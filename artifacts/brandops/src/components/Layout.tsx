@@ -118,7 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-50 w-60 bg-sidebar border-r border-sidebar-border transform transition-transform duration-200 ease-in-out",
-          "md:relative md:transform-none flex flex-col",
+          "md:sticky md:top-0 md:h-screen md:transform-none flex flex-col shrink-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
