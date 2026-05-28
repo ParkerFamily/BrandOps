@@ -152,9 +152,13 @@ export default function Signup() {
 
   const TOTAL_STEPS = 5; // 0:intro, 1:name, 2:email, 3:password, 4:account-type
 
+  // If already authenticated when landing on /signup, send to onboarding
   useEffect(() => {
-    if (user) setLocation("/onboarding");
-  }, [user, setLocation]);
+    if (user && !creating) {
+      const onboarded = localStorage.getItem(ONBOARDING_KEY);
+      setLocation(onboarded ? "/dashboard" : "/onboarding");
+    }
+  }, [user, creating, setLocation]);
 
   useEffect(() => {
     setError("");
@@ -201,8 +205,9 @@ export default function Signup() {
     setError("");
     try {
       await signInWithGoogle();
-      const onboarded = localStorage.getItem(ONBOARDING_KEY);
-      setLocation(onboarded ? "/dashboard" : "/onboarding");
+      // On the signup page, Google auth always starts onboarding — never skip it
+      localStorage.removeItem(ONBOARDING_KEY);
+      setLocation("/onboarding");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google sign-in failed.";
       setError(msg.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/, "").trim());
