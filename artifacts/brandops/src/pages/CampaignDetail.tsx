@@ -1,7 +1,7 @@
 import { useRoute } from "wouter";
 import { 
   useGetCampaign, getGetCampaignQueryKey,
-  useGetCampaignStats,
+  useGetCampaignStats, getGetCampaignStatsQueryKey,
   usePublishCampaign,
   useDeleteCampaign,
   useListSubmissions,
@@ -34,11 +34,11 @@ export default function CampaignDetail() {
   });
   
   const { data: stats, isLoading: statsLoading } = useGetCampaignStats(id, {
-    query: { enabled: !!id }
+    query: { enabled: !!id, queryKey: getGetCampaignStatsQueryKey(id) }
   });
 
   const { data: submissions, isLoading: submissionsLoading } = useListSubmissions({ campaignId: id }, {
-    query: { enabled: !!id }
+    query: { enabled: !!id, queryKey: getListSubmissionsQueryKey({ campaignId: id }) }
   });
 
   const publishCampaign = usePublishCampaign();
