@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Check, X, PlayCircle, ExternalLink, Inbox, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
-import { ListSubmissionsStatus } from "@workspace/api-client-react/src/generated/api.schemas";
+import { ListSubmissionsStatus } from "@workspace/api-client-react";
 
 export default function Submissions() {
   const { toast } = useToast();

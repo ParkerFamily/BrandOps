@@ -16,6 +16,7 @@ import CreatorDetail from "@/pages/CreatorDetail";
 import Submissions from "@/pages/Submissions";
 import Payments from "@/pages/Payments";
 import Analytics from "@/pages/Analytics";
+import AIAssistant from "@/pages/AIAssistant";
 import Team from "@/pages/Team";
 import Settings from "@/pages/Settings";
 
@@ -45,6 +46,7 @@ function AppRoutes() {
               <Route path="/submissions" component={Submissions} />
               <Route path="/payments" component={Payments} />
               <Route path="/analytics" component={Analytics} />
+              <Route path="/ai" component={AIAssistant} />
               <Route path="/team" component={Team} />
               <Route path="/settings" component={Settings} />
               <Route component={NotFound} />

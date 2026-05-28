@@ -1,0 +1,95 @@
+Upgrade BrandOps into a magical, AI-powered full SaaS experience.
+
+Keep the dark lime/black premium SaaS theme. Make the product feel like the fastest way for a brand to launch a UGC campaign and get videos from creators.
+
+Add these AI-powered features:
+
+1. AI Campaign Builder
+   Create a prominent “Create Campaign with AI” button.
+   When clicked, open a clean modal where the brand enters:
+
+* product/app name
+* campaign goal
+* total budget
+* payout per approved video
+* target creator type
+* platforms needed
+* tone/style
+* example link or notes
+
+Then use OpenAI to generate:
+
+* campaign title
+* campaign description
+* creator instructions
+* video hook ideas
+* deliverables
+* usage rights language
+* suggested deadline
+* suggested number of videos based on budget
+
+2. AI Quick Launch
+   Add a “Launch in 60 seconds” section on the dashboard.
+   It should guide the brand through:
+   Budget → Goal → Creator Type → AI generates campaign → Publish.
+
+3. AI Submission Review
+   On the submissions page, add AI score cards for each submitted video:
+
+* Hook strength
+* Brand fit
+* Clarity
+* UGC authenticity
+* Conversion potential
+* Overall score
+
+Also generate quick AI notes like:
+“This video has a strong hook but needs clearer product mention in the first 3 seconds.”
+
+4. AI Creator Match
+   On creator profiles and campaign pages, show:
+
+* Match Score
+* Why this creator fits
+* Suggested payout range
+* Best campaign type for this creator
+
+5. Dashboard Magic
+   Make dashboard feel more premium:
+
+* “Launch Campaign” primary CTA
+* “AI Campaign Builder” CTA
+* animated stats cards
+* active campaign pipeline
+* pending approvals
+* payout queue
+* recent creator submissions
+* AI insights panel
+
+6. Stripe/Firebase/OpenAI Integration Structure
+   Use existing Firebase, Stripe, and OpenAI environment variables.
+   Do not hardcode keys.
+   Create clean helper files:
+
+* firebase config
+* stripe config/routes
+* openai helper
+* campaign generation API route
+* submission review API route
+
+7. Product Flow
+   The core BrandOps flow should be:
+   Brand creates total campaign budget.
+   Creators submit videos.
+   Brand approves videos.
+   Only approved videos become payable.
+   Payout status updates after approval.
+
+8. UX Goal
+   Make it feel simple, fast, and powerful.
+   Not like a social app.
+   Not like a boring admin panel.
+   It should feel like:
+   “The AI operating system for UGC campaigns.”
+
+Build the UI, routes, modals, mock data, and backend API structure necessary for this experience.

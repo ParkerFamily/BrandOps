@@ -11,6 +11,7 @@ import {
   Menu,
   Activity,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { useState } from "react";
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { path: "/submissions", label: "Submissions", icon: Inbox },
   { path: "/payments", label: "Payments", icon: CreditCard },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
+  { path: "/ai", label: "AI Assistant", icon: Sparkles },
 ];
 
 const BOTTOM_NAV_ITEMS = [
