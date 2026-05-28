@@ -1,0 +1,96 @@
+Fix the BrandOps auth and signup flow using the current app. Do NOT redesign from scratch.
+
+Current issue:
+
+* Landing page looks good now.
+* “Start Free” does not open a real signup process.
+* Login page only has Google sign-in.
+* Need email/password signup + onboarding personalization.
+
+Implement this flow:
+
+1. LANDING PAGE BUTTONS
+
+* “Start Free” should route to `/signup`
+* “Sign in” should route to `/login`
+* “See how it works” can scroll to the how-it-works section
+
+2. SIGNUP PAGE
+   Create `/signup` with:
+
+* full name
+* work email
+* password
+* confirm password
+* account type selector:
+
+  * Brand
+  * Agency
+  * Solo Founder
+  * App Founder
+  * Ecommerce Brand
+  * Creator
+  * Creator Manager
+
+Use Firebase email/password auth.
+Also keep “Continue with Google” as an option.
+
+3. LOGIN PAGE
+   Update `/login` to include:
+
+* email
+* password
+* “Sign in” button
+* “Continue with Google”
+* “Forgot password?”
+* “Don’t have an account? Start free”
+
+Use Firebase email/password sign-in.
+
+4. AFTER SIGNUP
+   After successful signup, send new users to `/onboarding`.
+
+5. ONBOARDING FLOW
+   Ask personalization questions:
+
+* What best describes you?
+* Monthly creator campaign budget
+* Main platform: TikTok, Instagram, YouTube, Multiple
+* Main goal: sales, app installs, awareness, paid ads, organic UGC
+* Main niche/category
+* Team size
+* Experience with creator marketing
+
+Save answers to Firebase under the user profile.
+
+6. PERSONALIZED ROUTING
+   After onboarding:
+
+* Brands/agencies/founders go to dashboard
+* Creators go to creator setup/profile flow
+
+7. AUTH GUARDS
+   Protect dashboard routes.
+   If not logged in, redirect to `/login`.
+   If logged in but onboarding not complete, redirect to `/onboarding`.
+
+8. UI STYLE
+   Keep current BrandOps black + neon lime SaaS style.
+   Make auth pages premium:
+
+* clean cards
+* strong logo
+* subtle glow
+* smooth transitions
+* validation errors
+* loading state
+* success toast
+
+9. FIREBASE
+   Use existing Firebase config/env variables.
+   Do not hardcode keys.
+   Make auth helper functions clean and reusable.
+
+Goal:
+Make BrandOps feel like a real SaaS signup funnel:
+Landing → Signup → Personalized onboarding → Dashboard.

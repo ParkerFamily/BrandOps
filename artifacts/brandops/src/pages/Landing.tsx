@@ -60,7 +60,7 @@ function Navbar() {
                 Sign in
               </button>
               <button
-                onClick={() => setLocation("/login")}
+                onClick={() => setLocation("/signup")}
                 className="px-5 py-2 rounded-lg bg-[#C6FF00] text-black font-semibold text-sm hover:bg-[#d4ff33] transition-colors"
               >
                 Start Free
@@ -92,7 +92,7 @@ function Navbar() {
                 </a>
               ))}
               <button
-                onClick={() => setLocation("/login")}
+                onClick={() => setLocation("/signup")}
                 className="w-full mt-2 py-2.5 rounded-lg bg-[#C6FF00] text-black font-semibold text-sm"
               >
                 Start Free
@@ -469,7 +469,7 @@ export default function Landing() {
 
             <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={() => setLocation("/login")}
+                onClick={() => setLocation("/signup")}
                 className="px-8 py-4 rounded-xl bg-[#C6FF00] text-black font-bold text-base hover:bg-[#d4ff33] transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(198,255,0,0.3)]"
               >
                 Start Free — No credit card
@@ -743,7 +743,7 @@ export default function Landing() {
             Join brands that are scaling UGC campaigns with AI — faster, cheaper, and smarter than ever.
           </p>
           <button
-            onClick={() => setLocation("/login")}
+            onClick={() => setLocation("/signup")}
             className="px-10 py-5 rounded-xl bg-[#C6FF00] text-black font-bold text-lg hover:bg-[#d4ff33] transition-all hover:scale-105 active:scale-95 shadow-[0_0_60px_rgba(198,255,0,0.4)]"
           >
             Start Free Today →

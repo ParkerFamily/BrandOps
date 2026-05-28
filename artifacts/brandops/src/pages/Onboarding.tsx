@@ -2,16 +2,20 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { updateProfile } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import {
   Sparkles, ArrowRight, Check, Zap, ShoppingBag, Building2,
   Users, Rocket, User, Laptop, DollarSign, Target,
-  TrendingUp, Megaphone, Smartphone, Globe, Loader2
+  TrendingUp, Megaphone, Smartphone, Globe, Loader2,
+  UserCheck
 } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { cn } from "@/lib/utils";
 import { SiTiktok, SiInstagram, SiYoutube } from "react-icons/si";
 
 const ONBOARDING_KEY = "brandops_onboarded";
+const ACCOUNT_TYPE_KEY = "brandops_account_type";
 
 const slideVariants = {
   enter: (dir: number) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),
@@ -24,10 +28,9 @@ interface OptionCardProps {
   label: string;
   selected: boolean;
   onClick: () => void;
-  color?: string;
 }
 
-function OptionCard({ icon: Icon, label, selected, onClick, color = "#C6FF00" }: OptionCardProps) {
+function OptionCard({ icon: Icon, label, selected, onClick }: OptionCardProps) {
   return (
     <button
       onClick={onClick}
@@ -43,10 +46,7 @@ function OptionCard({ icon: Icon, label, selected, onClick, color = "#C6FF00" }:
           <Check className="h-3 w-3 text-black" />
         </div>
       )}
-      <div className={cn(
-        "w-10 h-10 rounded-xl flex items-center justify-center",
-        selected ? "bg-[#C6FF00]/20" : "bg-white/5"
-      )}>
+      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", selected ? "bg-[#C6FF00]/20" : "bg-white/5")}>
         <Icon className={cn("h-5 w-5", selected ? "text-[#C6FF00]" : "text-white/50")} />
       </div>
       <span className={cn("text-sm font-medium", selected ? "text-white" : "text-white/60")}>{label}</span>
@@ -118,26 +118,44 @@ const EXPERIENCE = [
   { label: "Power user", desc: "Managing 10+ campaigns/month" },
 ];
 
+const TEAM_SIZES = [
+  { icon: User, label: "Just me" },
+  { icon: Users, label: "2–5 people" },
+  { icon: Building2, label: "6–20 people" },
+  { icon: Globe, label: "20+ people" },
+];
+
 interface OnboardingData {
   role: string;
   budget: string;
   platforms: string[];
   niches: string[];
   goal: string;
+  teamSize: string;
   experience: string;
 }
 
-const STEPS = ["Your role", "Budget", "Platforms", "Niche & Goal", "Experience", "Ready"];
+const STEPS = ["Your role", "Budget", "Platforms", "Niche & Goal", "Team", "Experience", "Ready"];
 
-function PreparingScreen({ onDone }: { onDone: () => void }) {
+const CREATOR_ROLES = ["Creator", "Creator Manager"];
+
+function PreparingScreen({ onDone, isCreator }: { onDone: () => void; isCreator: boolean }) {
   const [step, setStep] = useState(0);
-  const steps = [
-    "Analyzing your profile...",
-    "Configuring AI recommendations...",
-    "Setting up creator discovery...",
-    "Personalizing your dashboard...",
-    "Your workspace is ready ✓",
-  ];
+  const steps = isCreator
+    ? [
+        "Analyzing your creator profile...",
+        "Setting up your portfolio...",
+        "Connecting brand opportunities...",
+        "Personalizing your workspace...",
+        "Your creator hub is ready ✓",
+      ]
+    : [
+        "Analyzing your profile...",
+        "Configuring AI recommendations...",
+        "Setting up creator discovery...",
+        "Personalizing your dashboard...",
+        "Your workspace is ready ✓",
+      ];
 
   useState(() => {
     let i = 0;
@@ -160,12 +178,10 @@ function PreparingScreen({ onDone }: { onDone: () => void }) {
           <Zap className="h-10 w-10 text-[#C6FF00]" />
         </div>
       </div>
-
       <h2 className="text-3xl font-black mb-3">BrandOps is setting up your workspace</h2>
       <p className="text-white/40 mb-12 text-center">
         Your AI business assistant is personalizing everything based on your profile.
       </p>
-
       <div className="w-full max-w-sm space-y-4">
         {steps.map((s, i) => (
           <motion.div
@@ -173,10 +189,7 @@ function PreparingScreen({ onDone }: { onDone: () => void }) {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: i <= step ? 1 : 0.2, x: 0 }}
             transition={{ delay: i * 0.1 }}
-            className={cn(
-              "flex items-center gap-3 text-sm",
-              i <= step ? "text-white" : "text-white/20"
-            )}
+            className={cn("flex items-center gap-3 text-sm", i <= step ? "text-white" : "text-white/20")}
           >
             {i < step ? (
               <div className="w-5 h-5 rounded-full bg-[#C6FF00] flex items-center justify-center shrink-0">
@@ -201,14 +214,20 @@ export default function Onboarding() {
   const [currentStep, setCurrentStep] = useState(0);
   const [dir, setDir] = useState(1);
   const [preparing, setPreparing] = useState(false);
+
+  const prefilledRole = localStorage.getItem(ACCOUNT_TYPE_KEY) ?? "";
+
   const [data, setData] = useState<OnboardingData>({
-    role: "",
+    role: prefilledRole,
     budget: "",
     platforms: [],
     niches: [],
     goal: "",
+    teamSize: "",
     experience: "",
   });
+
+  const isCreator = CREATOR_ROLES.includes(data.role);
 
   const goNext = () => {
     setDir(1);
@@ -237,19 +256,31 @@ export default function Onboarding() {
     if (currentStep === 1) return !!data.budget;
     if (currentStep === 2) return data.platforms.length > 0;
     if (currentStep === 3) return data.niches.length > 0 && !!data.goal;
-    if (currentStep === 4) return !!data.experience;
+    if (currentStep === 4) return !!data.teamSize;
+    if (currentStep === 5) return !!data.experience;
     return true;
   };
 
+  const handleFinish = async () => {
+    const payload = { ...data, completedAt: new Date().toISOString() };
+    localStorage.setItem(ONBOARDING_KEY, JSON.stringify(payload));
+    localStorage.removeItem(ACCOUNT_TYPE_KEY);
+
+    if (auth.currentUser) {
+      try {
+        await updateProfile(auth.currentUser, {
+          displayName: auth.currentUser.displayName ?? user?.displayName ?? "",
+        });
+      } catch {
+        // Non-critical — onboarding data saved to localStorage
+      }
+    }
+
+    setLocation(isCreator ? "/settings" : "/dashboard");
+  };
+
   if (preparing) {
-    return (
-      <PreparingScreen
-        onDone={() => {
-          localStorage.setItem(ONBOARDING_KEY, JSON.stringify(data));
-          setLocation("/dashboard");
-        }}
-      />
-    );
+    return <PreparingScreen isCreator={isCreator} onDone={handleFinish} />;
   }
 
   return (
@@ -260,9 +291,7 @@ export default function Onboarding() {
           <img src={logoPath} alt="BrandOps" className="h-7 w-auto" />
           <span className="font-bold text-base text-white">BrandOps</span>
         </div>
-        <div className="text-white/30 text-sm">
-          Step {currentStep + 1} of {STEPS.length}
-        </div>
+        <div className="text-white/30 text-sm">Step {currentStep + 1} of {STEPS.length}</div>
       </div>
 
       {/* Progress bar */}
@@ -274,7 +303,7 @@ export default function Onboarding() {
         />
       </div>
 
-      {/* Step indicators */}
+      {/* Step dots */}
       <div className="flex justify-center gap-2 py-6">
         {STEPS.map((s, i) => (
           <div
@@ -304,19 +333,15 @@ export default function Onboarding() {
               {currentStep === 0 && (
                 <div>
                   <div className="text-center mb-10">
-                    <div className="text-[#C6FF00] text-sm font-medium mb-3">Welcome{user?.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}! 👋</div>
+                    <div className="text-[#C6FF00] text-sm font-medium mb-3">
+                      Welcome{user?.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}! 👋
+                    </div>
                     <h2 className="text-3xl font-black mb-3">What best describes you?</h2>
                     <p className="text-white/40">We'll personalize BrandOps to your specific needs.</p>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {ROLES.map(({ icon, label }) => (
-                      <OptionCard
-                        key={label}
-                        icon={icon}
-                        label={label}
-                        selected={data.role === label}
-                        onClick={() => setData((d) => ({ ...d, role: label }))}
-                      />
+                      <OptionCard key={label} icon={icon} label={label} selected={data.role === label} onClick={() => setData((d) => ({ ...d, role: label }))} />
                     ))}
                   </div>
                 </div>
@@ -343,13 +368,7 @@ export default function Onboarding() {
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-md mx-auto">
                     {PLATFORMS.map(({ icon, label }) => (
-                      <OptionCard
-                        key={label}
-                        icon={icon}
-                        label={label}
-                        selected={data.platforms.includes(label)}
-                        onClick={() => toggleArray("platforms", label)}
-                      />
+                      <OptionCard key={label} icon={icon} label={label} selected={data.platforms.includes(label)} onClick={() => toggleArray("platforms", label)} />
                     ))}
                   </div>
                 </div>
@@ -386,21 +405,31 @@ export default function Onboarding() {
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {GOALS.map(({ icon, label }) => (
-                        <OptionCard
-                          key={label}
-                          icon={icon}
-                          label={label}
-                          selected={data.goal === label}
-                          onClick={() => setData((d) => ({ ...d, goal: label }))}
-                        />
+                        <OptionCard key={label} icon={icon} label={label} selected={data.goal === label} onClick={() => setData((d) => ({ ...d, goal: label }))} />
                       ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Step 4: Experience */}
+              {/* Step 4: Team size */}
               {currentStep === 4 && (
+                <div>
+                  <div className="text-center mb-10">
+                    <UserCheck className="h-10 w-10 text-[#C6FF00] mx-auto mb-4 p-2 bg-[#C6FF00]/10 rounded-xl" />
+                    <h2 className="text-3xl font-black mb-3">How big is your team?</h2>
+                    <p className="text-white/40">We'll tailor collaboration features and workflows to your team size.</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-lg mx-auto">
+                    {TEAM_SIZES.map(({ icon, label }) => (
+                      <OptionCard key={label} icon={icon} label={label} selected={data.teamSize === label} onClick={() => setData((d) => ({ ...d, teamSize: label }))} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5: Experience */}
+              {currentStep === 5 && (
                 <div>
                   <div className="text-center mb-10">
                     <Sparkles className="h-10 w-10 text-[#C6FF00] mx-auto mb-4 p-2 bg-[#C6FF00]/10 rounded-xl" />
@@ -414,9 +443,7 @@ export default function Onboarding() {
                         onClick={() => setData((d) => ({ ...d, experience: label }))}
                         className={cn(
                           "w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all",
-                          data.experience === label
-                            ? "border-[#C6FF00]/60 bg-[#C6FF00]/8"
-                            : "border-white/8 bg-white/2 hover:border-white/20"
+                          data.experience === label ? "border-[#C6FF00]/60 bg-[#C6FF00]/8" : "border-white/8 bg-white/2 hover:border-white/20"
                         )}
                       >
                         <div className={cn(
@@ -435,8 +462,8 @@ export default function Onboarding() {
                 </div>
               )}
 
-              {/* Step 5: Summary / Ready */}
-              {currentStep === 5 && (
+              {/* Step 6: Summary / Ready */}
+              {currentStep === 6 && (
                 <div className="text-center">
                   <div className="relative inline-block mb-8">
                     <div className="absolute inset-0 bg-[#C6FF00]/20 blur-2xl rounded-full" />
@@ -455,6 +482,7 @@ export default function Onboarding() {
                       { label: "Budget", value: data.budget },
                       { label: "Platforms", value: data.platforms.join(", ") },
                       { label: "Goal", value: data.goal },
+                      { label: "Team size", value: data.teamSize },
                       { label: "Experience", value: data.experience },
                     ].filter((x) => x.value).map(({ label, value }) => (
                       <div key={label} className="flex justify-between text-sm">
@@ -463,6 +491,12 @@ export default function Onboarding() {
                       </div>
                     ))}
                   </div>
+                  {isCreator && (
+                    <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-2 text-sm text-blue-300 mb-6">
+                      <Users className="h-3.5 w-3.5" />
+                      We'll set up your creator profile next
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
@@ -476,9 +510,7 @@ export default function Onboarding() {
           onClick={goPrev}
           className={cn(
             "px-5 py-2.5 rounded-xl text-sm font-medium transition-all",
-            currentStep === 0
-              ? "text-white/20 cursor-default"
-              : "text-white/60 hover:text-white hover:bg-white/5"
+            currentStep === 0 ? "text-white/20 cursor-default" : "text-white/60 hover:text-white hover:bg-white/5"
           )}
           disabled={currentStep === 0}
         >
@@ -496,7 +528,7 @@ export default function Onboarding() {
           )}
         >
           {currentStep === STEPS.length - 1 ? (
-            <>Launch BrandOps <Zap className="h-4 w-4" /></>
+            <><Zap className="h-4 w-4" /> Launch BrandOps</>
           ) : (
             <>Continue <ArrowRight className="h-4 w-4" /></>
           )}

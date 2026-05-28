@@ -3,15 +3,31 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+const ONBOARDING_KEY = "brandops_onboarded";
+
+export function ProtectedRoute({
+  children,
+  requireOnboarding = true,
+}: {
+  children: React.ReactNode;
+  requireOnboarding?: boolean;
+}) {
   const { user, loading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return;
+    if (!user) {
       setLocation("/login");
+      return;
     }
-  }, [loading, user, setLocation]);
+    if (requireOnboarding && location !== "/onboarding") {
+      const onboarded = localStorage.getItem(ONBOARDING_KEY);
+      if (!onboarded) {
+        setLocation("/onboarding");
+      }
+    }
+  }, [loading, user, requireOnboarding, location, setLocation]);
 
   if (loading) {
     return (

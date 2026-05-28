@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/Layout";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import Signup from "@/pages/Signup";
 import Onboarding from "@/pages/Onboarding";
 import Dashboard from "@/pages/Dashboard";
 import Campaigns from "@/pages/Campaigns";
@@ -60,6 +61,7 @@ function AppRoutes() {
     <Switch>
       <Route path="/" component={SmartRoot} />
       <Route path="/login" component={Login} />
+      <Route path="/signup" component={Signup} />
       <Route path="/onboarding">
         <ProtectedRoute>
           <Onboarding />
