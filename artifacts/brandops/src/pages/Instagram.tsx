@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,7 +8,8 @@ import {
 import {
   Users, Eye, Heart, MessageCircle, Bookmark, TrendingUp,
   ExternalLink, Link2, Link2Off, Loader2, AlertCircle,
-  ImageIcon, Play, RefreshCw,
+  ImageIcon, Play, RefreshCw, Key, ChevronDown, ChevronUp,
+  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -61,8 +62,39 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 /* ─── Not Connected State ────────────────────────────────────────────────── */
 function ConnectPanel({ userId, onConnect }: { userId: string; onConnect: () => void }) {
-  const handleConnect = () => {
+  const [showTokenForm, setShowTokenForm] = useState(false);
+  const [token, setToken] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [tokenError, setTokenError] = useState("");
+  const [tokenSuccess, setTokenSuccess] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleOAuth = () => {
     window.location.href = `${BASE}/api/instagram/auth?userId=${encodeURIComponent(userId)}`;
+  };
+
+  const handleTokenSubmit = async () => {
+    if (!token.trim()) return;
+    setSubmitting(true);
+    setTokenError("");
+    try {
+      const res = await fetch(`${BASE}/api/instagram/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, accessToken: token.trim() }),
+      });
+      const data = await res.json() as { success?: boolean; error?: string };
+      if (!res.ok || !data.success) {
+        setTokenError(data.error ?? "Invalid token");
+      } else {
+        setTokenSuccess(true);
+        setTimeout(() => onConnect(), 1200);
+      }
+    } catch {
+      setTokenError("Network error — please try again");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -84,7 +116,7 @@ function ConnectPanel({ userId, onConnect }: { userId: string; onConnect: () => 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
         <h2 className="text-3xl font-black text-white mb-3">Connect Instagram</h2>
         <p className="text-white/40 max-w-md mb-2">
-          Link your professional Instagram account to view your real follower stats, media performance, and post-level insights directly inside BrandOps.
+          Link your Instagram Business or Creator account to pull real follower stats, media performance, and post-level insights.
         </p>
       </motion.div>
 
@@ -103,11 +135,12 @@ function ConnectPanel({ userId, onConnect }: { userId: string; onConnect: () => 
         ))}
       </motion.div>
 
+      {/* OAuth button */}
       <motion.button
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.45 }}
-        onClick={handleConnect}
+        onClick={handleOAuth}
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.96 }}
         className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-2xl shadow-[0_0_32px_rgba(168,85,247,0.3)] hover:shadow-[0_0_48px_rgba(168,85,247,0.4)] transition-all"
@@ -116,10 +149,86 @@ function ConnectPanel({ userId, onConnect }: { userId: string; onConnect: () => 
         Connect with Instagram
       </motion.button>
 
-      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55 }}
-        className="text-white/20 text-xs mt-5">
-        Requires an Instagram Professional account (Business or Creator)
-      </motion.p>
+      {/* Manual token toggle */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.55 }}
+        className="mt-6 w-full max-w-lg"
+      >
+        <button
+          onClick={() => { setShowTokenForm((v) => !v); setTimeout(() => inputRef.current?.focus(), 100); }}
+          className="flex items-center gap-2 mx-auto text-white/30 hover:text-white/60 text-xs transition-colors"
+        >
+          <Key className="h-3.5 w-3.5" />
+          Have an access token from Graph API Explorer?
+          {showTokenForm ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
+
+        <AnimatePresence>
+          {showTokenForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-4 bg-white/3 border border-white/10 rounded-2xl p-5 text-left space-y-3">
+                {/* Instructions */}
+                <div className="bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl p-3 space-y-1.5">
+                  <p className="text-[#C6FF00] text-xs font-semibold">How to get your access token:</p>
+                  <ol className="text-white/40 text-[11px] space-y-1 list-decimal list-inside">
+                    <li>Go to <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" className="text-[#C6FF00]/70 underline underline-offset-2 hover:text-[#C6FF00]">Meta Graph API Explorer</a></li>
+                    <li>Select your app in the top-right dropdown</li>
+                    <li>Click <strong className="text-white/60">"Generate Access Token"</strong></li>
+                    <li>Add permission: <code className="bg-white/8 px-1 rounded text-[10px]">instagram_business_basic</code></li>
+                    <li>Copy the token and paste it below</li>
+                  </ol>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-white/40 text-[11px] font-medium uppercase tracking-wide">Access Token</label>
+                  <input
+                    ref={inputRef}
+                    type="password"
+                    value={token}
+                    onChange={(e) => { setToken(e.target.value); setTokenError(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleTokenSubmit()}
+                    placeholder="Paste your Instagram access token…"
+                    className="w-full bg-white/5 border border-white/12 rounded-xl px-4 py-3 text-white text-sm placeholder:text-white/20 outline-none focus:border-[#C6FF00]/40 focus:ring-1 focus:ring-[#C6FF00]/20 transition-all font-mono"
+                  />
+                  {tokenError && (
+                    <p className="flex items-center gap-1.5 text-red-400 text-xs">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      {tokenError}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleTokenSubmit}
+                  disabled={!token.trim() || submitting || tokenSuccess}
+                  className={cn(
+                    "w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all",
+                    tokenSuccess
+                      ? "bg-[#C6FF00]/15 border border-[#C6FF00]/30 text-[#C6FF00]"
+                      : "bg-[#C6FF00] text-black hover:bg-[#d4ff33] disabled:opacity-40 disabled:cursor-not-allowed"
+                  )}
+                >
+                  {tokenSuccess ? (
+                    <><CheckCircle2 className="h-4 w-4" /> Connected!</>
+                  ) : submitting ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Validating…</>
+                  ) : (
+                    "Connect with Token"
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }
@@ -316,7 +425,17 @@ export default function Instagram() {
             {error}
           </div>
         )}
-        <ConnectPanel userId={uid} onConnect={() => {}} />
+        <ConnectPanel userId={uid} onConnect={() => {
+          setLoadingProfile(true);
+          fetch(`${BASE}/api/instagram/profile?userId=${encodeURIComponent(uid)}`)
+            .then((r) => r.json())
+            .then((data: IGProfile) => {
+              setProfile(data);
+              if (data.connected) loadMedia();
+            })
+            .catch(() => setError("Failed to load profile"))
+            .finally(() => setLoadingProfile(false));
+        }} />
       </div>
     );
   }

@@ -12,6 +12,94 @@ function getFrontendBase() {
 }
 function getRedirectUri() { return `${getFrontendBase()}/api/instagram/callback`; }
 
+/* ── Manual token connect ────────────────────────────────────────────────── */
+router.post("/instagram/token", async (req, res): Promise<void> => {
+  const { userId, accessToken } = req.body as { userId?: string; accessToken?: string };
+  if (!userId || !accessToken) {
+    res.status(400).json({ error: "userId and accessToken required" });
+    return;
+  }
+
+  try {
+    // Try to exchange for long-lived token first
+    let finalToken = accessToken;
+    if (getAppId() && getAppSecret()) {
+      try {
+        const longUrl = new URL("https://graph.instagram.com/access_token");
+        longUrl.searchParams.set("grant_type", "ig_exchange_token");
+        longUrl.searchParams.set("client_id", getAppId());
+        longUrl.searchParams.set("client_secret", getAppSecret());
+        longUrl.searchParams.set("access_token", accessToken);
+        const longRes = await fetch(longUrl.toString());
+        const longData = await longRes.json() as { access_token?: string };
+        if (longData.access_token) finalToken = longData.access_token;
+      } catch {
+        // fall through with original token
+      }
+    }
+
+    // Fetch profile to validate token
+    const profileUrl = new URL("https://graph.instagram.com/me");
+    profileUrl.searchParams.set(
+      "fields",
+      "id,username,name,biography,followers_count,media_count,profile_picture_url"
+    );
+    profileUrl.searchParams.set("access_token", finalToken);
+
+    const profileRes = await fetch(profileUrl.toString());
+    const profile = await profileRes.json() as {
+      id?: string;
+      username?: string;
+      name?: string;
+      biography?: string;
+      followers_count?: number;
+      media_count?: number;
+      profile_picture_url?: string;
+      error?: { message: string };
+    };
+
+    if (profile.error || !profile.id) {
+      req.log.error({ profile }, "Instagram token validation failed");
+      res.status(400).json({ error: profile.error?.message ?? "Invalid access token — make sure it has instagram_business_basic scope" });
+      return;
+    }
+
+    await db
+      .insert(instagramAccountsTable)
+      .values({
+        userId,
+        instagramUserId: profile.id,
+        accessToken: finalToken,
+        username: profile.username ?? "",
+        name: profile.name ?? null,
+        biography: profile.biography ?? null,
+        followersCount: profile.followers_count ?? 0,
+        mediaCount: profile.media_count ?? 0,
+        profilePictureUrl: profile.profile_picture_url ?? null,
+        tokenExpiresAt: null,
+      })
+      .onConflictDoUpdate({
+        target: instagramAccountsTable.instagramUserId,
+        set: {
+          userId,
+          accessToken: finalToken,
+          username: profile.username ?? "",
+          name: profile.name ?? null,
+          biography: profile.biography ?? null,
+          followersCount: profile.followers_count ?? 0,
+          mediaCount: profile.media_count ?? 0,
+          profilePictureUrl: profile.profile_picture_url ?? null,
+          tokenExpiresAt: null,
+        },
+      });
+
+    res.json({ success: true, username: profile.username });
+  } catch (err) {
+    req.log.error({ err }, "Instagram manual token connect error");
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 /* ── Step 1: Start OAuth ─────────────────────────────────────────────────── */
 router.get("/instagram/auth", (req, res): void => {
   const userId = req.query.userId as string;
