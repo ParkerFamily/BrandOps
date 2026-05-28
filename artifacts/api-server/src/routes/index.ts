@@ -6,6 +6,7 @@ import creatorsRouter from "./creators";
 import submissionsRouter from "./submissions";
 import paymentsRouter from "./payments";
 import analyticsRouter from "./analytics";
+import stripeRouter from "./stripe";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(creatorsRouter);
 router.use(submissionsRouter);
 router.use(paymentsRouter);
 router.use(analyticsRouter);
+router.use(stripeRouter);
 
 export default router;
