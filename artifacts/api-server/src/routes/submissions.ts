@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, submissionsTable, campaignsTable, creatorsTable, activityTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { sendApprovalEmail, sendRevisionRequestEmail } from "../lib/email";
 import {
   CreateSubmissionBody,
   UpdateSubmissionBody,
@@ -114,6 +115,15 @@ router.patch("/submissions/:id", async (req, res): Promise<void> => {
       entityId: submission.id,
       entityType: "submission",
     });
+    const enriched2 = await enrichSubmission(submission);
+    if (enriched2.creator?.email) {
+      void sendApprovalEmail(
+        enriched2.creator.email,
+        enriched2.creator.name,
+        enriched2.campaign?.title ?? "your campaign",
+        enriched2.payoutAmount ? `$${enriched2.payoutAmount}` : "TBD",
+      );
+    }
   } else if (data.status === "rejected") {
     await db.insert(activityTable).values({
       type: "rejection",
@@ -121,6 +131,15 @@ router.patch("/submissions/:id", async (req, res): Promise<void> => {
       entityId: submission.id,
       entityType: "submission",
     });
+    const enriched2 = await enrichSubmission(submission);
+    if (enriched2.creator?.email && data.notes) {
+      void sendRevisionRequestEmail(
+        enriched2.creator.email,
+        enriched2.creator.name,
+        enriched2.campaign?.title ?? "your campaign",
+        data.notes,
+      );
+    }
   }
 
   const enriched = await enrichSubmission(submission);

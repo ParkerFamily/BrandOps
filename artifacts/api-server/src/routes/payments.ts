@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, paymentsTable, creatorsTable, campaignsTable, submissionsTable, activityTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { sendPayoutEmail } from "../lib/email";
 import {
   CreatePaymentBody,
   UpdatePaymentBody,
@@ -120,6 +121,16 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
 
     // Mark related submission as paid
     await db.update(submissionsTable).set({ status: "paid" }).where(eq(submissionsTable.id, payment.submissionId));
+
+    const enriched2 = await enrichPayment(payment);
+    if (enriched2.creator?.email) {
+      void sendPayoutEmail(
+        enriched2.creator.email,
+        enriched2.creator.name,
+        `$${parseFloat(payment.amount).toFixed(2)}`,
+        enriched2.campaign?.title ?? "your campaign",
+      );
+    }
   }
 
   const enriched = await enrichPayment(payment);

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, creatorsTable, submissionsTable, paymentsTable, activityTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { sendWelcomeEmail } from "../lib/email";
 import {
   CreateCreatorBody,
   UpdateCreatorBody,
@@ -65,6 +66,10 @@ router.post("/creators", async (req, res): Promise<void> => {
     entityId: creator.id,
     entityType: "creator",
   });
+
+  if (creator.email) {
+    void sendWelcomeEmail(creator.email, creator.name);
+  }
 
   res.status(201).json({ ...creator, engagementRate: parseFloat(creator.engagementRate), totalEarnings: 0, approvedVideos: 0 });
 });
