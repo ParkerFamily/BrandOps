@@ -1,0 +1,386 @@
+Upgrade BrandOps from a clean dashboard into a truly alive AI-powered SaaS platform for creator campaigns.
+
+The current UI direction is strong. Keep the premium black + neon lime aesthetic and modern enterprise SaaS feel. Do NOT redesign the theme completely. Instead, evolve it into a living platform with real interactions, smarter UX, and stronger branding.
+
+CORE GOAL:
+BrandOps should feel like:
+“The AI operating system for creator marketing.”
+
+It should feel:
+
+* fast
+* intelligent
+* premium
+* automated
+* mobile-era
+* creator-first
+* enterprise capable
+
+━━━━━━━━━━━━━━━━━━━
+
+1. FIX BRANDING
+   ━━━━━━━━━━━━━━━━━━━
+
+The current logo is too tiny and feels placeholder.
+
+Upgrade branding system:
+
+* larger sidebar logo
+* proper icon mark
+* favicon version
+* responsive wordmark
+* animated logo glow on hover
+* better spacing in sidebar header
+
+Create:
+
+* compact icon version
+* full BrandOps wordmark
+* favicon asset handling
+
+The branding should feel like a real funded SaaS company.
+
+━━━━━━━━━━━━━━━━━━━
+2. MAKE THE APP FEEL “ALIVE”
+━━━━━━━━━━━━━━━━━━━
+
+Right now the app looks visually impressive but still feels like mock/demo data.
+
+Convert the experience into real interactive SaaS behavior:
+
+Add:
+
+* loading states
+* optimistic updates
+* skeleton loaders
+* toast notifications
+* real-time UI updates
+* success animations
+* empty states
+* onboarding flows
+* hover states
+* subtle motion
+* AI generation animations
+* live counters
+
+Every major action should feel responsive and real.
+
+━━━━━━━━━━━━━━━━━━━
+3. REAL CREATOR ONBOARDING
+━━━━━━━━━━━━━━━━━━━
+
+Build a real creator onboarding flow.
+
+Creator can:
+
+* create profile
+* upload profile image
+* connect TikTok
+* connect Instagram
+* connect YouTube
+* connect Stripe Connect payout account
+* add niches/tags
+* add follower counts
+* upload portfolio videos
+* set payout preferences
+
+Store all creator data in Firebase.
+
+Use mock platform analytics for now if APIs are unavailable.
+
+Add:
+
+* verification badges
+* creator score
+* AI fit score
+* content categories
+* recent campaign history
+* payout history
+
+━━━━━━━━━━━━━━━━━━━
+4. MAKE CREATORS PAGE FEEL PREMIUM
+━━━━━━━━━━━━━━━━━━━
+
+Current creator page feels like a CRM list.
+
+Upgrade it into a creator discovery system.
+
+Each creator card should include:
+
+* real avatar
+* platform icons
+* follower count
+* engagement rate
+* AI match %
+* average views
+* audience type
+* niche tags
+* performance trend
+* campaign completion rate
+
+Add:
+
+* advanced filtering
+* AI recommendations
+* “Best Match”
+* “Trending”
+* “High ROI”
+* “Undervalued Creators”
+
+Make it feel like brands are discovering talent.
+
+━━━━━━━━━━━━━━━━━━━
+5. AI CAMPAIGN BUILDER
+━━━━━━━━━━━━━━━━━━━
+
+Upgrade the AI campaign creation experience.
+
+Brand enters:
+
+* product/app/company
+* campaign goal
+* target audience
+* total budget
+* payout per video
+* platforms
+* tone/style
+* niche
+* creator size
+* notes
+
+Use OpenAI to generate:
+
+* campaign title
+* full brief
+* creator instructions
+* hook ideas
+* CTA ideas
+* video concepts
+* content pillars
+* suggested payout strategy
+* suggested creator count
+* usage rights section
+* campaign timeline
+
+Add:
+
+* streaming AI generation
+* editable sections
+* regenerate buttons
+* save draft
+* publish campaign
+
+Make the AI generation feel magical and fast.
+
+━━━━━━━━━━━━━━━━━━━
+6. SUBMISSION REVIEW AI
+━━━━━━━━━━━━━━━━━━━
+
+Upgrade submissions page heavily.
+
+Each submission should show:
+
+* AI hook score
+* AI retention prediction
+* AI conversion prediction
+* AI authenticity score
+* AI product visibility score
+* AI notes
+
+Example:
+“This video has a strong opening hook but the product appears too late.”
+
+Add:
+
+* timeline comments
+* approval workflow
+* request revision workflow
+* auto payout trigger after approval
+* side-by-side comparison
+* quick preview modal
+
+Make reviewing content addictive and efficient.
+
+━━━━━━━━━━━━━━━━━━━
+7. REAL STRIPE CONNECT FLOW
+━━━━━━━━━━━━━━━━━━━
+
+Implement actual Stripe Connect onboarding.
+
+Creators can:
+
+* connect payout account
+* verify identity
+* receive payouts
+
+Brands can:
+
+* fund campaign budgets
+* approve creator payouts
+* view payout queue
+
+Flow:
+Campaign budget held →
+Creator submits →
+Brand approves →
+Payout released.
+
+Use:
+
+* Stripe Connect
+* payment intents
+* payout tracking
+* webhook handling
+
+Add:
+
+* payout statuses
+* pending balances
+* transaction history
+* estimated payout dates
+
+━━━━━━━━━━━━━━━━━━━
+8. ANALYTICS PAGE = AI INTELLIGENCE
+━━━━━━━━━━━━━━━━━━━
+
+Current analytics feel too generic.
+
+Transform into AI campaign intelligence.
+
+Add:
+
+* best creator performance
+* best posting times
+* audience overlap
+* projected ROI
+* projected conversions
+* top performing hooks
+* platform comparison
+* campaign efficiency score
+* AI recommendations
+
+Example AI insight:
+“Creators between 50k–150k followers are outperforming larger creators by 31% this month.”
+
+Add:
+
+* animated charts
+* trend indicators
+* live refresh feeling
+* export reports
+* downloadable PDFs
+
+━━━━━━━━━━━━━━━━━━━
+9. AI ASSISTANT UPGRADE
+━━━━━━━━━━━━━━━━━━━
+
+Current AI assistant feels generic.
+
+Give it contextual memory.
+
+AI should understand:
+
+* active campaigns
+* budgets
+* creators
+* approvals
+* analytics
+* ROI data
+
+Brands should ask:
+
+* “Who should we scale next?”
+* “Which campaign performed best?”
+* “Generate another campaign like our top performer.”
+* “Which creator gives best ROI?”
+
+Add:
+
+* streaming chat
+* saved conversations
+* quick actions
+* suggested prompts
+* contextual recommendations
+
+Make this feel like an actual business copilot.
+
+━━━━━━━━━━━━━━━━━━━
+10. MOBILE-FIRST CREATOR THINKING
+━━━━━━━━━━━━━━━━━━━
+
+Even though this is web-first SaaS, the ecosystem should feel creator-native.
+
+Design everything assuming creators will eventually use:
+
+* mobile app
+* notifications
+* quick uploads
+* payout tracking
+* AI creator coach
+
+Structure backend and database accordingly.
+
+━━━━━━━━━━━━━━━━━━━
+11. UX / MOTION / POLISH
+━━━━━━━━━━━━━━━━━━━
+
+Add:
+
+* framer motion
+* page transitions
+* glow hover states
+* animated gradients
+* floating action feedback
+* premium modal transitions
+* command palette
+* keyboard shortcuts
+* smooth loading
+
+Do NOT overdo animation.
+Keep it premium and subtle.
+
+━━━━━━━━━━━━━━━━━━━
+12. TECH STRUCTURE
+━━━━━━━━━━━━━━━━━━━
+
+Use:
+
+* React
+* TypeScript
+* Tailwind
+* Firebase
+* Stripe Connect
+* OpenAI API
+
+Create proper structure:
+
+* services/
+* hooks/
+* api/
+* components/
+* modals/
+* ai/
+* stripe/
+* firebase/
+
+Do NOT hardcode secrets.
+
+Use environment variables only.
+
+━━━━━━━━━━━━━━━━━━━
+13. MOST IMPORTANT RULE
+━━━━━━━━━━━━━━━━━━━
+
+Stop making fake dashboard pages only.
+
+Prioritize making these REAL:
+
+1. creator onboarding
+2. AI campaign generation
+3. real submission upload flow
+4. Stripe payout flow
+5. AI assistant context awareness
+
+Once those are real, the app becomes an actual SaaS business instead of a mock UI.
+
+Build production-style architecture and scalable frontend/backend structure.
