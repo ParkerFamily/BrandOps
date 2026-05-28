@@ -8,6 +8,7 @@ import paymentsRouter from "./payments";
 import analyticsRouter from "./analytics";
 import stripeRouter from "./stripe";
 import openaiRouter from "./openai";
+import instagramRouter from "./instagram";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(paymentsRouter);
 router.use(analyticsRouter);
 router.use(stripeRouter);
 router.use(openaiRouter);
+router.use(instagramRouter);
 
 export default router;

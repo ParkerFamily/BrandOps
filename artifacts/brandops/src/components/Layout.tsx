@@ -15,6 +15,7 @@ import {
   Zap,
   Command,
 } from "lucide-react";
+import { SiInstagram } from "react-icons/si";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { useState } from "react";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { path: "/payments", label: "Payments", icon: CreditCard },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/ai", label: "AI Assistant", icon: Sparkles },
+  { path: "/instagram", label: "Instagram", icon: SiInstagram },
 ];
 
 const BOTTOM_NAV_ITEMS = [
