@@ -1,0 +1,140 @@
+Aight my fault 😭 here’s the REAL first Replit SaaS prompt for BrandOps:
+
+Build a modern SaaS web application called “BrandOps” focused on UGC campaign operations for brands and creators.
+
+STYLE / DESIGN:
+
+* Clean modern SaaS aesthetic similar to Linear, Stripe, Notion, and Ramp
+* Premium UI with dark mode default
+* Accent color: lime green (#C6FF00) with black/dark charcoal backgrounds
+* Rounded cards, modern shadows, smooth animations
+* Professional but creator-friendly
+* Mobile responsive
+* Use modern typography like Satoshi or Inter
+
+CORE IDEA:
+BrandOps is NOT a social media app.
+It is an operations platform for managing UGC campaigns.
+
+Brands:
+
+* create campaigns
+* set total campaign budgets
+* receive creator submissions
+* approve/reject videos
+* manage payouts
+* view analytics
+
+Creators:
+
+* apply to campaigns
+* upload videos
+* track approvals
+* track payments
+
+WEB APP STRUCTURE:
+
+SIDEBAR NAVIGATION:
+
+* Dashboard
+* Campaigns
+* Creators
+* Submissions
+* Payments
+* Analytics
+* Team
+* Settings
+
+MAIN DASHBOARD:
+Display:
+
+* Total campaign spend
+* Active campaigns
+* Pending submissions
+* Approved videos
+* Creator payouts
+* Campaign performance graph
+
+CAMPAIGN CREATION FLOW:
+Brands can:
+
+* create campaign
+* add title
+* add description
+* upload inspiration/examples
+* set total campaign budget
+* set payout per approved video
+* choose platform (TikTok, Instagram, YouTube)
+* choose creator niche
+* set deadline
+* publish campaign
+
+CAMPAIGN CARDS:
+Display:
+
+* campaign budget
+* approved submissions
+* pending submissions
+* status
+* creator count
+* spend progress bar
+
+SUBMISSIONS PAGE:
+Brands can:
+
+* review creator videos
+* approve/reject submissions
+* request revisions
+* leave notes/comments
+
+STATUS TYPES:
+
+* Pending
+* Reviewing
+* Approved
+* Revision Requested
+* Paid
+* Rejected
+
+CREATOR MANAGEMENT:
+Display:
+
+* creator profile
+* platform connected
+* engagement
+* content examples
+* payout status
+
+PAYMENTS:
+Prepare Stripe Connect integration structure:
+
+* payout tracking
+* pending payouts
+* approved payout queue
+* campaign spend tracking
+
+ANALYTICS:
+Display mock analytics cards:
+
+* views
+* engagement
+* campaign ROI
+* content performance
+
+TECH STACK:
+
+* Next.js
+* TailwindCSS
+* TypeScript
+* Responsive design
+* Component-based architecture
+
+IMPORTANT:
+
+* Generate realistic SaaS dashboard layouts
+* Use modern cards/charts/tables
+* Make it feel premium and investor-ready
+* Do NOT make it look like a social media feed
+* Prioritize workflow efficiency and operations
+
+And now I’ll generate the SEPARATE logo only using the lime/black style we actually chose.
