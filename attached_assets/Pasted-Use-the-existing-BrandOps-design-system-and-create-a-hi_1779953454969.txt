@@ -1,0 +1,155 @@
+Use the existing BrandOps design system and create a high-converting SaaS landing page and onboarding personalization flow.
+
+Do NOT redesign the app aesthetic.
+Keep the premium black + neon lime AI SaaS theme.
+
+━━━━━━━━━━━━━━━━━━━
+LANDING PAGE
+━━━━━━━━━━━━━━━━━━━
+
+Build a premium modern SaaS landing page for BrandOps.
+
+The landing page should feel like:
+
+* AI-native
+* creator economy focused
+* premium
+* fast
+* intelligent
+* enterprise-ready
+
+Hero section:
+Headline:
+“The AI Operating System for Creator Campaigns”
+
+Subheadline:
+Launch UGC campaigns, manage creators, review submissions, and automate payouts — all powered by AI.
+
+Primary CTA:
+“Start Free”
+
+Secondary CTA:
+“Watch Demo”
+
+Add:
+
+* animated dashboard preview
+* glowing gradients
+* floating UI cards
+* creator analytics previews
+* campaign workflow previews
+* subtle motion effects
+
+━━━━━━━━━━━━━━━━━━━
+LANDING PAGE SECTIONS
+━━━━━━━━━━━━━━━━━━━
+
+1. Hero
+2. Trusted by modern brands
+3. How it works
+4. AI campaign generation
+5. Creator management
+6. AI review system
+7. Analytics + ROI
+8. Stripe payouts
+9. Testimonials
+10. Pricing
+11. FAQ
+12. Final CTA
+
+━━━━━━━━━━━━━━━━━━━
+HOW IT WORKS SECTION
+━━━━━━━━━━━━━━━━━━━
+
+Step 1:
+Set budget
+
+Step 2:
+AI builds campaign
+
+Step 3:
+Creators submit videos
+
+Step 4:
+Approve content
+
+Step 5:
+Automatically pay creators
+
+━━━━━━━━━━━━━━━━━━━
+ONBOARDING PERSONALIZATION
+━━━━━━━━━━━━━━━━━━━
+
+After signup, create an onboarding flow that personalizes the BrandOps experience.
+
+Ask:
+
+* What best describes you?
+
+  * Brand
+  * Startup
+  * Ecommerce
+  * Agency
+  * Solo founder
+  * Creator manager
+  * App founder
+  * Creator
+
+* Monthly campaign budget
+
+* Preferred platform
+
+* Main niche
+
+* Team size
+
+* Goal:
+
+  * sales
+  * awareness
+  * app installs
+  * organic UGC
+  * paid ads
+
+* Number of creators needed
+
+* Experience level with creator marketing
+
+Then personalize:
+
+* dashboard recommendations
+* AI suggestions
+* creator feed
+* analytics
+* onboarding tips
+* quick start templates
+
+━━━━━━━━━━━━━━━━━━━
+MAGICAL UX
+━━━━━━━━━━━━━━━━━━━
+
+Make onboarding feel:
+
+* smooth
+* premium
+* intelligent
+* fast
+
+Add:
+
+* progress indicator
+* animated transitions
+* AI loading moments
+* personalized recommendations
+* “BrandOps is preparing your workspace…” screen
+
+━━━━━━━━━━━━━━━━━━━
+IMPORTANT
+━━━━━━━━━━━━━━━━━━━
+
+Do NOT make onboarding boring or corporate.
+
+It should feel like:
+“An AI business assistant is setting up your creator marketing operation.”
+
+Use the existing UI system and evolve the current BrandOps product into a true premium SaaS experience.

@@ -43,14 +43,19 @@ router.get("/openai/conversations/:id/messages", async (req, res): Promise<void>
 
 router.post("/openai/conversations/:id/messages", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-  const { content } = req.body as { content: string };
+  const { content, context } = req.body as { content: string; context?: string };
   if (!content?.trim()) { res.status(400).json({ error: "content is required" }); return; }
 
   const history = await db.select().from(messages).where(eq(messages.conversationId, id)).orderBy(asc(messages.createdAt));
   await db.insert(messages).values({ conversationId: id, role: "user", content });
 
+  const systemContent = [
+    "You are BrandOps AI — an intelligent business copilot for UGC campaign operations. You have real-time access to the user's platform data. Be specific, data-driven, and actionable. Reference actual numbers and campaign names when available.",
+    context ? `\n${context}` : "",
+  ].join("");
+
   const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
-    { role: "system", content: "You are BrandOps AI — an intelligent assistant for UGC campaign operations. Be concise, practical, and actionable." },
+    { role: "system", content: systemContent },
     ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     { role: "user", content },
   ];

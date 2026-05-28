@@ -1,0 +1,140 @@
+Use the CURRENT BrandOps build and improve/refine it — do NOT rebuild the app or redesign from scratch.
+
+Keep the exact current black + neon lime SaaS aesthetic and existing layout structure.
+
+Apply these targeted upgrades based on the current screens:
+
+1. SIDEBAR + LOGO FIXES
+
+* The BrandOps logo is currently too tiny in the sidebar.
+* Increase logo visibility and branding presence.
+* Add:
+
+  * larger logo sizing
+  * compact icon mark
+  * better spacing/padding
+  * glowing hover effect
+  * cleaner favicon setup
+* Make the app feel like a polished funded SaaS company.
+
+2. MAKE DATA FEEL REAL
+   Current pages feel visually good but still too mock/static.
+
+Improve the “alive” feeling:
+
+* loading skeletons
+* animated counters
+* live updating states
+* hover transitions
+* toast notifications
+* success animations
+* subtle realtime feeling
+* optimistic UI updates
+* smooth page transitions
+
+3. CREATOR PAGE IMPROVEMENTS
+   Current creator cards feel too plain/CRM-like.
+
+Upgrade cards with:
+
+* profile avatars
+* verified badges
+* AI match %
+* avg views
+* platform icons
+* content niche tags
+* creator score
+* trend indicators
+* “Best Match” badge
+* “High ROI” badge
+
+Keep current layout but make it feel more premium and intelligent.
+
+4. ANALYTICS PAGE UPGRADE
+   Current analytics page is good visually but too generic.
+
+Add:
+
+* AI Insights panel
+* projected ROI
+* top performing creator
+* best posting time
+* best performing hook type
+* creator efficiency ranking
+* AI recommendations
+
+Example:
+“Fitness creators under 150k followers are outperforming larger creators by 31%.”
+
+Keep charts but make them smarter and more SaaS/AI focused.
+
+5. SUBMISSIONS PAGE
+   Current submission flow is strong already.
+
+Upgrade with:
+
+* AI review breakdown modal
+* hook score
+* conversion prediction
+* authenticity score
+* AI notes section
+* side-by-side revisions
+* timestamps/comments
+
+Keep current approve/reject workflow.
+
+6. PAYMENTS PAGE
+   Current payments page looks good.
+
+Improve with:
+
+* payout progress states
+* payout timeline
+* creator payout history modal
+* estimated payout arrival
+* Stripe Connect onboarding status
+* balance overview
+
+7. AI ASSISTANT
+   Current AI assistant page looks too empty.
+
+Upgrade with:
+
+* contextual recommendations
+* recent campaign memory
+* suggested actions
+* quick prompts
+* live streaming response UI
+* AI campaign optimization suggestions
+
+Make it feel like a business copilot instead of generic chat.
+
+8. CAMPAIGN BUILDER
+   Current campaign builder needs more “magic.”
+
+Improve AI campaign generation flow:
+
+* streaming generation
+* editable AI sections
+* regenerate buttons
+* AI hook suggestions
+* AI CTA suggestions
+* AI creator recommendations
+* save draft flow
+
+9. REAL BACKEND CONNECTIONS
+   Start replacing mock behavior with real architecture:
+
+* Firebase data persistence
+* real creator onboarding
+* real uploads
+* real Stripe payout flow
+* real OpenAI responses
+
+Do NOT fully productionize everything yet.
+Focus on making the product FEEL real and interactive.
+
+10. IMPORTANT
+    Do NOT redesign the app from scratch.
+    Do NOT remove the current UI direction.
+    Refine and elevate the CURRENT BrandOps implementation into a more premium, alive, AI-native SaaS experience.

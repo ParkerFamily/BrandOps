@@ -1,12 +1,14 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import NotFound from "@/pages/not-found";
 import { Layout } from "@/components/Layout";
+import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import Onboarding from "@/pages/Onboarding";
 import Dashboard from "@/pages/Dashboard";
 import Campaigns from "@/pages/Campaigns";
 import CampaignDetail from "@/pages/CampaignDetail";
@@ -19,6 +21,8 @@ import Analytics from "@/pages/Analytics";
 import AIAssistant from "@/pages/AIAssistant";
 import Team from "@/pages/Team";
 import Settings from "@/pages/Settings";
+import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,15 +33,43 @@ const queryClient = new QueryClient({
   },
 });
 
+function SmartRoot() {
+  const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!loading && user) {
+      setLocation("/dashboard");
+    }
+  }, [user, loading, setLocation]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#C6FF00]" />
+      </div>
+    );
+  }
+
+  if (user) return null;
+  return <Landing />;
+}
+
 function AppRoutes() {
   return (
     <Switch>
+      <Route path="/" component={SmartRoot} />
       <Route path="/login" component={Login} />
+      <Route path="/onboarding">
+        <ProtectedRoute>
+          <Onboarding />
+        </ProtectedRoute>
+      </Route>
       <Route>
         <ProtectedRoute>
           <Layout>
             <Switch>
-              <Route path="/" component={Dashboard} />
+              <Route path="/dashboard" component={Dashboard} />
               <Route path="/campaigns" component={Campaigns} />
               <Route path="/campaigns/new" component={NewCampaign} />
               <Route path="/campaigns/:id" component={CampaignDetail} />
