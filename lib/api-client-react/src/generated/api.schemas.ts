@@ -369,26 +369,37 @@ export interface PaymentUpdate {
   status?: PaymentUpdateStatus;
 }
 
-export interface PlatformStat {
-  platform: string;
-  count: number;
-  spend: number;
-}
-
 export interface MonthlySpend {
   month: string;
   spend: number;
   approved: number;
 }
 
+export interface CreatorStat {
+  id: number;
+  name: string;
+  handle: string;
+  platform: string;
+  metric: number;
+  metricLabel: string;
+  approvedVideos?: number;
+}
+
 export interface Analytics {
-  totalViews: number;
-  totalEngagements: number;
-  avgEngagementRate: number;
-  totalRoi: number;
-  topCampaigns: CampaignStats[];
-  platformBreakdown: PlatformStat[];
+  totalBudget: number;
+  approvedPayouts: number;
+  pendingApprovals: number;
+  videosDelivered: number;
+  videosApproved: number;
+  approvalRate: number;
+  avgDeliveryDays: number;
+  revisionRequests: number;
+  costPerApprovedVideo: number;
+  budgetRemaining: number;
   monthlySpend: MonthlySpend[];
+  topCreators: CreatorStat[];
+  fastestCreators: CreatorStat[];
+  creatorsNeedingAttention: CreatorStat[];
 }
 
 export interface OpenaiConversation {

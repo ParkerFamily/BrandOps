@@ -1134,48 +1134,82 @@ components:
     Analytics:
       type: object
       required:
-        - totalViews
-        - totalEngagements
-        - avgEngagementRate
-        - totalRoi
-        - topCampaigns
-        - platformBreakdown
+        - totalBudget
+        - approvedPayouts
+        - pendingApprovals
+        - videosDelivered
+        - videosApproved
+        - approvalRate
+        - avgDeliveryDays
+        - revisionRequests
+        - costPerApprovedVideo
+        - budgetRemaining
         - monthlySpend
+        - topCreators
+        - fastestCreators
+        - creatorsNeedingAttention
       properties:
-        totalViews:
-          type: integer
-        totalEngagements:
-          type: integer
-        avgEngagementRate:
+        totalBudget:
           type: number
-        totalRoi:
+        approvedPayouts:
           type: number
-        topCampaigns:
-          type: array
-          items:
-            $ref: "#/components/schemas/CampaignStats"
-        platformBreakdown:
-          type: array
-          items:
-            $ref: "#/components/schemas/PlatformStat"
+        pendingApprovals:
+          type: integer
+        videosDelivered:
+          type: integer
+        videosApproved:
+          type: integer
+        approvalRate:
+          type: number
+        avgDeliveryDays:
+          type: number
+        revisionRequests:
+          type: integer
+        costPerApprovedVideo:
+          type: number
+        budgetRemaining:
+          type: number
         monthlySpend:
           type: array
           items:
             $ref: "#/components/schemas/MonthlySpend"
+        topCreators:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorStat"
+        fastestCreators:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorStat"
+        creatorsNeedingAttention:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorStat"
 
-    PlatformStat:
+    CreatorStat:
       type: object
       required:
+        - id
+        - name
+        - handle
         - platform
-        - count
-        - spend
+        - metric
+        - metricLabel
       properties:
+        id:
+          type: integer
+        name:
+          type: string
+        handle:
+          type: string
         platform:
           type: string
-        count:
-          type: integer
-        spend:
+        metric:
           type: number
+        metricLabel:
+          type: string
+        approvedVideos:
+          type: integer
 
     MonthlySpend:
       type: object

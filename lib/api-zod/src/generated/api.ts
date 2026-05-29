@@ -924,29 +924,47 @@ export const UpdatePaymentResponse = zod.object({
  * @summary Get aggregate analytics
  */
 export const GetAnalyticsResponse = zod.object({
-  "totalViews": zod.number(),
-  "totalEngagements": zod.number(),
-  "avgEngagementRate": zod.number(),
-  "totalRoi": zod.number(),
-  "topCampaigns": zod.array(zod.object({
-  "campaignId": zod.number(),
-  "totalSubmissions": zod.number(),
-  "approvedSubmissions": zod.number(),
-  "pendingSubmissions": zod.number(),
-  "rejectedSubmissions": zod.number(),
-  "totalSpent": zod.number(),
+  "totalBudget": zod.number(),
+  "approvedPayouts": zod.number(),
+  "pendingApprovals": zod.number(),
+  "videosDelivered": zod.number(),
+  "videosApproved": zod.number(),
+  "approvalRate": zod.number(),
+  "avgDeliveryDays": zod.number(),
+  "revisionRequests": zod.number(),
+  "costPerApprovedVideo": zod.number(),
   "budgetRemaining": zod.number(),
-  "creatorCount": zod.number()
-})),
-  "platformBreakdown": zod.array(zod.object({
-  "platform": zod.string(),
-  "count": zod.number(),
-  "spend": zod.number()
-})),
   "monthlySpend": zod.array(zod.object({
   "month": zod.string(),
   "spend": zod.number(),
   "approved": zod.number()
+})),
+  "topCreators": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "handle": zod.string(),
+  "platform": zod.string(),
+  "metric": zod.number(),
+  "metricLabel": zod.string(),
+  "approvedVideos": zod.number().optional()
+})),
+  "fastestCreators": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "handle": zod.string(),
+  "platform": zod.string(),
+  "metric": zod.number(),
+  "metricLabel": zod.string(),
+  "approvedVideos": zod.number().optional()
+})),
+  "creatorsNeedingAttention": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "handle": zod.string(),
+  "platform": zod.string(),
+  "metric": zod.number(),
+  "metricLabel": zod.string(),
+  "approvedVideos": zod.number().optional()
 }))
 })
 

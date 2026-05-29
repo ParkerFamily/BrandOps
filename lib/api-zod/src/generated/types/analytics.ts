@@ -5,16 +5,22 @@
  * BrandOps API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { CampaignStats } from './campaignStats';
+import type { CreatorStat } from './creatorStat';
 import type { MonthlySpend } from './monthlySpend';
-import type { PlatformStat } from './platformStat';
 
 export interface Analytics {
-  totalViews: number;
-  totalEngagements: number;
-  avgEngagementRate: number;
-  totalRoi: number;
-  topCampaigns: CampaignStats[];
-  platformBreakdown: PlatformStat[];
+  totalBudget: number;
+  approvedPayouts: number;
+  pendingApprovals: number;
+  videosDelivered: number;
+  videosApproved: number;
+  approvalRate: number;
+  avgDeliveryDays: number;
+  revisionRequests: number;
+  costPerApprovedVideo: number;
+  budgetRemaining: number;
   monthlySpend: MonthlySpend[];
+  topCreators: CreatorStat[];
+  fastestCreators: CreatorStat[];
+  creatorsNeedingAttention: CreatorStat[];
 }

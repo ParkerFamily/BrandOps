@@ -6,8 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface PlatformStat {
+export interface CreatorStat {
+  id: number;
+  name: string;
+  handle: string;
   platform: string;
-  count: number;
-  spend: number;
+  metric: number;
+  metricLabel: string;
+  approvedVideos?: number;
 }
