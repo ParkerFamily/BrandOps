@@ -1,5 +1,6 @@
 import { useListCampaigns, useCreateCampaign } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { fsCreateCampaign } from "@/lib/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -267,6 +268,7 @@ export default function Campaigns() {
   const handleCreateFromAI = (status: "draft" | "active" = "draft") => {
     if (!generated) return;
     const deadlineStr = generated.suggestedDeadline || deadline || "30 days";
+    const deadlineISO = parseDeadline(deadlineStr);
     createCampaign.mutate({
       data: {
         title: generated.title,
@@ -275,13 +277,42 @@ export default function Campaigns() {
         niche: generated.creatorType?.slice(0, 50) || "UGC",
         totalBudget: generated.estimatedTotalCost || Number(budget) || 1000,
         payoutPerVideo: generated.suggestedPayoutPerVideo || 100,
-        deadline: parseDeadline(deadlineStr),
+        deadline: deadlineISO,
         videosNeeded: generated.suggestedVideoCount || 1,
         creatorType: generated.creatorType || "",
         tone: generated.toneAndStyle || "",
       }
     }, {
       onSuccess: (campaign) => {
+        // Mirror to Firestore — stores the full AI-generated content too
+        fsCreateCampaign({
+          title: generated.title,
+          description: generated.summary,
+          platform: "tiktok",
+          niche: generated.creatorType?.slice(0, 50) || "UGC",
+          status: status === "active" ? "active" : "draft",
+          totalBudget: generated.estimatedTotalCost || Number(budget) || 1000,
+          payoutPerVideo: generated.suggestedPayoutPerVideo || 100,
+          videosNeeded: generated.suggestedVideoCount || 1,
+          creatorType: generated.creatorType || "",
+          tone: generated.toneAndStyle || "",
+          deadline: deadlineISO,
+          aiData: {
+            postgresId: campaign.id,
+            hookIdeas: generated.hookIdeas,
+            videoConceptIdeas: generated.videoConceptIdeas,
+            ctaIdeas: generated.ctaIdeas,
+            creatorBrief: generated.creatorBrief,
+            approvalCriteria: generated.approvalCriteria,
+            deliverables: generated.deliverables,
+            usageRights: generated.usageRights,
+            payoutStrategy: generated.payoutStrategy,
+            doList: generated.doList,
+            dontList: generated.dontList,
+            toneAndStyle: generated.toneAndStyle,
+          },
+        }).catch(err => console.warn("Firestore mirror failed (non-fatal):", err));
+
         toast({
           title: status === "active" ? "Campaign published!" : "Campaign saved as draft",
           description: generated.title,
