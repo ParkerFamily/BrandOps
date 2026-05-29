@@ -7,13 +7,16 @@ import { Progress } from "@/components/ui/progress";
 import {
   DollarSign, Megaphone, CheckCircle2, Clock, Plus, Sparkles,
   TrendingUp, AlertTriangle, Lightbulb, Star, ArrowRight, Zap,
-  PlayCircle, Users, ChevronRight
+  PlayCircle, Users, ChevronRight, Upload, Video, Inbox, Wallet,
+  CalendarDays, ExternalLink
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { Link, useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { getOnboarded } from "@/lib/onboarding";
+import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -73,7 +76,301 @@ function InsightIcon({ type }: { type: string }) {
   }
 }
 
-export default function Dashboard() {
+function statusBadge(status: string) {
+  switch (status) {
+    case "approved": return <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">Approved</Badge>;
+    case "pending": return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">Pending</Badge>;
+    case "reviewing": return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">In Review</Badge>;
+    case "rejected": return <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">Rejected</Badge>;
+    case "revision_requested": return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">Revision</Badge>;
+    default: return <Badge variant="outline" className="text-xs">{status}</Badge>;
+  }
+}
+
+/* ─────────────────────────── CREATOR DASHBOARD ─────────────────────────── */
+
+function CreatorDashboard() {
+  const { data: campaigns, isLoading: campaignsLoading } = useListCampaigns();
+  const { data: submissions, isLoading: submissionsLoading } = useListSubmissions({});
+  const { data: payments, isLoading: paymentsLoading } = useListPayments();
+  const [, navigate] = useLocation();
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const activeCampaigns = campaigns?.filter(c => c.status === "active") ?? [];
+  const mySubmissions = submissions ?? [];
+  const approvedCount = mySubmissions.filter(s => s.status === "approved").length;
+  const pendingCount = mySubmissions.filter(s => s.status === "pending" || s.status === "reviewing").length;
+  const totalEarned = payments?.filter(p => p.status === "paid").reduce((sum, p) => sum + p.amount, 0) ?? 0;
+
+  return (
+    <div className="space-y-8">
+      {/* Hero */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Creator Hub</h1>
+          <p className="text-muted-foreground mt-1">Your campaigns, submissions, and earnings — all in one place.</p>
+        </div>
+        <Button
+          onClick={() => setUploadOpen(true)}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shadow-[0_0_20px_rgba(198,255,0,0.15)]"
+        >
+          <Upload className="h-4 w-4" /> Submit a Video
+        </Button>
+      </div>
+
+      {/* CTA Banner */}
+      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent p-6">
+        <div className="absolute -right-8 -top-8 w-48 h-48 opacity-[0.04]">
+          <Video className="w-full h-full" />
+        </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
+              <Zap className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <div className="font-semibold text-foreground flex items-center gap-2">
+                {activeCampaigns.length} Active Campaign{activeCampaigns.length !== 1 ? "s" : ""} Available
+                <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">Open</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Browse open briefs, pick your best fit, and submit your video to earn.
+              </p>
+            </div>
+          </div>
+          <Button
+            className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shrink-0"
+            onClick={() => navigate("/campaigns")}
+          >
+            Browse Campaigns <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <AnimatedStatCard
+          title="Total Earned"
+          rawValue={totalEarned}
+          icon={DollarSign}
+          color="bg-primary/10 text-primary"
+          description="From approved videos"
+          prefix="$"
+        />
+        <AnimatedStatCard
+          title="Open Campaigns"
+          rawValue={activeCampaigns.length}
+          icon={Megaphone}
+          color="bg-blue-500/10 text-blue-400"
+          description="Available to submit"
+        />
+        <AnimatedStatCard
+          title="Pending Review"
+          rawValue={pendingCount}
+          icon={Clock}
+          color="bg-yellow-500/10 text-yellow-400"
+          description="Awaiting brand approval"
+        />
+        <AnimatedStatCard
+          title="Approved Videos"
+          rawValue={approvedCount}
+          icon={CheckCircle2}
+          color="bg-green-500/10 text-green-400"
+          description="Ready to publish"
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Left / main */}
+        <div className="lg:col-span-2 space-y-6">
+
+          {/* Available Campaigns */}
+          <Card className="bg-card border-card-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Megaphone className="h-4 w-4 text-muted-foreground" />
+                  Available Campaigns
+                </CardTitle>
+                <Link href="/campaigns">
+                  <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground h-7">
+                    View all <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {campaignsLoading ? (
+                [...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
+              ) : activeCampaigns.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  <Megaphone className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                  No open campaigns right now. Check back soon.
+                </div>
+              ) : activeCampaigns.slice(0, 4).map((c) => (
+                <Link key={c.id} href={`/campaigns/${c.id}`}>
+                  <div className="p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/20 transition-all cursor-pointer group">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm group-hover:text-primary transition-colors truncate">{c.title}</div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          <span className="capitalize">{c.platform}</span>
+                          <span>·</span>
+                          <span>{c.niche}</span>
+                          <span>·</span>
+                          <CalendarDays className="h-3 w-3 inline" /> Due {format(new Date(c.deadline), "MMM d")}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 ml-4 shrink-0">
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-primary">${Number(c.payoutPerVideo).toLocaleString()}</div>
+                          <div className="text-xs text-muted-foreground">per video</div>
+                        </div>
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* My Submissions */}
+          <Card className="bg-card border-card-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Inbox className="h-4 w-4 text-muted-foreground" />
+                  My Submissions
+                  {mySubmissions.length > 0 && (
+                    <Badge variant="outline" className="text-xs text-muted-foreground">{mySubmissions.length}</Badge>
+                  )}
+                </CardTitle>
+                <Link href="/submissions">
+                  <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground h-7">
+                    View all <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {submissionsLoading ? (
+                <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}</div>
+              ) : mySubmissions.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  <Video className="h-7 w-7 mx-auto mb-2 opacity-20" />
+                  No submissions yet.{" "}
+                  <button onClick={() => setUploadOpen(true)} className="text-primary hover:underline">Submit your first video →</button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {mySubmissions.slice(0, 5).map(sub => (
+                    <Link href="/submissions" key={sub.id}>
+                      <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer">
+                        <div className="w-9 h-9 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
+                          <PlayCircle className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{sub.campaign?.title ?? "Campaign"}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(sub.createdAt), { addSuffix: true })}
+                          </div>
+                        </div>
+                        {statusBadge(sub.status)}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-6">
+          {/* My Earnings */}
+          <Card className="bg-card border-card-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-muted-foreground" />
+                  My Earnings
+                </CardTitle>
+                <Link href="/payments">
+                  <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground h-7">
+                    All <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {paymentsLoading ? (
+                <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : (payments?.length ?? 0) === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  <DollarSign className="h-7 w-7 mx-auto mb-2 opacity-20" />
+                  No earnings yet — submit a video to get paid.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {payments?.slice(0, 5).map(p => (
+                    <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/30 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{p.campaign?.title ?? "Campaign"}</div>
+                        <Badge variant="outline" className={cn("text-xs mt-0.5",
+                          p.status === "paid" ? "text-green-400 border-green-500/30" :
+                          p.status === "pending" ? "text-yellow-400 border-yellow-500/30" :
+                          "text-muted-foreground"
+                        )}>
+                          {p.status === "paid" ? "Paid" : p.status === "pending" ? "Pending" : p.status}
+                        </Badge>
+                      </div>
+                      <div className="text-sm font-bold text-primary ml-3 shrink-0">${p.amount}</div>
+                    </div>
+                  ))}
+                  {totalEarned > 0 && (
+                    <div className="pt-2 mt-1 border-t border-border flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Total paid out</span>
+                      <span className="font-bold text-foreground">${totalEarned.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Quick Tips */}
+          <Card className="bg-card border-card-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Quick Tips
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                { icon: <Video className="h-4 w-4 text-primary" />, tip: "Keep videos between 15–60 seconds for best approval rates." },
+                { icon: <CheckCircle2 className="h-4 w-4 text-green-400" />, tip: "Read the campaign brief carefully before filming — it speeds up approval." },
+                { icon: <DollarSign className="h-4 w-4 text-yellow-400" />, tip: "Submit before the deadline to guarantee your slot in the campaign." },
+              ].map((item, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="mt-0.5 shrink-0">{item.icon}</div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{item.tip}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <SubmitVideoDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+    </div>
+  );
+}
+
+/* ─────────────────────────── BRAND DASHBOARD ───────────────────────────── */
+
+function BrandDashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
   const { data: activity, isLoading: activityLoading } = useGetRecentActivity();
   const { data: campaigns } = useListCampaigns();
@@ -164,7 +461,6 @@ export default function Dashboard() {
             Start Now <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
-        {/* Step indicators */}
         <div className="mt-5 flex items-center">
           {["Set Budget", "Define Goal", "Creator Type", "AI Generates", "Publish"].map((step, i) => (
             <div key={step} className="flex items-center flex-1">
@@ -222,9 +518,7 @@ export default function Dashboard() {
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left / main column */}
         <div className="lg:col-span-2 space-y-6">
-
           {/* Active Campaign Pipeline */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
@@ -255,12 +549,8 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="font-medium text-sm group-hover:text-primary transition-colors">{c.title}</div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />{c.creatorCount ?? 0}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <PlayCircle className="h-3 w-3" />{c.approvedCount ?? 0} approved
-                          </span>
+                          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{c.creatorCount ?? 0}</span>
+                          <span className="flex items-center gap-1"><PlayCircle className="h-3 w-3" />{c.approvedCount ?? 0} approved</span>
                           <span className="text-primary font-medium">${(c.totalSpent ?? 0).toLocaleString()}</span>
                         </div>
                       </div>
@@ -283,9 +573,7 @@ export default function Dashboard() {
                   <Clock className="h-4 w-4 text-yellow-400" />
                   Pending Approvals
                   {pendingSubmissions.length > 0 && (
-                    <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
-                      {pendingSubmissions.length}
-                    </Badge>
+                    <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">{pendingSubmissions.length}</Badge>
                   )}
                 </CardTitle>
                 <Link href="/submissions">
@@ -442,4 +730,12 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+/* ─────────────────────────── ROOT ──────────────────────────────────────── */
+
+export default function Dashboard() {
+  const onboarding = getOnboarded();
+  const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
+  return isCreator ? <CreatorDashboard /> : <BrandDashboard />;
 }
