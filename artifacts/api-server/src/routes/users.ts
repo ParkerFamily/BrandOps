@@ -15,7 +15,14 @@ router.get("/users/:uid", async (req, res) => {
     if (!rows.length || !rows[0].onboardedAt) {
       return res.json({ onboarded: false });
     }
-    return res.json({ onboarded: true, onboardingData: rows[0].onboardingData });
+    const row = rows[0];
+    return res.json({
+      onboarded: true,
+      onboardingData: row.onboardingData,
+      stripeConnectAccountId: row.stripeConnectAccountId ?? null,
+      stripeConnectOnboarded: row.stripeConnectOnboarded,
+      stripeCustomerId: row.stripeCustomerId ?? null,
+    });
   } catch (err) {
     req.log.error({ err }, "GET /users/:uid failed");
     return res.status(500).json({ error: "Internal server error" });

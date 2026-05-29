@@ -1,14 +1,21 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Check, User, Briefcase, Globe, CreditCard, Shield, LogOut } from "lucide-react";
+import {
+  Check, User, Briefcase, Globe, CreditCard, Shield, LogOut,
+  Zap, ExternalLink, RefreshCw, CheckCircle2, AlertTriangle, Clock
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-
 import { getOnboarded, clearOnboarded } from "@/lib/onboarding";
+
+const BASE = import.meta.env.BASE_URL;
 const PROFILE_KEY = "brandops_profile";
 
 interface OnboardingData {
@@ -27,29 +34,297 @@ interface Profile {
   website: string;
 }
 
-const loadOnboarding = (): OnboardingData | null => getOnboarded() as OnboardingData | null;
+interface UserStripeStatus {
+  stripeConnectAccountId: string | null;
+  stripeConnectOnboarded: boolean;
+  stripeCustomerId: string | null;
+}
+
+interface ConnectStatus {
+  connected: boolean;
+  accountId?: string;
+  payoutsEnabled?: boolean;
+  chargesEnabled?: boolean;
+  detailsSubmitted?: boolean;
+  requiresAction?: boolean;
+}
 
 function loadProfile(): Profile {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return JSON.parse(raw) as Profile;
   } catch {}
   return { brandName: "", website: "" };
 }
 
+/* ─── Creator Payout Setup Card ─────────────────────────────────────────── */
+
+function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; name?: string | null }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [starting, setStarting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { data: connectStatus, isLoading } = useQuery<ConnectStatus>({
+    queryKey: ["creator-connect-status", uid],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}api/stripe/creator-connect/status?uid=${encodeURIComponent(uid)}`);
+      if (!res.ok) return { connected: false, payoutsEnabled: false };
+      return res.json() as Promise<ConnectStatus>;
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const startOnboarding = async () => {
+    setStarting(true);
+    try {
+      const res = await fetch(`${BASE}api/stripe/creator-connect/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, email, name, returnUrl: window.location.origin }),
+      });
+      if (!res.ok) throw new Error("Failed to start onboarding");
+      const { url } = await res.json() as { url: string };
+      window.location.href = url;
+    } catch (err) {
+      toast({ title: "Setup failed", description: String(err), variant: "destructive" });
+      setStarting(false);
+    }
+  };
+
+  const refreshStatus = async () => {
+    setRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ["creator-connect-status", uid] });
+    setRefreshing(false);
+  };
+
+  const isReady = connectStatus?.payoutsEnabled && connectStatus?.detailsSubmitted;
+  const inProgress = connectStatus?.connected && !isReady;
+
+  return (
+    <Card className="bg-card border-card-border">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Zap className="h-4 w-4 text-primary" />
+            Payout Setup
+          </CardTitle>
+          {isLoading ? null : isReady ? (
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" /> Active
+            </Badge>
+          ) : inProgress ? (
+            <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
+              <Clock className="h-3 w-3 mr-1" /> Incomplete
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground text-xs">
+              <AlertTriangle className="h-3 w-3 mr-1" /> Not set up
+            </Badge>
+          )}
+        </div>
+        <CardDescription>
+          Connect your bank account so brands can pay you for approved videos.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isReady ? (
+          <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-green-400">
+              <CheckCircle2 className="h-4 w-4" /> Payouts enabled
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your bank account is connected and payouts are live. Brands can now send earnings directly to you.
+            </p>
+          </div>
+        ) : inProgress ? (
+          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
+              <Clock className="h-4 w-4" /> Onboarding incomplete
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your Stripe account was created but needs more info. Click below to finish.
+            </p>
+          </div>
+        ) : (
+          <div className="p-4 rounded-lg bg-muted/40 border border-border space-y-2">
+            <p className="text-sm text-muted-foreground">
+              You need to connect a bank account or debit card before you can receive payments.
+              This takes about 2 minutes via Stripe's secure onboarding.
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={startOnboarding}
+            disabled={starting}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shadow-[0_0_20px_rgba(198,255,0,0.1)]"
+          >
+            {starting ? (
+              <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Redirecting…</>
+            ) : isReady ? (
+              <><ExternalLink className="h-3.5 w-3.5" /> Manage Payout Account</>
+            ) : inProgress ? (
+              <><ExternalLink className="h-3.5 w-3.5" /> Finish Setup</>
+            ) : (
+              <><Zap className="h-3.5 w-3.5" /> Set Up Payouts</>
+            )}
+          </Button>
+          {connectStatus?.connected && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={refreshStatus}
+              disabled={refreshing}
+              className="text-muted-foreground gap-1.5 h-9"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+              Refresh status
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Brand Payment Method Setup Card ───────────────────────────────────── */
+
+function BrandPaymentSetup({ uid, email, name }: { uid: string; email: string; name?: string | null }) {
+  const { toast } = useToast();
+  const [starting, setStarting] = useState(false);
+
+  const { data: profileData } = useQuery<UserStripeStatus>({
+    queryKey: ["user-stripe-status", uid],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}api/users/${uid}`);
+      if (!res.ok) return { stripeConnectAccountId: null, stripeConnectOnboarded: false, stripeCustomerId: null };
+      return res.json() as Promise<UserStripeStatus>;
+    },
+    staleTime: 30_000,
+  });
+
+  const hasPaymentMethod = !!profileData?.stripeCustomerId;
+
+  const startSetup = async () => {
+    setStarting(true);
+    try {
+      const res = await fetch(`${BASE}api/stripe/brand-setup/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, email, name, returnUrl: window.location.origin }),
+      });
+      if (!res.ok) throw new Error("Failed to start payment setup");
+      const { url } = await res.json() as { url: string };
+      window.location.href = url;
+    } catch (err) {
+      toast({ title: "Setup failed", description: String(err), variant: "destructive" });
+      setStarting(false);
+    }
+  };
+
+  return (
+    <Card className="bg-card border-card-border">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CreditCard className="h-4 w-4 text-primary" />
+            Payment Method
+          </CardTitle>
+          {hasPaymentMethod ? (
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" /> On file
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground text-xs">
+              <AlertTriangle className="h-3 w-3 mr-1" /> Required
+            </Badge>
+          )}
+        </div>
+        <CardDescription>
+          Add a card or bank account to fund campaigns and pay creators.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {hasPaymentMethod ? (
+          <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-green-400">
+              <CheckCircle2 className="h-4 w-4" /> Payment method on file
+            </div>
+            <p className="text-xs text-muted-foreground">
+              You're ready to pay creators. Manage your payment methods or invoices via Stripe.
+            </p>
+          </div>
+        ) : (
+          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
+              <AlertTriangle className="h-4 w-4" /> No payment method yet
+            </div>
+            <p className="text-xs text-muted-foreground">
+              You need to add a card before you can issue payouts to creators through the platform.
+            </p>
+          </div>
+        )}
+
+        <Button
+          onClick={startSetup}
+          disabled={starting}
+          className={cn(
+            "gap-2",
+            hasPaymentMethod
+              ? "bg-muted text-foreground border border-border hover:bg-muted/80"
+              : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.1)]"
+          )}
+        >
+          {starting ? (
+            <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Redirecting…</>
+          ) : hasPaymentMethod ? (
+            <><ExternalLink className="h-3.5 w-3.5" /> Manage Payment Methods</>
+          ) : (
+            <><CreditCard className="h-3.5 w-3.5" /> Add Payment Method</>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ─── Main Settings Page ─────────────────────────────────────────────────── */
+
 export default function Settings() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
-  const onboarding = loadOnboarding();
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const onboarding = getOnboarded() as OnboardingData | null;
+  const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
   const [profile, setProfile] = useState<Profile>(loadProfile);
   const [saved, setSaved] = useState(false);
 
+  // Handle Stripe return callbacks
   useEffect(() => {
-    if (!profile.brandName && !profile.website) {
-      const stored = loadProfile();
-      setProfile(stored);
+    const params = new URLSearchParams(window.location.search);
+    const stripeConnect = params.get("stripe_connect");
+    const stripeSetup = params.get("stripe_setup");
+
+    if (stripeConnect === "complete") {
+      toast({ title: "Stripe connected!", description: "Your payout account is being verified. Refresh to see your status." });
+      queryClient.invalidateQueries({ queryKey: ["creator-connect-status"] });
+      navigate("/settings", { replace: true });
+    } else if (stripeConnect === "refresh") {
+      toast({ title: "Session expired", description: "Please start the Stripe setup again." });
+      navigate("/settings", { replace: true });
+    } else if (stripeSetup === "complete") {
+      toast({ title: "Payment method saved!", description: "You can now fund campaigns and pay creators." });
+      queryClient.invalidateQueries({ queryKey: ["user-stripe-status"] });
+      navigate("/settings", { replace: true });
+    } else if (stripeSetup === "cancelled") {
+      navigate("/settings", { replace: true });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSave = () => {
@@ -58,8 +333,6 @@ export default function Settings() {
     toast({ title: "Profile saved", description: "Your workspace profile has been updated." });
     setTimeout(() => setSaved(false), 2000);
   };
-
-  const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
   return (
     <div className="space-y-6">
@@ -159,7 +432,14 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        {/* Onboarding Selections */}
+        {/* Role-specific Stripe Setup */}
+        {user && (
+          isCreator
+            ? <CreatorPayoutSetup uid={user.uid} email={user.email ?? ""} name={user.displayName} />
+            : <BrandPaymentSetup uid={user.uid} email={user.email ?? ""} name={user.displayName} />
+        )}
+
+        {/* Workspace Configuration */}
         {onboarding && (
           <Card className="bg-card border-card-border">
             <CardHeader>
@@ -196,7 +476,7 @@ export default function Settings() {
                 )}
                 {onboarding.platforms?.length > 0 && !isCreator && (
                   <div className="col-span-2 p-3 rounded-lg bg-background border border-border">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{isCreator ? "Services" : "Video Channels"}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Video Channels</p>
                     <div className="flex flex-wrap gap-1.5">
                       {onboarding.platforms.map((p) => (
                         <span key={p} className="text-xs bg-white/5 text-foreground border border-border rounded-full px-2 py-0.5">{p}</span>
@@ -206,28 +486,17 @@ export default function Settings() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                To change these, <button onClick={() => { clearOnboarded(); window.location.href = "/onboarding"; }} className="text-primary underline underline-offset-2">re-run onboarding</button>.
+                To change these,{" "}
+                <button
+                  onClick={() => { clearOnboarded(); window.location.href = "/onboarding"; }}
+                  className="text-primary underline underline-offset-2"
+                >
+                  re-run onboarding
+                </button>.
               </p>
             </CardContent>
           </Card>
         )}
-
-        {/* Billing */}
-        <Card className="bg-card border-card-border">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-primary" />
-              Billing & Invoices
-            </CardTitle>
-            <CardDescription>Manage your subscription and payment methods.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="p-4 rounded-lg bg-background border border-border text-center py-8">
-              <p className="text-sm text-muted-foreground">No active subscription.</p>
-              <p className="text-xs text-muted-foreground mt-1">Choose a plan from the <a href="/" className="text-primary underline underline-offset-2">pricing page</a> to get started.</p>
-            </div>
-          </CardContent>
-        </Card>
 
       </div>
     </div>

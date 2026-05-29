@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { sql, eq } from 'drizzle-orm';
-import { db, creatorsTable, paymentsTable, campaignsTable } from '@workspace/db';
+import { db, creatorsTable, paymentsTable, campaignsTable, userProfilesTable } from '@workspace/db';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { logger } from '../lib/logger';
 
@@ -242,6 +242,152 @@ router.get('/stripe/creator-earnings', async (req, res): Promise<void> => {
 
   req.log.info({ email, count: merged.length, totalEarned }, 'Creator earnings fetched');
   res.json({ totalEarned, pendingAmount, payments: merged });
+});
+
+// ── CREATOR STRIPE CONNECT ────────────────────────────────────────────────
+
+// Start creator Connect Express onboarding — creates account if needed, returns hosted onboarding URL
+router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => {
+  const { uid, email, name, returnUrl } = req.body as {
+    uid?: string; email?: string; name?: string; returnUrl?: string;
+  };
+  if (!uid || !email) {
+    res.status(400).json({ error: 'uid and email are required' });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const base = returnUrl ?? 'http://localhost:80';
+
+  const [profile] = await db
+    .select()
+    .from(userProfilesTable)
+    .where(eq(userProfilesTable.firebaseUid, uid))
+    .limit(1);
+
+  let accountId = profile?.stripeConnectAccountId;
+
+  if (!accountId) {
+    const account = await stripe.accounts.create({
+      type: 'express',
+      email,
+      ...(name ? { display_name: name } : {}),
+      capabilities: { transfers: { requested: true } },
+    });
+    accountId = account.id;
+
+    await db
+      .insert(userProfilesTable)
+      .values({ firebaseUid: uid, stripeConnectAccountId: accountId })
+      .onConflictDoUpdate({
+        target: userProfilesTable.firebaseUid,
+        set: { stripeConnectAccountId: accountId, updatedAt: new Date() },
+      });
+  }
+
+  const accountLink = await stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: `${base}/settings?stripe_connect=refresh`,
+    return_url: `${base}/settings?stripe_connect=complete`,
+    type: 'account_onboarding',
+  });
+
+  req.log.info({ uid, accountId }, 'Creator Connect onboarding link created');
+  res.json({ url: accountLink.url, accountId });
+});
+
+// Check creator Connect Express account status
+router.get('/stripe/creator-connect/status', async (req, res): Promise<void> => {
+  const uid = typeof req.query.uid === 'string' ? req.query.uid : '';
+  if (!uid) {
+    res.status(400).json({ error: 'uid is required' });
+    return;
+  }
+
+  const [profile] = await db
+    .select()
+    .from(userProfilesTable)
+    .where(eq(userProfilesTable.firebaseUid, uid))
+    .limit(1);
+
+  if (!profile?.stripeConnectAccountId) {
+    res.json({ connected: false, payoutsEnabled: false, chargesEnabled: false });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const account = await stripe.accounts.retrieve(profile.stripeConnectAccountId);
+
+  const fullyOnboarded = account.payouts_enabled && account.charges_enabled;
+
+  if (fullyOnboarded && !profile.stripeConnectOnboarded) {
+    await db
+      .update(userProfilesTable)
+      .set({ stripeConnectOnboarded: true, updatedAt: new Date() })
+      .where(eq(userProfilesTable.firebaseUid, uid));
+  }
+
+  res.json({
+    connected: true,
+    accountId: account.id,
+    payoutsEnabled: account.payouts_enabled,
+    chargesEnabled: account.charges_enabled,
+    detailsSubmitted: account.details_submitted,
+    requiresAction: !account.payouts_enabled || !account.details_submitted,
+  });
+});
+
+// ── BRAND PAYMENT METHOD SETUP ────────────────────────────────────────────
+
+// Start brand payment method setup — creates Stripe Customer + Checkout setup session
+router.post('/stripe/brand-setup/start', async (req, res): Promise<void> => {
+  const { uid, email, name, returnUrl } = req.body as {
+    uid?: string; email?: string; name?: string; returnUrl?: string;
+  };
+  if (!uid || !email) {
+    res.status(400).json({ error: 'uid and email are required' });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const base = returnUrl ?? 'http://localhost:80';
+
+  const [profile] = await db
+    .select()
+    .from(userProfilesTable)
+    .where(eq(userProfilesTable.firebaseUid, uid))
+    .limit(1);
+
+  let customerId = profile?.stripeCustomerId;
+
+  if (!customerId) {
+    const existing = await stripe.customers.list({ email, limit: 1 });
+    const customer = existing.data[0] ?? await stripe.customers.create({
+      email,
+      name: name ?? email,
+      metadata: { firebaseUid: uid, role: 'brand' },
+    });
+    customerId = customer.id;
+
+    await db
+      .insert(userProfilesTable)
+      .values({ firebaseUid: uid, stripeCustomerId: customerId })
+      .onConflictDoUpdate({
+        target: userProfilesTable.firebaseUid,
+        set: { stripeCustomerId: customerId, updatedAt: new Date() },
+      });
+  }
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'setup',
+    customer: customerId,
+    payment_method_types: ['card'],
+    success_url: `${base}/settings?stripe_setup=complete`,
+    cancel_url: `${base}/settings?stripe_setup=cancelled`,
+  });
+
+  req.log.info({ uid, customerId, sessionId: session.id }, 'Brand payment setup session created');
+  res.json({ url: session.url, customerId });
 });
 
 export default router;
