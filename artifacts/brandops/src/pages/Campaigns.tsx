@@ -8,8 +8,7 @@ import { Link, useLocation } from "wouter";
 import {
   Megaphone, Plus, Search, Sparkles, Loader2, Wand2,
   ChevronRight, X, CheckCircle2, RotateCcw, Save, Send,
-  DollarSign, Video, Users, Clock, ShieldCheck,
-  Lightbulb, Target, ChevronDown,
+  DollarSign, Users, Clock, ChevronDown, Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,7 +58,79 @@ interface GeneratedCampaign {
 
 type Step = "prompt" | "generating" | "result";
 
-// ── Collapsible section ─────────────────────────────────────────────────────
+// ── Editable plain text (textarea) ──────────────────────────────────────────
+function EditableText({
+  value, onChange, placeholder, rows = 4, mono = false,
+}: {
+  value: string; onChange: (v: string) => void;
+  placeholder?: string; rows?: number; mono?: boolean;
+}) {
+  return (
+    <textarea
+      rows={rows}
+      className={cn(
+        "w-full resize-none rounded-lg bg-white/4 border border-white/10 text-sm text-foreground/90 leading-relaxed px-3 py-2.5",
+        "focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/15 transition-all placeholder:text-white/20 mt-2",
+        mono && "font-mono",
+      )}
+      value={value}
+      placeholder={placeholder}
+      onChange={e => onChange(e.target.value)}
+    />
+  );
+}
+
+// ── Editable ordered/unordered list ─────────────────────────────────────────
+function EditableList({
+  items, onChange, numbered = false, accent = "text-primary",
+}: {
+  items: string[]; onChange: (items: string[]) => void;
+  numbered?: boolean; accent?: string;
+}) {
+  function updateItem(i: number, val: string) {
+    const next = [...items];
+    next[i] = val;
+    onChange(next);
+  }
+  function removeItem(i: number) {
+    onChange(items.filter((_, idx) => idx !== i));
+  }
+  function addItem() {
+    onChange([...items, ""]);
+  }
+
+  return (
+    <div className="space-y-1.5 pt-2">
+      {items.map((item, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <span className={cn("shrink-0 text-xs font-bold mt-2.5 w-4", accent)}>
+            {numbered ? `${i + 1}.` : "•"}
+          </span>
+          <input
+            className="flex-1 bg-white/4 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-foreground/90 placeholder:text-white/20 focus:outline-none focus:border-primary/40 transition-colors"
+            value={item}
+            placeholder="Add item…"
+            onChange={e => updateItem(i, e.target.value)}
+          />
+          <button
+            onClick={() => removeItem(i)}
+            className="shrink-0 mt-1.5 p-1 text-white/20 hover:text-red-400 transition-colors rounded"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={addItem}
+        className="text-xs text-muted-foreground hover:text-primary transition-colors px-1 pt-1 flex items-center gap-1"
+      >
+        <Plus className="h-3 w-3" /> Add item
+      </button>
+    </div>
+  );
+}
+
+// ── Collapsible section ──────────────────────────────────────────────────────
 function Accordion({
   emoji, label, count, children, defaultOpen = false,
 }: {
@@ -101,33 +172,7 @@ function Accordion({
   );
 }
 
-function BulletList({ items, color = "text-primary" }: { items: string[]; color?: string }) {
-  return (
-    <ul className="space-y-2 pt-3">
-      {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 text-sm">
-          <span className={cn("mt-1 shrink-0 text-xs", color)}>•</span>
-          <span className="text-foreground/80 leading-relaxed">{item}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function NumberedList({ items }: { items: string[] }) {
-  return (
-    <ol className="space-y-2 pt-3">
-      {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2.5 text-sm">
-          <span className="text-primary font-bold shrink-0 text-xs mt-0.5 w-4">{i + 1}.</span>
-          <span className="text-foreground/80 leading-relaxed">{item}</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-// ── Main component ──────────────────────────────────────────────────────────
+// ── Main component ───────────────────────────────────────────────────────────
 export default function Campaigns() {
   const { data: campaigns, isLoading } = useListCampaigns();
   const createCampaign = useCreateCampaign();
@@ -144,6 +189,11 @@ export default function Campaigns() {
   const [deadline, setDeadline] = useState("");
   const [genStep, setGenStep] = useState(0);
   const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Patch any single field of the generated campaign
+  function patch<K extends keyof GeneratedCampaign>(key: K, value: GeneratedCampaign[K]) {
+    setGenerated(prev => prev ? { ...prev, [key]: value } : prev);
+  }
 
   const filtered = useMemo(() =>
     (campaigns ?? []).filter(c =>
@@ -238,7 +288,7 @@ export default function Campaigns() {
 
   return (
     <div className="space-y-6">
-      {/* ── Page header ── */}
+      {/* Page header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Campaigns</h1>
@@ -335,14 +385,14 @@ export default function Campaigns() {
         </div>
       )}
 
-      {/* ─── AI Campaign Builder Modal ─────────────────────────────────────── */}
+      {/* ─── AI Campaign Builder Modal ─── */}
       <Dialog open={aiOpen} onOpenChange={o => { if (!o) closeAI(); }}>
         <DialogContent className={cn(
           "bg-[#0e0e0e] border border-white/10 text-white p-0 max-h-[92vh] overflow-hidden flex flex-col",
-          step === "result" ? "sm:max-w-[580px]" : "sm:max-w-[620px]"
+          step === "result" ? "sm:max-w-[600px]" : "sm:max-w-[620px]"
         )}>
 
-          {/* Modal header */}
+          {/* Header */}
           <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/8 shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-primary/15 border border-primary/25 flex items-center justify-center">
@@ -353,7 +403,7 @@ export default function Campaigns() {
                 <div className="text-[11px] text-muted-foreground mt-0.5">
                   {step === "prompt"     && "Describe what you need — AI does the rest"}
                   {step === "generating" && "Building your campaign…"}
-                  {step === "result"     && "Campaign ready ✓"}
+                  {step === "result"     && "Campaign ready ✓ — edit anything below"}
                 </div>
               </div>
             </div>
@@ -376,7 +426,7 @@ export default function Campaigns() {
                   <div className="relative">
                     <textarea
                       className="w-full min-h-[140px] resize-none rounded-xl bg-white/4 border border-white/12 text-white placeholder:text-white/25 text-sm leading-relaxed px-4 py-3.5 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
-                      placeholder={"Example: I'm launching a skincare brand and need 15 short UGC videos for TikTok and Reels. Budget is $3,000. I want product demos, testimonials, and strong hooks for paid ads."}
+                      placeholder="Example: I'm launching a skincare brand and need 15 short UGC videos for TikTok and Reels. Budget is $3,000. I want product demos, testimonials, and strong hooks for paid ads."
                       value={prompt}
                       onChange={e => setPrompt(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && prompt.trim()) generateMutation.mutate(); }}
@@ -439,117 +489,182 @@ export default function Campaigns() {
               <motion.div key="result" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex flex-col overflow-hidden">
                 <div className="overflow-y-auto flex-1 px-6 pt-5 pb-2 space-y-4">
 
-                  {/* ── 1. PAYOUT HERO ── */}
+                  {/* 1. PAYOUT HERO — editable numbers */}
                   <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/4 p-5">
                     <div className="flex items-center gap-2 mb-4">
                       <DollarSign className="h-4 w-4 text-primary" />
                       <span className="text-xs font-bold text-primary uppercase tracking-wider">Recommended Payout Strategy</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-3 gap-4 mb-3">
                       <div>
-                        <div className="text-3xl font-bold text-white">{generated.suggestedVideoCount}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">Videos</div>
+                        <div className="text-xs text-muted-foreground mb-1">Videos</div>
+                        <input
+                          type="number" min="1"
+                          className="w-full bg-white/8 border border-white/15 rounded-lg px-2.5 py-1.5 text-2xl font-bold text-white focus:outline-none focus:border-primary/50 transition-colors"
+                          value={generated.suggestedVideoCount}
+                          onChange={e => {
+                            const v = Math.max(1, parseInt(e.target.value) || 1);
+                            patch("suggestedVideoCount", v);
+                            patch("estimatedTotalCost", v * generated.suggestedPayoutPerVideo);
+                          }}
+                        />
                       </div>
                       <div>
-                        <div className="text-3xl font-bold text-primary">${generated.suggestedPayoutPerVideo}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">Per approved video</div>
+                        <div className="text-xs text-muted-foreground mb-1">Per approved video</div>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-primary text-lg font-bold">$</span>
+                          <input
+                            type="number" min="1"
+                            className="w-full bg-white/8 border border-white/15 rounded-lg pl-6 pr-2.5 py-1.5 text-2xl font-bold text-primary focus:outline-none focus:border-primary/50 transition-colors"
+                            value={generated.suggestedPayoutPerVideo}
+                            onChange={e => {
+                              const v = Math.max(1, parseInt(e.target.value) || 1);
+                              patch("suggestedPayoutPerVideo", v);
+                              patch("estimatedTotalCost", generated.suggestedVideoCount * v);
+                            }}
+                          />
+                        </div>
                       </div>
                       <div>
-                        <div className="text-3xl font-bold text-white">${(generated.estimatedTotalCost ?? 0).toLocaleString()}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">Estimated spend</div>
+                        <div className="text-xs text-muted-foreground mb-1">Est. spend</div>
+                        <div className="text-2xl font-bold text-white pt-1.5">
+                          ${(generated.suggestedVideoCount * generated.suggestedPayoutPerVideo).toLocaleString()}
+                        </div>
                       </div>
                     </div>
-                    {generated.payoutStrategy && (
-                      <p className="text-xs text-white/60 border-t border-white/10 pt-3">{generated.payoutStrategy}</p>
-                    )}
+                    <EditableText
+                      value={generated.payoutStrategy}
+                      onChange={v => patch("payoutStrategy", v)}
+                      placeholder="Payout notes…"
+                      rows={2}
+                    />
                   </div>
 
-                  {/* ── 2. KEY FACTS ── */}
+                  {/* 2. KEY FACTS — editable title, summary, deadline, creator type */}
                   <div className="rounded-xl border border-white/8 bg-white/2 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/6">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-bold text-base leading-tight">{generated.title}</h3>
+                    <div className="px-4 py-3 border-b border-white/6 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="flex-1 bg-transparent font-bold text-base text-white focus:outline-none border-b border-transparent focus:border-white/20 pb-0.5 transition-colors"
+                          value={generated.title}
+                          onChange={e => patch("title", e.target.value)}
+                          placeholder="Campaign title…"
+                        />
                         <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
                       </div>
-                      {generated.summary && (
-                        <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{generated.summary}</p>
-                      )}
+                      <textarea
+                        rows={2}
+                        className="w-full bg-transparent text-xs text-muted-foreground leading-relaxed resize-none focus:outline-none focus:text-white/70 transition-colors placeholder:text-white/15"
+                        value={generated.summary}
+                        onChange={e => patch("summary", e.target.value)}
+                        placeholder="Campaign summary…"
+                      />
                     </div>
                     <div className="grid grid-cols-2 divide-x divide-white/6">
                       {[
-                        { icon: Clock, label: "Deadline", value: generated.suggestedDeadline },
-                        { icon: Users, label: "Creator type", value: generated.creatorType?.split(" ").slice(0, 6).join(" ") || "—" },
-                      ].map(({ icon: Icon, label, value }) => (
-                        <div key={label} className="flex items-center gap-2.5 px-4 py-3">
+                        { icon: Clock, label: "Deadline", key: "suggestedDeadline" as const },
+                        { icon: Users, label: "Creator type", key: "creatorType" as const },
+                      ].map(({ icon: Icon, label, key }) => (
+                        <div key={label} className="flex items-center gap-2.5 px-4 py-2.5">
                           <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <div className="min-w-0">
+                          <div className="flex-1 min-w-0">
                             <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</div>
-                            <div className="text-xs font-medium text-white truncate">{value}</div>
+                            <input
+                              className="w-full bg-transparent text-xs font-medium text-white focus:outline-none border-b border-transparent focus:border-white/20 transition-colors truncate"
+                              value={generated[key]}
+                              onChange={e => patch(key, e.target.value)}
+                            />
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* ── 3. AI RECOMMENDATIONS (collapsibles) ── */}
+                  {/* 3. COLLAPSIBLE SECTIONS — all editable */}
                   <div>
-                    <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-2.5">AI Recommendations</p>
+                    <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-2.5">AI Recommendations — edit anything</p>
                     <div className="space-y-2">
 
                       {generated.hookIdeas?.length > 0 && (
                         <Accordion emoji="🔥" label="Hook Ideas" count={generated.hookIdeas.length} defaultOpen>
-                          <NumberedList items={generated.hookIdeas} />
+                          <EditableList
+                            items={generated.hookIdeas}
+                            onChange={v => patch("hookIdeas", v)}
+                            numbered
+                          />
                         </Accordion>
                       )}
 
                       {generated.videoConceptIdeas?.length > 0 && (
                         <Accordion emoji="🎬" label="Video Concepts" count={generated.videoConceptIdeas.length}>
-                          <BulletList items={generated.videoConceptIdeas} />
+                          <EditableList
+                            items={generated.videoConceptIdeas}
+                            onChange={v => patch("videoConceptIdeas", v)}
+                          />
                         </Accordion>
                       )}
 
                       {generated.ctaIdeas?.length > 0 && (
                         <Accordion emoji="📣" label="CTA Ideas" count={generated.ctaIdeas.length}>
-                          <div className="flex flex-wrap gap-1.5 pt-3">
-                            {generated.ctaIdeas.map((c, i) => (
-                              <span key={i} className="text-xs bg-white/5 border border-white/10 rounded-full px-3 py-1 text-foreground/80">{c}</span>
-                            ))}
-                          </div>
+                          <EditableList
+                            items={generated.ctaIdeas}
+                            onChange={v => patch("ctaIdeas", v)}
+                          />
                         </Accordion>
                       )}
 
-                      <Accordion emoji="📋" label="Creator Brief">
-                        <div className="pt-3 text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{generated.creatorBrief}</div>
-                        {(generated.doList?.length > 0 || generated.dontList?.length > 0) && (
-                          <div className="grid grid-cols-2 gap-3 mt-4">
-                            {generated.doList?.length > 0 && (
-                              <div className="p-3 rounded-lg bg-primary/5 border border-primary/15">
-                                <div className="text-xs font-bold text-primary mb-1">✓ DO</div>
-                                <BulletList items={generated.doList} color="text-primary" />
-                              </div>
-                            )}
-                            {generated.dontList?.length > 0 && (
-                              <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/15">
-                                <div className="text-xs font-bold text-red-400 mb-1">✗ DON'T</div>
-                                <BulletList items={generated.dontList} color="text-red-400" />
-                              </div>
-                            )}
+                      <Accordion emoji="📋" label="Creator Brief" defaultOpen={false}>
+                        <EditableText
+                          value={generated.creatorBrief}
+                          onChange={v => patch("creatorBrief", v)}
+                          placeholder="Describe what creators should film and how…"
+                          rows={6}
+                        />
+                        <div className="grid grid-cols-2 gap-3 mt-3">
+                          <div className="p-3 rounded-lg bg-primary/5 border border-primary/15">
+                            <div className="text-xs font-bold text-primary mb-1">✓ DO</div>
+                            <EditableList
+                              items={generated.doList ?? []}
+                              onChange={v => patch("doList", v)}
+                              accent="text-primary"
+                            />
                           </div>
-                        )}
+                          <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/15">
+                            <div className="text-xs font-bold text-red-400 mb-1">✗ DON'T</div>
+                            <EditableList
+                              items={generated.dontList ?? []}
+                              onChange={v => patch("dontList", v)}
+                              accent="text-red-400"
+                            />
+                          </div>
+                        </div>
                       </Accordion>
 
                       {generated.approvalCriteria?.length > 0 && (
                         <Accordion emoji="✅" label="Approval Criteria" count={generated.approvalCriteria.length}>
-                          <BulletList items={generated.approvalCriteria} />
+                          <EditableList
+                            items={generated.approvalCriteria}
+                            onChange={v => patch("approvalCriteria", v)}
+                          />
                         </Accordion>
                       )}
 
                       <Accordion emoji="📦" label="Deliverables">
-                        <p className="text-sm text-foreground/80 leading-relaxed pt-3">{generated.deliverables}</p>
+                        <EditableText
+                          value={generated.deliverables}
+                          onChange={v => patch("deliverables", v)}
+                          placeholder="Format, resolution, caption requirements…"
+                          rows={3}
+                        />
                       </Accordion>
 
                       <Accordion emoji="⚖️" label="Usage Rights">
-                        <p className="text-sm text-foreground/80 leading-relaxed pt-3">{generated.usageRights}</p>
+                        <EditableText
+                          value={generated.usageRights}
+                          onChange={v => patch("usageRights", v)}
+                          placeholder="Usage rights terms…"
+                          rows={3}
+                        />
                       </Accordion>
 
                     </div>
@@ -557,7 +672,7 @@ export default function Campaigns() {
                   <div className="h-1" />
                 </div>
 
-                {/* ── Action bar ── */}
+                {/* Action bar */}
                 <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-white/8 shrink-0 bg-[#0e0e0e]">
                   <button
                     onClick={() => { setStep("prompt"); setGenerated(null); }}
