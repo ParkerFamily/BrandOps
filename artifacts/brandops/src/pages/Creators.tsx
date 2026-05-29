@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
 import {
   Search, Plus, UserCircle2, TrendingUp, TrendingDown,
@@ -16,6 +19,8 @@ import { SiTiktok, SiInstagram, SiYoutube } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+
+const EMPTY_FORM = { name: "", email: "", handle: "", platform: "tiktok" as "tiktok"|"instagram"|"youtube", niche: "Lifestyle", followerCount: "", engagementRate: "" };
 
 type Platform = "all" | "tiktok" | "instagram" | "youtube";
 type SortBy = "match" | "followers" | "engagement" | "name";
@@ -236,31 +241,32 @@ export default function Creators() {
   const [nicheFilter, setNicheFilter] = useState("All");
   const [sortBy, setSortBy] = useState<SortBy>("match");
 
-  const handleMockAddCreator = () => {
-    const niches = ["Lifestyle", "Fitness", "Beauty", "Food", "Tech"];
-    const platforms = ["tiktok", "instagram", "youtube"] as const;
-    const names = ["Alex Chen", "Jordan Kim", "Taylor Morgan", "Sam Rivera", "Casey Blake", "Morgan Lee"];
-    const name = names[Math.floor(Math.random() * names.length)];
-    const plat = platforms[Math.floor(Math.random() * platforms.length)];
-    const niche = niches[Math.floor(Math.random() * niches.length)];
-    const handle = "@" + name.toLowerCase().replace(" ", "") + Math.floor(Math.random() * 99);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
+  const handleAddCreator = () => {
+    if (!form.name || !form.email || !form.handle) return;
     createCreator.mutate(
       {
         data: {
-          name,
-          email: `creator${Math.random().toString(36).slice(2)}@example.com`,
-          platform: plat,
-          handle,
-          niche,
-          followerCount: Math.floor(Math.random() * 300000) + 10000,
-          engagementRate: parseFloat((Math.random() * 8 + 2).toFixed(1)),
+          name: form.name,
+          email: form.email,
+          platform: form.platform,
+          handle: form.handle,
+          niche: form.niche,
+          followerCount: parseInt(form.followerCount) || 0,
+          engagementRate: parseFloat(form.engagementRate) || 0,
         },
       },
       {
         onSuccess: () => {
-          toast({ title: "Creator added!", description: `${name} joined your roster.` });
+          toast({ title: "Creator added!", description: `${form.name} joined your roster.` });
           queryClient.invalidateQueries({ queryKey: getListCreatorsQueryKey() });
+          setShowAddDialog(false);
+          setForm({ ...EMPTY_FORM });
+        },
+        onError: () => {
+          toast({ title: "Failed to add creator", variant: "destructive" });
         },
       }
     );
@@ -319,7 +325,7 @@ export default function Creators() {
           </p>
         </div>
         <Button
-          onClick={handleMockAddCreator}
+          onClick={() => setShowAddDialog(true)}
           disabled={createCreator.isPending}
           className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
           data-testid="button-add-creator"
@@ -472,12 +478,117 @@ export default function Creators() {
           <p className="text-muted-foreground mt-2 mb-5 max-w-xs mx-auto text-sm">
             Add creators to start AI-matching them with your campaigns.
           </p>
-          <Button onClick={handleMockAddCreator} className="bg-primary text-primary-foreground">
+          <Button onClick={() => setShowAddDialog(true)} className="bg-primary text-primary-foreground">
             <Plus className="mr-2 h-4 w-4" />
             Add Your First Creator
           </Button>
         </div>
       )}
+
+      {/* Add Creator Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent className="bg-[#111] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Add Creator</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Name *</Label>
+                <Input
+                  placeholder="Full name"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Handle *</Label>
+                <Input
+                  placeholder="@username"
+                  value={form.handle}
+                  onChange={(e) => setForm((f) => ({ ...f, handle: e.target.value }))}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-white/60 text-xs">Email *</Label>
+              <Input
+                type="email"
+                placeholder="creator@example.com"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/20"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Platform</Label>
+                <Select value={form.platform} onValueChange={(v) => setForm((f) => ({ ...f, platform: v as typeof f.platform }))}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tiktok">TikTok</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="youtube">YouTube</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Niche</Label>
+                <Select value={form.niche} onValueChange={(v) => setForm((f) => ({ ...f, niche: v }))}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Lifestyle","Fitness","Beauty","Food","Tech","Fashion","Travel","Gaming"].map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Followers</Label>
+                <Input
+                  type="number"
+                  placeholder="50000"
+                  value={form.followerCount}
+                  onChange={(e) => setForm((f) => ({ ...f, followerCount: e.target.value }))}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Engagement %</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  placeholder="3.5"
+                  value={form.engagementRate}
+                  onChange={(e) => setForm((f) => ({ ...f, engagementRate: e.target.value }))}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowAddDialog(false); setForm({ ...EMPTY_FORM }); }}
+              className="border-white/10 text-white/60 hover:text-white">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddCreator}
+              disabled={createCreator.isPending || !form.name || !form.email || !form.handle}
+              className="bg-[#C6FF00] text-black hover:bg-[#d4ff33] font-bold"
+            >
+              {createCreator.isPending ? "Adding…" : "Add Creator"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

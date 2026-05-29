@@ -33,15 +33,6 @@ function InsightIcon({ type }: { type: string }) {
   }
 }
 
-const BEST_TIMES = [
-  { day: "Mon", time: "6–8pm", score: 82 },
-  { day: "Tue", time: "12–2pm", score: 68 },
-  { day: "Wed", time: "7–9pm", score: 91 },
-  { day: "Thu", time: "6–8pm", score: 85 },
-  { day: "Fri", time: "5–7pm", score: 94 },
-  { day: "Sat", time: "11am–1pm", score: 76 },
-  { day: "Sun", time: "8–10pm", score: 71 },
-];
 
 function StatCard({
   title,
@@ -386,40 +377,6 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
-        {/* Best posting times */}
-        <Card className="bg-card border-card-border">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
-              <CardTitle className="text-base">Best Posting Windows</CardTitle>
-              <span className="ml-auto text-xs text-muted-foreground bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                AI predicted
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2.5">
-              {BEST_TIMES.map(({ day, time, score }) => (
-                <div key={day} className="flex items-center gap-3">
-                  <div className="w-8 text-xs font-semibold text-muted-foreground">{day}</div>
-                  <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all duration-700"
-                      style={{ width: `${score}%`, opacity: score >= 90 ? 1 : 0.6 + score / 300 }}
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground w-20 text-right">{time}</div>
-                  {score >= 90 && (
-                    <Zap className="h-3 w-3 text-primary shrink-0" />
-                  )}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
-              Based on your audience's peak activity windows across all platforms.
-            </p>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

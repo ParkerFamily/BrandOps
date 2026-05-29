@@ -167,19 +167,6 @@ export default function Payments() {
           <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
           <p className="text-muted-foreground mt-1">Track and issue payouts to creators for approved content.</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => createPayment.mutate({ data: { submissionId: 1, creatorId: 1, campaignId: 1, amount: 250 } }, {
-            onSuccess: () => {
-              toast({ title: "Test payment added" });
-              queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
-            },
-          })}
-          disabled={createPayment.isPending}
-          className="text-xs"
-        >
-          + Add Test Payment
-        </Button>
       </div>
 
       {/* Summary cards */}
