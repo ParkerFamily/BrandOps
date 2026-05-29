@@ -209,15 +209,12 @@ export default function Campaigns() {
                       <h3 className="font-semibold text-lg group-hover:text-primary transition-colors">{campaign.title}</h3>
                       {getStatusBadge(campaign.status)}
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        {getPlatformIcon(campaign.platform)}
-                        <span className="capitalize">{campaign.platform}</span>
-                      </span>
-                      <span>•</span>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
                       <span>{campaign.niche}</span>
                       <span>•</span>
-                      <span>Budget: ${campaign.totalBudget.toLocaleString()}</span>
+                      <span>${campaign.totalBudget.toLocaleString()} budget</span>
+                      <span>•</span>
+                      <span>${(campaign.payoutPerVideo ?? 0).toLocaleString()}/video</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-8 text-sm">
@@ -317,18 +314,18 @@ export default function Campaigns() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Target Creator Type</Label>
+                  <Label>Creator Type</Label>
                   <Input
-                    placeholder="e.g. fitness micro-influencers 10k-100k"
+                    placeholder="e.g. on-camera talent, product demo experience"
                     value={form.creatorType}
                     onChange={e => setForm(p => ({ ...p, creatorType: e.target.value }))}
                     className="bg-background border-border"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Platforms</Label>
+                  <Label>Content Format</Label>
                   <Input
-                    placeholder="TikTok, Instagram Reels"
+                    placeholder="e.g. vertical video, talking head, lifestyle b-roll"
                     value={form.platforms}
                     onChange={e => setForm(p => ({ ...p, platforms: e.target.value }))}
                     className="bg-background border-border"

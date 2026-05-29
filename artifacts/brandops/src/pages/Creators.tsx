@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useListCreators, useCreateCreator, getListCreatorsQueryKey, type Creator } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,16 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { Link } from "wouter";
 import {
   Search, Plus, Sparkles, Star, CheckCircle2, Clock, BarChart3,
-  Award, Zap, ThumbsUp, Filter, Users, DollarSign, RefreshCw
+  Award, Zap, ThumbsUp, Users, Loader2, Info, DollarSign,
 } from "lucide-react";
 import { SiTiktok, SiInstagram, SiYoutube } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
+
+const BASE = import.meta.env.BASE_URL;
 
 const CONTENT_STYLE_OPTIONS = [
   "Talking Head", "Product Demo", "Lifestyle", "Voiceover", "Testimonial", "Comedy", "Tutorial",
@@ -27,9 +29,7 @@ const CONTENT_STYLE_OPTIONS = [
 const EMPTY_FORM = {
   name: "", email: "", handle: "",
   platform: "tiktok" as "tiktok" | "instagram" | "youtube",
-  approvalRate: "", onTimeDeliveryRate: "", avgTurnaroundDays: "",
-  brandRating: "", completedCampaigns: "", suggestedPayout: "",
-  contentStyles: [] as string[],
+  suggestedPayout: "",
 };
 
 type SortBy = "match" | "approvalRate" | "onTimeDelivery" | "turnaround" | "brandRating" | "name";
@@ -329,11 +329,41 @@ export default function Creators() {
       });
   }, [creators, platform, sortBy, search, styleFilter]);
 
+  const suggestStylesMutation = useMutation({
+    mutationFn: async ({ handle, platform }: { handle: string; platform: string }) => {
+      const r = await fetch(`${BASE}api/openai/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Given a UGC creator with handle "${handle}" on ${platform}, suggest 2-3 content styles from this list that best fit them: ${CONTENT_STYLE_OPTIONS.join(", ")}. Reply with ONLY the style names separated by commas, nothing else.`,
+        }),
+      });
+      const text = await r.text();
+      const match = text.match(/data: ({.*?"done".*?})/g)?.pop();
+      if (!match) return [];
+      const chunks: string[] = [];
+      text.split("\n").forEach(line => {
+        if (line.startsWith("data: ")) {
+          try {
+            const d = JSON.parse(line.slice(6));
+            if (d.content) chunks.push(d.content);
+          } catch {}
+        }
+      });
+      const raw = chunks.join("").trim();
+      return raw.split(",").map(s => s.trim()).filter(s => CONTENT_STYLE_OPTIONS.includes(s));
+    },
+    onSuccess: (styles) => {
+      if (styles.length > 0) {
+        setSelectedStyles(styles);
+        toast({ title: "Styles suggested", description: `AI picked: ${styles.join(", ")}` });
+      }
+    },
+    onError: () => toast({ title: "AI unavailable", description: "Select content styles manually.", variant: "destructive" }),
+  });
+
   function toggleStyle(s: string) {
-    setSelectedStyles(prev =>
-      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
-    );
-    setForm(f => ({ ...f, contentStyles: selectedStyles.includes(s) ? selectedStyles.filter(x => x !== s) : [...selectedStyles, s] }));
+    setSelectedStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
   }
 
   function handleAddCreator() {
@@ -344,11 +374,6 @@ export default function Creators() {
         email: form.email,
         handle: form.handle,
         platform: form.platform,
-        approvalRate: parseFloat(form.approvalRate) || 0,
-        onTimeDeliveryRate: parseFloat(form.onTimeDeliveryRate) || 0,
-        avgTurnaroundDays: parseFloat(form.avgTurnaroundDays) || 0,
-        brandRating: parseFloat(form.brandRating) || 0,
-        completedCampaigns: parseInt(form.completedCampaigns) || 0,
         suggestedPayout: parseFloat(form.suggestedPayout) || 0,
         contentStyles: selectedStyles,
       },
@@ -501,10 +526,10 @@ export default function Creators() {
 
       {/* Add Creator Dialog */}
       <Dialog open={showAddDialog} onOpenChange={open => { setShowAddDialog(open); if (!open) { setForm({ ...EMPTY_FORM }); setSelectedStyles([]); } }}>
-        <DialogContent className="bg-[#111] border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#111] border-white/10 text-white max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-white">Add Creator to Roster</DialogTitle>
-            <p className="text-xs text-muted-foreground mt-1">Enter their UGC production history. These metrics power AI matching.</p>
+            <p className="text-xs text-muted-foreground mt-1">Just their identity. Performance metrics auto-track from campaign activity.</p>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -531,66 +556,44 @@ export default function Creators() {
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-white/60 text-xs">Platform</Label>
+                <Label className="text-white/60 text-xs">Primary Format</Label>
                 <Select value={form.platform} onValueChange={v => setForm(f => ({ ...f, platform: v as typeof f.platform }))}>
                   <SelectTrigger className="bg-white/5 border-white/10 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="tiktok">TikTok</SelectItem>
-                    <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="youtube">YouTube</SelectItem>
+                    <SelectItem value="tiktok">Vertical / TikTok</SelectItem>
+                    <SelectItem value="instagram">Short-form / Reels</SelectItem>
+                    <SelectItem value="youtube">Long-form / YouTube</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Production metrics */}
-            <div className="border-t border-white/8 pt-3">
-              <p className="text-xs text-white/50 uppercase tracking-wide font-semibold mb-3">Production Metrics</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-white/60 text-xs">Approval Rate (%)</Label>
-                  <Input type="number" min="0" max="100" placeholder="e.g. 92" value={form.approvalRate}
-                    onChange={e => setForm(f => ({ ...f, approvalRate: e.target.value }))}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-white/60 text-xs">On-Time Delivery (%)</Label>
-                  <Input type="number" min="0" max="100" placeholder="e.g. 88" value={form.onTimeDeliveryRate}
-                    onChange={e => setForm(f => ({ ...f, onTimeDeliveryRate: e.target.value }))}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-white/60 text-xs">Avg Turnaround (days)</Label>
-                  <Input type="number" min="0" step="0.5" placeholder="e.g. 2.5" value={form.avgTurnaroundDays}
-                    onChange={e => setForm(f => ({ ...f, avgTurnaroundDays: e.target.value }))}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-white/60 text-xs">Completed Campaigns</Label>
-                  <Input type="number" min="0" placeholder="e.g. 12" value={form.completedCampaigns}
-                    onChange={e => setForm(f => ({ ...f, completedCampaigns: e.target.value }))}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-white/60 text-xs">Brand Rating (0–5)</Label>
-                  <Input type="number" min="0" max="5" step="0.1" placeholder="e.g. 4.7" value={form.brandRating}
-                    onChange={e => setForm(f => ({ ...f, brandRating: e.target.value }))}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-white/60 text-xs">Suggested Payout ($/video)</Label>
-                  <Input type="number" min="0" placeholder="e.g. 150" value={form.suggestedPayout}
-                    onChange={e => setForm(f => ({ ...f, suggestedPayout: e.target.value }))}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
-                </div>
-              </div>
+            {/* Payout */}
+            <div className="space-y-1.5">
+              <Label className="text-white/60 text-xs">Agreed Payout ($/video)</Label>
+              <Input type="number" min="0" placeholder="e.g. 150" value={form.suggestedPayout}
+                onChange={e => setForm(f => ({ ...f, suggestedPayout: e.target.value }))}
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/20 max-w-[180px]" />
             </div>
 
-            {/* Content styles */}
+            {/* Content styles with AI suggest */}
             <div className="border-t border-white/8 pt-3">
-              <p className="text-xs text-white/50 uppercase tracking-wide font-semibold mb-2">Content Style Strengths</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-white/50 uppercase tracking-wide font-semibold">Content Style Strengths</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!form.handle || suggestStylesMutation.isPending}
+                  onClick={() => suggestStylesMutation.mutate({ handle: form.handle, platform: form.platform })}
+                  className="h-6 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
+                >
+                  {suggestStylesMutation.isPending
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Thinking…</>
+                    : <><Sparkles className="h-3 w-3" /> AI Suggest</>}
+                </Button>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {CONTENT_STYLE_OPTIONS.map(s => (
                   <button
@@ -608,6 +611,14 @@ export default function Creators() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Auto-compute note */}
+            <div className="flex items-start gap-2 rounded-lg bg-white/3 border border-white/6 p-3">
+              <Info className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Approval rate, turnaround time, on-time delivery, and revision rate are computed automatically as this creator completes submissions through BrandOps.
+              </p>
             </div>
           </div>
 
