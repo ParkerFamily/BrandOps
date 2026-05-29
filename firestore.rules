@@ -1,14 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Campaigns — any authenticated user can read (creators browse);
+    // writes restricted to authenticated users (brand creates/edits)
     match /campaigns/{id} {
-      allow read, write: if true;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
+
+    // Creators — authenticated users only
     match /creators/{id} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
+
+    // Submissions — authenticated users only
+    match /submissions/{id} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Payments — authenticated users only
+    match /payments/{id} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Users — each user can read/write only their own document
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Deny everything else
     match /{document=**} {
-      // Existing rules for all other collections remain unchanged
       allow read, write: if false;
     }
   }

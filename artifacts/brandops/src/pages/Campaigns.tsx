@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   fsSubscribeCampaigns, fsCreateCampaign,
   type FsCampaign,
@@ -12,7 +11,8 @@ import { Link, useLocation } from "wouter";
 import {
   Megaphone, Plus, Search, Sparkles, Loader2, Wand2,
   ChevronRight, X, CheckCircle2, RotateCcw, Save, Send,
-  DollarSign, Users, Clock, ChevronDown, Trash2,
+  DollarSign, Users, Clock, ChevronDown, Trash2, Upload,
+  CalendarDays, Zap, ExternalLink, PlayCircle, Video,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,8 +21,187 @@ import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { format } from "date-fns";
+import { getOnboarded } from "@/lib/onboarding";
+import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
 
 const BASE = import.meta.env.BASE_URL;
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  CREATOR VIEW — browse available (active) campaigns                        */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+function CreatorCampaignsPage() {
+  const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  useEffect(() => {
+    const unsub = fsSubscribeCampaigns((data) => {
+      setCampaigns(data);
+      setIsLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const available = useMemo(() =>
+    campaigns
+      .filter(c => c.status === "active")
+      .filter(c =>
+        !search ||
+        c.title.toLowerCase().includes(search.toLowerCase()) ||
+        c.niche.toLowerCase().includes(search.toLowerCase()) ||
+        c.platform.toLowerCase().includes(search.toLowerCase())
+      ),
+    [campaigns, search]
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Available Campaigns</h1>
+          <p className="text-muted-foreground mt-1">
+            Open briefs you can submit videos to. Pick your best fit and upload your take.
+          </p>
+        </div>
+        <Button
+          onClick={() => setUploadOpen(true)}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shrink-0 shadow-[0_0_20px_rgba(198,255,0,0.15)]"
+        >
+          <Upload className="h-4 w-4" /> Submit a Video
+        </Button>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by title, niche, platform…"
+          className="pl-9 bg-card border-card-border"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      {/* Stats pill */}
+      {!isLoading && available.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <span><span className="text-white font-semibold">{available.length}</span> open campaign{available.length !== 1 ? "s" : ""} right now</span>
+        </div>
+      )}
+
+      {/* Cards */}
+      {isLoading ? (
+        <div className="grid gap-4">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-xl bg-card" />)}
+        </div>
+      ) : available.length > 0 ? (
+        <div className="grid gap-4">
+          {available.map((campaign, i) => (
+            <motion.div
+              key={campaign.id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: i * 0.05 }}
+            >
+              <Link href={`/campaigns/${campaign.id}`}>
+                <Card className="bg-card border-card-border hover:border-primary/50 transition-all cursor-pointer group">
+                  <CardContent className="p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      {/* Icon */}
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                        <Video className="h-5 w-5 text-primary" />
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-2 flex-wrap">
+                          <h3 className="font-semibold text-base group-hover:text-primary transition-colors">
+                            {campaign.title}
+                          </h3>
+                          <Badge className="bg-primary/15 text-primary border-primary/25 text-xs shrink-0">Open</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                          {campaign.description}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 mt-2.5 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1 capitalize">
+                            <PlayCircle className="h-3 w-3" /> {campaign.platform}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" /> {campaign.videosNeeded} videos needed
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <CalendarDays className="h-3 w-3" /> Due {format(new Date(campaign.deadline), "MMM d, yyyy")}
+                          </span>
+                          {campaign.niche && (
+                            <span className="bg-white/5 border border-white/8 rounded px-1.5 py-0.5">{campaign.niche}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Payout + CTA */}
+                      <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-2 shrink-0">
+                        <div className="text-right">
+                          <div className="text-2xl font-black text-primary leading-none">
+                            ${Number(campaign.payoutPerVideo).toLocaleString()}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">per video</div>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                          View brief <ExternalLink className="h-3 w-3" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Brief preview */}
+                    {campaign.aiData?.creatorBrief && (
+                      <div className="mt-4 pt-4 border-t border-border/50">
+                        <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-1.5">Brief preview</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                          {campaign.aiData.creatorBrief}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-20 border border-dashed rounded-xl bg-card/50">
+          <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
+            <Megaphone className="h-6 w-6 text-muted-foreground opacity-40" />
+          </div>
+          <h3 className="text-lg font-medium">
+            {search ? "No campaigns match your search" : "No open campaigns right now"}
+          </h3>
+          <p className="text-muted-foreground mt-2 text-sm max-w-sm mx-auto">
+            {search
+              ? "Try a different search term."
+              : "Check back soon — brands post new campaigns regularly."}
+          </p>
+          {search && (
+            <Button variant="ghost" className="mt-4 text-sm" onClick={() => setSearch("")}>
+              Clear search
+            </Button>
+          )}
+        </div>
+      )}
+
+      <SubmitVideoDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  BRAND VIEW — full campaign management + AI builder                        */
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 const QUICK_CHIPS = [
   "App installs", "Product demo", "TikTok ads", "Instagram Reels",
@@ -89,16 +268,10 @@ function EditableList({
   numbered?: boolean; accent?: string;
 }) {
   function updateItem(i: number, val: string) {
-    const next = [...items];
-    next[i] = val;
-    onChange(next);
+    const next = [...items]; next[i] = val; onChange(next);
   }
-  function removeItem(i: number) {
-    onChange(items.filter((_, idx) => idx !== i));
-  }
-  function addItem() {
-    onChange([...items, ""]);
-  }
+  function removeItem(i: number) { onChange(items.filter((_, idx) => idx !== i)); }
+  function addItem() { onChange([...items, ""]); }
 
   return (
     <div className="space-y-1.5 pt-2">
@@ -121,10 +294,7 @@ function EditableList({
           </button>
         </div>
       ))}
-      <button
-        onClick={addItem}
-        className="text-xs text-muted-foreground hover:text-primary transition-colors px-1 pt-1 flex items-center gap-1"
-      >
+      <button onClick={addItem} className="text-xs text-muted-foreground hover:text-primary transition-colors px-1 pt-1 flex items-center gap-1">
         <Plus className="h-3 w-3" /> Add item
       </button>
     </div>
@@ -172,7 +342,7 @@ function Accordion({
   );
 }
 
-export default function Campaigns() {
+function BrandCampaignsPage() {
   const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -416,6 +586,7 @@ export default function Campaigns() {
         </div>
       )}
 
+      {/* ── AI Builder Dialog ─────────────────────────────────────────────── */}
       <Dialog open={aiOpen} onOpenChange={o => { if (!o) closeAI(); }}>
         <DialogContent className={cn(
           "bg-[#0e0e0e] border border-white/10 text-white p-0 max-h-[92vh] overflow-hidden flex flex-col",
@@ -450,7 +621,6 @@ export default function Campaigns() {
                     <h2 className="text-xl font-bold mb-1">Tell BrandOps what you need</h2>
                     <p className="text-sm text-muted-foreground">Describe your product, budget, audience, and goal. AI turns it into a complete campaign brief.</p>
                   </div>
-
                   <div className="relative">
                     <textarea
                       className="w-full min-h-[140px] resize-none rounded-xl bg-white/4 border border-white/12 text-white placeholder:text-white/25 text-sm leading-relaxed px-4 py-3.5 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
@@ -461,7 +631,6 @@ export default function Campaigns() {
                     />
                     <div className="absolute bottom-3 right-3 text-[10px] text-white/20">⌘↵ to generate</div>
                   </div>
-
                   <div>
                     <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-2">Quick add</p>
                     <div className="flex flex-wrap gap-2">
@@ -472,7 +641,6 @@ export default function Campaigns() {
                       ))}
                     </div>
                   </div>
-
                   <div className="flex gap-3 pt-1">
                     <div className="space-y-1.5 flex-1">
                       <Label className="text-white/40 text-xs">Total Budget ($) <span className="text-white/25">optional</span></Label>
@@ -516,7 +684,6 @@ export default function Campaigns() {
             {step === "result" && generated && (
               <motion.div key="result" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-y-auto flex-1">
                 <div className="px-6 pt-4 pb-2 space-y-4">
-
                   <div className="p-3 rounded-lg bg-primary/8 border border-primary/15 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
@@ -563,27 +730,21 @@ export default function Campaigns() {
                   <Accordion emoji="📝" label="Campaign Brief" defaultOpen>
                     <EditableText value={generated.creatorBrief} onChange={v => patch("creatorBrief", v)} rows={5} />
                   </Accordion>
-
                   <Accordion emoji="🎯" label="Deliverables">
                     <EditableText value={generated.deliverables} onChange={v => patch("deliverables", v)} rows={3} />
                   </Accordion>
-
-                  <Accordion emoji="💡" label={`Hook Ideas`} count={generated.hookIdeas.length}>
+                  <Accordion emoji="💡" label="Hook Ideas" count={generated.hookIdeas.length}>
                     <EditableList items={generated.hookIdeas} onChange={v => patch("hookIdeas", v)} accent="text-primary" />
                   </Accordion>
-
-                  <Accordion emoji="🎬" label={`Video Concepts`} count={generated.videoConceptIdeas.length}>
+                  <Accordion emoji="🎬" label="Video Concepts" count={generated.videoConceptIdeas.length}>
                     <EditableList items={generated.videoConceptIdeas} onChange={v => patch("videoConceptIdeas", v)} numbered accent="text-blue-400" />
                   </Accordion>
-
-                  <Accordion emoji="📣" label={`CTA Ideas`} count={generated.ctaIdeas.length}>
+                  <Accordion emoji="📣" label="CTA Ideas" count={generated.ctaIdeas.length}>
                     <EditableList items={generated.ctaIdeas} onChange={v => patch("ctaIdeas", v)} accent="text-yellow-400" />
                   </Accordion>
-
-                  <Accordion emoji="✅" label={`Approval Criteria`} count={generated.approvalCriteria.length}>
+                  <Accordion emoji="✅" label="Approval Criteria" count={generated.approvalCriteria.length}>
                     <EditableList items={generated.approvalCriteria} onChange={v => patch("approvalCriteria", v)} numbered accent="text-green-400" />
                   </Accordion>
-
                   <Accordion emoji="✅" label="Do's & Don'ts">
                     <div className="grid grid-cols-2 gap-3 mt-2">
                       <div>
@@ -596,12 +757,10 @@ export default function Campaigns() {
                       </div>
                     </div>
                   </Accordion>
-
                   <Accordion emoji="⚖️" label="Usage Rights & Payout">
                     <EditableText value={generated.usageRights} onChange={v => patch("usageRights", v)} rows={2} />
                     <EditableText value={generated.payoutStrategy} onChange={v => patch("payoutStrategy", v)} rows={2} />
                   </Accordion>
-
                 </div>
 
                 <div className="sticky bottom-0 px-6 py-4 border-t border-white/8 bg-[#0e0e0e] flex gap-2 shrink-0">
@@ -631,4 +790,14 @@ export default function Campaigns() {
       </Dialog>
     </div>
   );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  ROOT — route to correct view based on account type                        */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+export default function Campaigns() {
+  const onboarding = getOnboarded();
+  const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
+  return isCreator ? <CreatorCampaignsPage /> : <BrandCampaignsPage />;
 }
