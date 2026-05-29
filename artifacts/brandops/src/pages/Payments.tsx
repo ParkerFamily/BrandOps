@@ -1,5 +1,8 @@
-import { useListPayments, useCreatePayment, useUpdatePayment, getListPaymentsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import {
+  fsSubscribePayments, fsUpdatePayment, type FsPayment,
+} from "@/lib/firestore";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,7 +15,6 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { useState } from "react";
 import { Link } from "wouter";
 import { getOnboarded } from "@/lib/onboarding";
 import { useAuth } from "@/contexts/AuthContext";
@@ -81,7 +83,7 @@ function useCreatorEarnings(email: string | null | undefined) {
 
 function useCreateStripePayoutIntent() {
   return useMutation({
-    mutationFn: async (body: { amount: number; creatorEmail: string; creatorName: string; submissionId: number }) => {
+    mutationFn: async (body: { amount: number; creatorEmail: string; creatorName: string; submissionId: string }) => {
       const res = await fetch(`${BASE}api/stripe/payout-intent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +121,15 @@ function getStatusBadge(status: string) {
   }
 }
 
+function getTimestamp(ts: unknown): string {
+  if (!ts) return new Date().toISOString();
+  if (typeof ts === "string") return ts;
+  if (ts && typeof ts === "object" && "toDate" in ts) {
+    return (ts as { toDate: () => Date }).toDate().toISOString();
+  }
+  return new Date().toISOString();
+}
+
 /* ─────────────────────────── CREATOR EARNINGS ───────────────────────────── */
 
 function CreatorEarningsPage() {
@@ -134,7 +145,6 @@ function CreatorEarningsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">My Earnings</h1>
         <p className="text-muted-foreground mt-1">
@@ -142,7 +152,6 @@ function CreatorEarningsPage() {
         </p>
       </div>
 
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="bg-card border-card-border relative overflow-hidden group hover:border-primary/30 transition-all">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -194,7 +203,6 @@ function CreatorEarningsPage() {
         </Card>
       </div>
 
-      {/* Earnings History */}
       <Card className="bg-card border-card-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -276,7 +284,6 @@ function CreatorEarningsPage() {
         </CardContent>
       </Card>
 
-      {/* How payouts work */}
       <Card className="bg-card border-card-border border-dashed">
         <CardContent className="p-6">
           <div className="flex items-start gap-4">
@@ -302,43 +309,46 @@ function CreatorEarningsPage() {
 /* ─────────────────────────── BRAND PAYMENTS ─────────────────────────────── */
 
 function BrandPaymentsPage() {
-  const { data: payments, isLoading } = useListPayments();
-  useCreatePayment();
-  const updatePayment = useUpdatePayment();
-  const queryClient = useQueryClient();
+  const [payments, setPayments] = useState<FsPayment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const unsub = fsSubscribePayments((data) => {
+      setPayments(data);
+      setIsLoading(false);
+    });
+    return unsub;
+  }, []);
 
   const { data: stripePayouts, isLoading: stripeLoading, error: stripeError } = useStripePayouts();
   const createPayoutIntent = useCreateStripePayoutIntent();
 
   const [payoutDialog, setPayoutDialog] = useState<{
     open: boolean;
-    paymentId?: number;
+    paymentId?: string;
     amount?: number;
     creator?: { name: string; email: string } | null;
-    submissionId?: number;
+    submissionId?: string;
     result?: { paymentIntentId: string };
   }>({ open: false });
 
-  const allPayments = payments ?? [];
+  const allPayments = payments;
   const totalPaid       = allPayments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
   const totalProcessing = allPayments.filter(p => p.status === "processing").reduce((s, p) => s + p.amount, 0);
   const totalPending    = allPayments.filter(p => p.status === "pending").reduce((s, p) => s + p.amount, 0);
 
-  const handleProcessPayment = (id: number) => {
-    updatePayment.mutate(
-      { id, data: { status: "processing" } },
-      {
-        onSuccess: () => {
-          toast({ title: "Payment marked as processing" });
-          queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
-        },
-      }
-    );
+  const handleProcessPayment = async (id: string) => {
+    try {
+      await fsUpdatePayment(id, { status: "processing" });
+      toast({ title: "Payment marked as processing" });
+    } catch {
+      toast({ title: "Failed to update payment", variant: "destructive" });
+    }
   };
 
-  const handleIssuePayout = (payment: (typeof allPayments)[0]) => {
-    if (!payment.creator) {
+  const handleIssuePayout = (payment: FsPayment) => {
+    if (!payment.creatorEmail || !payment.creatorName) {
       toast({ title: "No creator linked to payment", variant: "destructive" });
       return;
     }
@@ -346,8 +356,8 @@ function BrandPaymentsPage() {
       open: true,
       paymentId: payment.id,
       amount: payment.amount,
-      creator: payment.creator,
-      submissionId: payment.submissionId ?? undefined,
+      creator: { name: payment.creatorName, email: payment.creatorEmail },
+      submissionId: payment.submissionId,
     });
   };
 
@@ -364,10 +374,8 @@ function BrandPaymentsPage() {
         onSuccess: (data) => {
           setPayoutDialog(d => ({ ...d, result: { paymentIntentId: data.paymentIntentId } }));
           if (payoutDialog.paymentId) {
-            updatePayment.mutate({ id: payoutDialog.paymentId, data: { status: "processing" } });
+            fsUpdatePayment(payoutDialog.paymentId, { status: "processing" });
           }
-          queryClient.invalidateQueries({ queryKey: ["stripe-payouts"] });
-          queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
           toast({ title: "Stripe payout intent created", description: `PI: ${data.paymentIntentId}` });
         },
         onError: (err: Error) => {
@@ -386,7 +394,6 @@ function BrandPaymentsPage() {
         </div>
       </div>
 
-      {/* Summary */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="bg-card border-card-border">
           <CardContent className="p-6">
@@ -417,7 +424,6 @@ function BrandPaymentsPage() {
         </Card>
       </div>
 
-      {/* Stripe Activity */}
       <Card className="bg-card border-card-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -465,7 +471,6 @@ function BrandPaymentsPage() {
         </CardContent>
       </Card>
 
-      {/* All Payments */}
       <Card className="bg-card border-card-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -491,23 +496,23 @@ function BrandPaymentsPage() {
               <TableBody>
                 {allPayments.map(payment => (
                   <TableRow key={payment.id} className="border-border hover:bg-muted/30">
-                    <TableCell className="text-muted-foreground text-sm">{format(new Date(payment.createdAt), "MMM d, yyyy")}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{format(new Date(getTimestamp(payment.createdAt)), "MMM d, yyyy")}</TableCell>
                     <TableCell>
-                      <div className="font-medium text-foreground text-sm">{payment.creator?.name ?? "Unknown"}</div>
-                      <div className="text-xs text-muted-foreground">{payment.creator?.handle}</div>
-                      {payment.creator && !(payment.creator as { paymentMethod?: string | null }).paymentMethod && (
+                      <div className="font-medium text-foreground text-sm">{payment.creatorName ?? "Unknown"}</div>
+                      <div className="text-xs text-muted-foreground">{payment.creatorEmail}</div>
+                      {!payment.creatorEmail && (
                         <div className="flex items-center gap-1 text-xs text-yellow-400 mt-0.5">
                           <TriangleAlert className="h-3 w-3" /> No payment info
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">{payment.campaign?.title ?? "Unknown"}</TableCell>
+                    <TableCell className="text-sm">{payment.campaignTitle ?? "Unknown"}</TableCell>
                     <TableCell>{getStatusBadge(payment.status)}</TableCell>
                     <TableCell className="text-right font-bold">${payment.amount}</TableCell>
                     <TableCell className="text-right space-x-1">
                       {payment.status === "pending" && (
                         <>
-                          <Button size="sm" variant="ghost" onClick={() => handleProcessPayment(payment.id)}>
+                          <Button size="sm" variant="ghost" onClick={() => handleProcessPayment(payment.id!)}>
                             Mark Processing
                           </Button>
                           <Button
@@ -542,7 +547,6 @@ function BrandPaymentsPage() {
         </CardContent>
       </Card>
 
-      {/* Payout Dialog */}
       <Dialog open={payoutDialog.open} onOpenChange={open => { if (!open) setPayoutDialog({ open: false }); }}>
         <DialogContent className="sm:max-w-[480px] bg-card border-card-border">
           <DialogHeader>

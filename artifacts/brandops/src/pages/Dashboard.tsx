@@ -1,4 +1,8 @@
-import { useGetDashboardStats, useGetRecentActivity, useListCampaigns, useListPayments, useListSubmissions } from "@workspace/api-client-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  fsSubscribeCampaigns, fsSubscribeSubmissions, fsSubscribePayments,
+  type FsCampaign, type FsSubmission, type FsPayment,
+} from "@/lib/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +16,6 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { Link, useLocation } from "wouter";
-import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { getOnboarded } from "@/lib/onboarding";
@@ -88,6 +91,15 @@ function statusBadge(status: string) {
   }
 }
 
+function getTs(ts: unknown): string {
+  if (!ts) return new Date().toISOString();
+  if (typeof ts === "string") return ts;
+  if (ts && typeof ts === "object" && "toDate" in ts) {
+    return (ts as { toDate: () => Date }).toDate().toISOString();
+  }
+  return new Date().toISOString();
+}
+
 /* ─────────────────────────── CREATOR DASHBOARD ─────────────────────────── */
 
 interface CreatorEarnings {
@@ -107,12 +119,19 @@ interface CreatorEarnings {
 
 function CreatorDashboard() {
   const { user } = useAuth();
-  const { data: campaigns, isLoading: campaignsLoading } = useListCampaigns();
-  const { data: submissions, isLoading: submissionsLoading } = useListSubmissions({});
+  const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
+  const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const [, navigate] = useLocation();
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  // Real Stripe + DB earnings for this creator, keyed by their Firebase email
+  useEffect(() => {
+    const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); setCampaignsLoading(false); });
+    const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); setSubmissionsLoading(false); });
+    return () => { u1(); u2(); };
+  }, []);
+
   const { data: earningsData, isLoading: earningsLoading } = useQuery<CreatorEarnings>({
     queryKey: ["creator-earnings", user?.email],
     queryFn: async () => {
@@ -125,8 +144,8 @@ function CreatorDashboard() {
     staleTime: 60_000,
   });
 
-  const activeCampaigns = campaigns?.filter(c => c.status === "active") ?? [];
-  const mySubmissions = submissions ?? [];
+  const activeCampaigns = campaigns.filter(c => c.status === "active");
+  const mySubmissions = submissions;
   const approvedCount = mySubmissions.filter(s => s.status === "approved").length;
   const pendingCount = mySubmissions.filter(s => s.status === "pending" || s.status === "reviewing").length;
   const totalEarned = earningsData?.totalEarned ?? 0;
@@ -134,7 +153,6 @@ function CreatorDashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Hero */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Creator Hub</h1>
@@ -148,7 +166,6 @@ function CreatorDashboard() {
         </Button>
       </div>
 
-      {/* CTA Banner */}
       <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent p-6">
         <div className="absolute -right-8 -top-8 w-48 h-48 opacity-[0.04]">
           <Video className="w-full h-full" />
@@ -177,44 +194,16 @@ function CreatorDashboard() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <AnimatedStatCard
-          title="Total Earned"
-          rawValue={totalEarned}
-          icon={DollarSign}
-          color="bg-primary/10 text-primary"
-          description="From approved videos"
-          prefix="$"
-        />
-        <AnimatedStatCard
-          title="Open Campaigns"
-          rawValue={activeCampaigns.length}
-          icon={Megaphone}
-          color="bg-blue-500/10 text-blue-400"
-          description="Available to submit"
-        />
-        <AnimatedStatCard
-          title="Pending Review"
-          rawValue={pendingCount}
-          icon={Clock}
-          color="bg-yellow-500/10 text-yellow-400"
-          description="Awaiting brand approval"
-        />
-        <AnimatedStatCard
-          title="Approved Videos"
-          rawValue={approvedCount}
-          icon={CheckCircle2}
-          color="bg-green-500/10 text-green-400"
-          description="Ready to publish"
-        />
+        <AnimatedStatCard title="Total Earned" rawValue={totalEarned} icon={DollarSign} color="bg-primary/10 text-primary" description="From approved videos" prefix="$" />
+        <AnimatedStatCard title="Open Campaigns" rawValue={activeCampaigns.length} icon={Megaphone} color="bg-blue-500/10 text-blue-400" description="Available to submit" />
+        <AnimatedStatCard title="Pending Review" rawValue={pendingCount} icon={Clock} color="bg-yellow-500/10 text-yellow-400" description="Awaiting brand approval" />
+        <AnimatedStatCard title="Approved Videos" rawValue={approvedCount} icon={CheckCircle2} color="bg-green-500/10 text-green-400" description="Ready to publish" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left / main */}
         <div className="lg:col-span-2 space-y-6">
 
-          {/* Available Campaigns */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -265,7 +254,6 @@ function CreatorDashboard() {
             </CardContent>
           </Card>
 
-          {/* My Submissions */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -301,9 +289,9 @@ function CreatorDashboard() {
                           <PlayCircle className="h-4 w-4 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{sub.campaign?.title ?? "Campaign"}</div>
+                          <div className="text-sm font-medium truncate">{sub.campaignTitle ?? "Campaign"}</div>
                           <div className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(sub.createdAt), { addSuffix: true })}
+                            {formatDistanceToNow(new Date(getTs(sub.createdAt)), { addSuffix: true })}
                           </div>
                         </div>
                         {statusBadge(sub.status)}
@@ -316,9 +304,7 @@ function CreatorDashboard() {
           </Card>
         </div>
 
-        {/* Right column */}
         <div className="space-y-6">
-          {/* My Earnings */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -378,7 +364,6 @@ function CreatorDashboard() {
             </CardContent>
           </Card>
 
-          {/* Quick Tips */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -410,12 +395,20 @@ function CreatorDashboard() {
 /* ─────────────────────────── BRAND DASHBOARD ───────────────────────────── */
 
 function BrandDashboard() {
-  const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
-  const { data: activity, isLoading: activityLoading } = useGetRecentActivity();
-  const { data: campaigns } = useListCampaigns();
-  const { data: payments } = useListPayments();
-  const { data: submissions } = useListSubmissions({});
+  const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
+  const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
+  const [payments, setPayments] = useState<FsPayment[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    let loaded = 0;
+    const checkDone = () => { loaded++; if (loaded >= 3) setDataLoading(false); };
+    const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); });
+    const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); checkDone(); });
+    const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); });
+    return () => { u1(); u2(); u3(); };
+  }, []);
 
   const [insights, setInsights] = useState<DashboardInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -431,28 +424,31 @@ function BrandDashboard() {
     onSuccess: (d) => setInsights(d.insights ?? []),
   });
 
+  const activeCampaigns = campaigns.filter(c => c.status === "active");
+  const pendingPayments = payments.filter(p => p.status === "pending");
+  const pendingSubmissions = submissions.filter(s => s.status === "pending" || s.status === "reviewing");
+  const approvedSubmissions = submissions.filter(s => s.status === "approved");
+  const totalSpend = payments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
+  const totalBudget = campaigns.reduce((s, c) => s + c.totalBudget, 0);
+  const budgetUsed = totalBudget > 0 ? (totalSpend / totalBudget) * 100 : 0;
+
   useEffect(() => {
-    if (stats && !insightsFetched.current) {
+    if (!dataLoading && !insightsFetched.current) {
       insightsFetched.current = true;
       setInsightsLoading(true);
       fetchInsightsMutation.mutateAsync({
-        activeCampaigns: stats.activeCampaigns,
-        pendingSubmissions: stats.pendingSubmissions,
-        approvedVideos: stats.approvedVideos,
-        totalSpend: stats.totalSpend,
-        budgetUsed: stats.campaignBudgetUsed,
+        activeCampaigns: activeCampaigns.length,
+        pendingSubmissions: pendingSubmissions.length,
+        approvedVideos: approvedSubmissions.length,
+        totalSpend,
+        budgetUsed,
       }).finally(() => setInsightsLoading(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats]);
-
-  const activeCampaigns = campaigns?.filter(c => c.status === "active") ?? [];
-  const pendingPayments = payments?.filter(p => p.status === "pending") ?? [];
-  const pendingSubmissions = submissions?.filter(s => s.status === "pending" || s.status === "reviewing") ?? [];
+  }, [dataLoading]);
 
   return (
     <div className="space-y-8">
-      {/* Hero */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Command Center</h1>
@@ -473,7 +469,6 @@ function BrandDashboard() {
         </div>
       </div>
 
-      {/* AI Quick Launch Banner */}
       <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent p-6">
         <div className="absolute -right-8 -top-8 w-48 h-48 opacity-[0.04]">
           <Zap className="w-full h-full" />
@@ -518,47 +513,21 @@ function BrandDashboard() {
         </div>
       </div>
 
-      {/* Stats Grid */}
-      {statsLoading ? (
+      {dataLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl bg-card" />)}
         </div>
-      ) : stats ? (
+      ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <AnimatedStatCard
-            title="Total Spend"
-            rawValue={stats.totalSpend}
-            icon={DollarSign}
-            color="bg-primary/10 text-primary"
-            description={`${stats.campaignBudgetUsed.toFixed(1)}% of budget used`}
-            prefix="$"
-          />
-          <AnimatedStatCard
-            title="Active Campaigns"
-            rawValue={stats.activeCampaigns}
-            icon={Megaphone}
-            color="bg-blue-500/10 text-blue-400"
-          />
-          <AnimatedStatCard
-            title="Pending Review"
-            rawValue={stats.pendingSubmissions}
-            icon={Clock}
-            color="bg-yellow-500/10 text-yellow-400"
-            description="Awaiting your approval"
-          />
-          <AnimatedStatCard
-            title="Approved Videos"
-            rawValue={stats.approvedVideos}
-            icon={CheckCircle2}
-            color="bg-green-500/10 text-green-400"
-            description="Ready to publish"
-          />
+          <AnimatedStatCard title="Total Spend" rawValue={totalSpend} icon={DollarSign} color="bg-primary/10 text-primary" description={`${budgetUsed.toFixed(1)}% of budget used`} prefix="$" />
+          <AnimatedStatCard title="Active Campaigns" rawValue={activeCampaigns.length} icon={Megaphone} color="bg-blue-500/10 text-blue-400" />
+          <AnimatedStatCard title="Pending Review" rawValue={pendingSubmissions.length} icon={Clock} color="bg-yellow-500/10 text-yellow-400" description="Awaiting your approval" />
+          <AnimatedStatCard title="Approved Videos" rawValue={approvedSubmissions.length} icon={CheckCircle2} color="bg-green-500/10 text-green-400" description="Ready to publish" />
         </div>
-      ) : null}
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {/* Active Campaign Pipeline */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -581,16 +550,15 @@ function BrandDashboard() {
                   <Link href="/campaigns/new" className="text-primary hover:underline">Create one →</Link>
                 </div>
               ) : activeCampaigns.slice(0, 4).map((c) => {
-                const pct = c.totalBudget > 0 ? Math.min(100, ((c.totalSpent ?? 0) / c.totalBudget) * 100) : 0;
+                const pct = c.totalBudget > 0 ? Math.min(100, (payments.filter(p => p.campaignId === c.id && p.status === "paid").reduce((s, p) => s + p.amount, 0) / c.totalBudget) * 100) : 0;
                 return (
                   <Link key={c.id} href={`/campaigns/${c.id}`}>
                     <div className="p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/20 transition-all cursor-pointer group">
                       <div className="flex items-center justify-between mb-2">
                         <div className="font-medium text-sm group-hover:text-primary transition-colors">{c.title}</div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{c.creatorCount ?? 0}</span>
-                          <span className="flex items-center gap-1"><PlayCircle className="h-3 w-3" />{c.approvedCount ?? 0} approved</span>
-                          <span className="text-primary font-medium">${(c.totalSpent ?? 0).toLocaleString()}</span>
+                          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{c.videosNeeded}</span>
+                          <span className="text-primary font-medium">${c.totalBudget.toLocaleString()}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -604,7 +572,6 @@ function BrandDashboard() {
             </CardContent>
           </Card>
 
-          {/* Pending Approvals */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -637,8 +604,8 @@ function BrandDashboard() {
                           <PlayCircle className="h-4 w-4 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{sub.campaign?.title ?? "Unknown Campaign"}</div>
-                          <div className="text-xs text-muted-foreground">by {sub.creator?.name ?? "Unknown"}</div>
+                          <div className="text-sm font-medium truncate">{sub.campaignTitle ?? "Unknown Campaign"}</div>
+                          <div className="text-xs text-muted-foreground">by {sub.creatorName ?? "Unknown"}</div>
                         </div>
                         <Badge variant="outline" className="text-yellow-400 border-yellow-500/30 bg-yellow-500/10 text-xs shrink-0">
                           {sub.status === "reviewing" ? "In Review" : "Pending"}
@@ -651,7 +618,6 @@ function BrandDashboard() {
             </CardContent>
           </Card>
 
-          {/* Payout Queue */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -681,8 +647,8 @@ function BrandDashboard() {
                     <Link href="/payments" key={p.id}>
                       <div className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer">
                         <div>
-                          <div className="text-sm font-medium">{p.creator?.name ?? "Unknown"}</div>
-                          <div className="text-xs text-muted-foreground">{p.campaign?.title ?? "Unknown campaign"}</div>
+                          <div className="text-sm font-medium">{p.creatorName ?? "Unknown"}</div>
+                          <div className="text-xs text-muted-foreground">{p.campaignTitle ?? "Unknown campaign"}</div>
                         </div>
                         <div className="text-sm font-bold text-primary">${p.amount}</div>
                       </div>
@@ -702,9 +668,7 @@ function BrandDashboard() {
           </Card>
         </div>
 
-        {/* Right column */}
         <div className="space-y-6">
-          {/* AI Insights */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -738,27 +702,40 @@ function BrandDashboard() {
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Recent Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              {activityLoading ? (
+              {dataLoading ? (
                 <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-              ) : activity && activity.length > 0 ? (
+              ) : submissions.length > 0 || payments.length > 0 ? (
                 <div className="space-y-4">
-                  {activity.slice(0, 7).map((item) => (
-                    <div key={item.id} className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                      <div>
-                        <p className="text-sm leading-snug">{item.message}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
-                        </p>
+                  {[
+                    ...submissions.slice(0, 4).map(s => ({
+                      id: s.id,
+                      message: `${s.creatorName ?? "A creator"} submitted a video for "${s.campaignTitle ?? "a campaign"}"`,
+                      createdAt: getTs(s.createdAt),
+                    })),
+                    ...payments.slice(0, 3).map(p => ({
+                      id: p.id,
+                      message: `Payout of $${p.amount} queued for ${p.creatorName ?? "a creator"}`,
+                      createdAt: getTs(p.createdAt),
+                    })),
+                  ]
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .slice(0, 7)
+                    .map((item) => (
+                      <div key={item.id} className="flex items-start gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                        <div>
+                          <p className="text-sm leading-snug">{item.message}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               ) : (
                 <div className="text-center py-6 text-muted-foreground text-sm">No recent activity.</div>

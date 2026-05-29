@@ -1,7 +1,5 @@
-import { useState, useMemo } from "react";
-import { useListCreators, useCreateCreator, getListCreatorsQueryKey, type Creator } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { fsSubscribeCreators, fsCreateCreator, type FsCreator } from "@/lib/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
+import { useMutation } from "@tanstack/react-query";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -31,8 +30,7 @@ const EMPTY_FORM = {
 
 type SortBy = "match" | "approvalRate" | "onTimeDelivery" | "turnaround" | "brandRating" | "name";
 
-// AI match based on UGC production quality metrics
-function computeAiMatch(creator: Creator): number {
+function computeAiMatch(creator: FsCreator): number {
   const approval = (creator.approvalRate ?? 0);
   const onTime = (creator.onTimeDeliveryRate ?? 0);
   const rating = ((creator.brandRating ?? 0) / 5) * 100;
@@ -42,7 +40,7 @@ function computeAiMatch(creator: Creator): number {
   return Math.min(99, Math.max(0, Math.round(score)));
 }
 
-function getWhyMatched(creator: Creator): string[] {
+function getWhyMatched(creator: FsCreator): string[] {
   const reasons: string[] = [];
   if ((creator.approvalRate ?? 0) >= 90) reasons.push(`${creator.approvalRate}% approval rate`);
   if ((creator.onTimeDeliveryRate ?? 0) >= 90) reasons.push(`Delivers on time ${creator.onTimeDeliveryRate}%`);
@@ -55,7 +53,7 @@ function getWhyMatched(creator: Creator): string[] {
   return reasons.slice(0, 3);
 }
 
-function getBadges(creator: Creator, match: number) {
+function getBadges(creator: FsCreator, match: number) {
   const badges = [];
   if (match >= 90) badges.push({ label: "Best Match", color: "text-primary border-primary/30 bg-primary/10", icon: Sparkles });
   if ((creator.approvalRate ?? 0) >= 95) badges.push({ label: "Top Rated", color: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10", icon: Award });
@@ -80,7 +78,7 @@ const cardVariants: Variants = {
   }),
 };
 
-function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
+function CreatorCard({ creator, index }: { creator: FsCreator; index: number }) {
   const aiMatch = useMemo(() => computeAiMatch(creator), [creator]);
   const badges = useMemo(() => getBadges(creator, aiMatch), [creator, aiMatch]);
   const reasons = useMemo(() => getWhyMatched(creator), [creator]);
@@ -92,7 +90,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
         <Card className="bg-card border-card-border hover:border-primary/40 transition-all duration-200 cursor-pointer h-full group hover:shadow-lg hover:shadow-primary/5">
           <CardContent className="p-5 flex flex-col h-full">
 
-            {/* Header */}
             <div className="flex items-start gap-3 mb-4">
               <div className="relative shrink-0">
                 <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 flex items-center justify-center overflow-hidden">
@@ -104,11 +101,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
                     </span>
                   )}
                 </div>
-                {creator.status === "active" && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-card border-2 border-card flex items-center justify-center">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                  </div>
-                )}
               </div>
 
               <div className="flex-1 min-w-0">
@@ -120,7 +112,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
                 </div>
               </div>
 
-              {/* AI Match */}
               <div className="shrink-0 text-right">
                 <div className={cn("text-lg font-black leading-none", getAiMatchColor(aiMatch))}>
                   {aiMatch}%
@@ -132,7 +123,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
               </div>
             </div>
 
-            {/* Badges */}
             {badges.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {badges.map(({ label, color, icon: Icon }) => (
@@ -147,7 +137,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
               </div>
             )}
 
-            {/* UGC Production Metrics */}
             <div className="grid grid-cols-3 gap-2 text-center border-t border-border pt-3 mb-3">
               <div>
                 <div className="text-xs text-muted-foreground mb-0.5 flex items-center justify-center gap-0.5">
@@ -184,7 +173,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
               </div>
             </div>
 
-            {/* Secondary metrics row */}
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
               <div className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -204,7 +192,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
               </div>
             </div>
 
-            {/* Content style tags */}
             {styles.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-3">
                 {styles.slice(0, 4).map(s => (
@@ -216,7 +203,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
               </div>
             )}
 
-            {/* Why matched */}
             {reasons.length > 0 && (
               <div className="mt-auto pt-2 border-t border-border/50">
                 <div className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wide font-semibold">Why matched</div>
@@ -231,7 +217,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
               </div>
             )}
 
-            {/* Brand rating footer */}
             {(creator.brandRating ?? 0) > 0 && (
               <div className="flex items-center justify-end mt-3 pt-2 border-t border-border/50 text-xs">
                 <div className="flex items-center gap-0.5 text-yellow-400">
@@ -270,10 +255,18 @@ function SkeletonCard() {
 }
 
 export default function Creators() {
-  const { data: creators, isLoading } = useListCreators();
-  const createCreator = useCreateCreator();
-  const queryClient = useQueryClient();
+  const [creators, setCreators] = useState<FsCreator[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const unsub = fsSubscribeCreators((data) => {
+      setCreators(data);
+      setIsLoading(false);
+    });
+    return unsub;
+  }, []);
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("match");
@@ -283,7 +276,6 @@ export default function Creators() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
   const filtered = useMemo(() => {
-    if (!creators) return [];
     return creators
       .filter(c => {
         if (styleFilter !== "all" && !(c.contentStyles ?? []).includes(styleFilter)) return false;
@@ -319,8 +311,6 @@ export default function Creators() {
         }),
       });
       const text = await r.text();
-      const match = text.match(/data: ({.*?"done".*?})/g)?.pop();
-      if (!match) return [];
       const chunks: string[] = [];
       text.split("\n").forEach(line => {
         if (line.startsWith("data: ")) {
@@ -346,32 +336,32 @@ export default function Creators() {
     setSelectedStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
   }
 
-  function handleAddCreator() {
+  async function handleAddCreator() {
     if (!form.name || !form.email || !form.handle) return;
-    createCreator.mutate({
-      data: {
+    setSaving(true);
+    try {
+      await fsCreateCreator({
         name: form.name,
         email: form.email,
         handle: form.handle,
         platform: "tiktok",
         suggestedPayout: parseFloat(form.suggestedPayout) || 0,
         contentStyles: selectedStyles,
-      },
-    }, {
-      onSuccess: () => {
-        toast({ title: "Creator added", description: `${form.name} has been added to your roster.` });
-        queryClient.invalidateQueries({ queryKey: getListCreatorsQueryKey() });
-        setShowAddDialog(false);
-        setForm({ ...EMPTY_FORM });
-        setSelectedStyles([]);
-      },
-      onError: () => toast({ title: "Error", description: "Failed to add creator.", variant: "destructive" }),
-    });
+        payoutRate: parseFloat(form.suggestedPayout) || 0,
+      });
+      toast({ title: "Creator added", description: `${form.name} has been added to your roster.` });
+      setShowAddDialog(false);
+      setForm({ ...EMPTY_FORM });
+      setSelectedStyles([]);
+    } catch {
+      toast({ title: "Error", description: "Failed to add creator.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Creator Roster</h1>
@@ -386,7 +376,6 @@ export default function Creators() {
         </Button>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -425,8 +414,7 @@ export default function Creators() {
         </Select>
       </div>
 
-      {/* Stats bar */}
-      {!isLoading && creators && creators.length > 0 && (
+      {!isLoading && creators.length > 0 && (
         <div className="flex items-center gap-6 text-sm text-muted-foreground border border-white/8 rounded-lg px-4 py-2.5 bg-white/2">
           <div className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
@@ -459,7 +447,6 @@ export default function Creators() {
         </div>
       )}
 
-      {/* Grid */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => <SkeletonCard key={i} />)}
@@ -470,7 +457,7 @@ export default function Creators() {
             <CreatorCard key={creator.id} creator={creator} index={i} />
           ))}
         </div>
-      ) : creators && creators.length === 0 ? (
+      ) : creators.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
             <Users className="h-7 w-7 text-primary" />
@@ -492,7 +479,6 @@ export default function Creators() {
         </div>
       )}
 
-      {/* Add Creator Dialog */}
       <Dialog open={showAddDialog} onOpenChange={open => { setShowAddDialog(open); if (!open) { setForm({ ...EMPTY_FORM }); setSelectedStyles([]); } }}>
         <DialogContent className="bg-[#111] border-white/10 text-white max-w-lg">
           <DialogHeader>
@@ -501,7 +487,6 @@ export default function Creators() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Identity */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-white/60 text-xs">Name *</Label>
@@ -531,7 +516,6 @@ export default function Creators() {
               </div>
             </div>
 
-            {/* Content styles with AI suggest */}
             <div className="border-t border-white/8 pt-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-white/50 uppercase tracking-wide font-semibold">Content Style Strengths</p>
@@ -566,7 +550,6 @@ export default function Creators() {
               </div>
             </div>
 
-            {/* Auto-compute note */}
             <div className="flex items-start gap-2 rounded-lg bg-white/3 border border-white/6 p-3">
               <Info className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground leading-relaxed">
@@ -582,10 +565,10 @@ export default function Creators() {
             </Button>
             <Button
               onClick={handleAddCreator}
-              disabled={createCreator.isPending || !form.name || !form.email || !form.handle}
+              disabled={saving || !form.name || !form.email || !form.handle}
               className="bg-[#C6FF00] text-black hover:bg-[#d4ff33] font-bold"
             >
-              {createCreator.isPending ? "Adding…" : "Add Creator"}
+              {saving ? "Adding…" : "Add Creator"}
             </Button>
           </DialogFooter>
         </DialogContent>

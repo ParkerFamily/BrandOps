@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
-import { useGetAnalytics, useListCreators } from "@workspace/api-client-react";
+import {
+  fsSubscribeCampaigns, fsSubscribeSubmissions, fsSubscribePayments, fsSubscribeCreators,
+  type FsCampaign, type FsSubmission, type FsPayment, type FsCreator,
+} from "@/lib/firestore";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
   DollarSign, CheckCircle2, Clock, AlertTriangle, RefreshCw,
@@ -66,7 +68,7 @@ function CreatorRow({
   rank, creator,
 }: {
   rank: number;
-  creator: { id: number; name: string; handle: string; platform: string; metric: number; metricLabel: string; approvedVideos?: number };
+  creator: { id: string; name: string; handle: string; platform: string; metric: number; metricLabel: string };
 }) {
   return (
     <Link href={`/creators/${creator.id}`}>
@@ -90,9 +92,125 @@ function CreatorRow({
   );
 }
 
+function computeAnalytics(
+  campaigns: FsCampaign[],
+  submissions: FsSubmission[],
+  payments: FsPayment[],
+  creators: FsCreator[],
+) {
+  const totalBudget = campaigns.reduce((s, c) => s + c.totalBudget, 0);
+  const paidPayments = payments.filter(p => p.status === "paid");
+  const approvedPayouts = paidPayments.reduce((s, p) => s + p.amount, 0);
+  const videosDelivered = submissions.length;
+  const videosApproved = submissions.filter(s => s.status === "approved" || s.status === "paid").length;
+  const videosRejected = submissions.filter(s => s.status === "rejected").length;
+  const revisionRequests = submissions.filter(s => s.status === "revision_requested").length;
+  const pendingApprovals = submissions.filter(s => s.status === "pending" || s.status === "reviewing").length;
+  const totalDecided = videosApproved + videosRejected;
+  const approvalRate = totalDecided > 0 ? Math.round((videosApproved / totalDecided) * 100) : 0;
+  const budgetRemaining = Math.max(0, totalBudget - approvedPayouts);
+  const costPerApprovedVideo = videosApproved > 0 ? Math.round(approvedPayouts / videosApproved) : 0;
+
+  // Avg delivery time: not directly computable from FS data alone — placeholder
+  const avgDeliveryDays = 0;
+
+  // Monthly spend
+  const monthlyMap: Record<string, { spend: number; approved: number }> = {};
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  paidPayments.forEach(p => {
+    const ts = p.createdAt as unknown;
+    const date = ts && typeof ts === "object" && "toDate" in (ts as object)
+      ? (ts as { toDate: () => Date }).toDate()
+      : new Date();
+    const key = monthNames[date.getMonth()];
+    if (!monthlyMap[key]) monthlyMap[key] = { spend: 0, approved: 0 };
+    monthlyMap[key].spend += p.amount;
+  });
+  submissions.filter(s => s.status === "approved" || s.status === "paid").forEach(s => {
+    const ts = s.createdAt as unknown;
+    const date = ts && typeof ts === "object" && "toDate" in (ts as object)
+      ? (ts as { toDate: () => Date }).toDate()
+      : new Date();
+    const key = monthNames[date.getMonth()];
+    if (!monthlyMap[key]) monthlyMap[key] = { spend: 0, approved: 0 };
+    monthlyMap[key].approved += 1;
+  });
+  const monthlySpend = Object.entries(monthlyMap).map(([month, v]) => ({ month, ...v }));
+
+  // Creator leaderboards
+  const topCreators = creators
+    .filter(c => (c.approvalRate ?? 0) > 0)
+    .sort((a, b) => (b.approvalRate ?? 0) - (a.approvalRate ?? 0))
+    .slice(0, 5)
+    .map(c => ({
+      id: c.id!,
+      name: c.name,
+      handle: c.handle,
+      platform: c.platform,
+      metric: c.approvalRate ?? 0,
+      metricLabel: "approval rate",
+    }));
+
+  const fastestCreators = creators
+    .filter(c => (c.avgTurnaroundDays ?? 0) > 0)
+    .sort((a, b) => (a.avgTurnaroundDays ?? 99) - (b.avgTurnaroundDays ?? 99))
+    .slice(0, 5)
+    .map(c => ({
+      id: c.id!,
+      name: c.name,
+      handle: c.handle,
+      platform: c.platform,
+      metric: c.avgTurnaroundDays ?? 0,
+      metricLabel: "turnaround",
+    }));
+
+  const creatorsNeedingAttention = creators
+    .filter(c => (c.approvalRate ?? 0) > 0 && (c.approvalRate ?? 0) < 60)
+    .sort((a, b) => (a.approvalRate ?? 0) - (b.approvalRate ?? 0))
+    .slice(0, 5)
+    .map(c => ({
+      id: c.id!,
+      name: c.name,
+      handle: c.handle,
+      platform: c.platform,
+      metric: c.approvalRate ?? 0,
+      metricLabel: "approval rate",
+    }));
+
+  return {
+    totalBudget,
+    approvedPayouts,
+    videosDelivered,
+    videosApproved,
+    revisionRequests,
+    pendingApprovals,
+    approvalRate,
+    budgetRemaining,
+    costPerApprovedVideo,
+    avgDeliveryDays,
+    monthlySpend,
+    topCreators,
+    fastestCreators,
+    creatorsNeedingAttention,
+  };
+}
+
 export default function Analytics() {
-  const { data: analytics, isLoading } = useGetAnalytics();
-  const { data: creators } = useListCreators();
+  const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
+  const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
+  const [payments, setPayments] = useState<FsPayment[]>([]);
+  const [creators, setCreators] = useState<FsCreator[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let loaded = 0;
+    const checkDone = () => { loaded++; if (loaded >= 4) setIsLoading(false); };
+    const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); });
+    const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); checkDone(); });
+    const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); });
+    const u4 = fsSubscribeCreators(d => { setCreators(d); checkDone(); });
+    return () => { u1(); u2(); u3(); u4(); };
+  }, []);
 
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -111,6 +229,8 @@ export default function Analytics() {
     onError: () => setInsightsLoading(false),
   });
 
+  const analytics = isLoading ? null : computeAnalytics(campaigns, submissions, payments, creators);
+
   useEffect(() => {
     if (analytics && !fetchedRef.current) {
       fetchedRef.current = true;
@@ -124,10 +244,11 @@ export default function Analytics() {
         costPerApprovedVideo: analytics.costPerApprovedVideo,
         avgDeliveryDays: analytics.avgDeliveryDays,
         budgetRemaining: analytics.budgetRemaining,
-        creatorsCount: creators?.length ?? 0,
+        creatorsCount: creators.length,
       });
     }
-  }, [analytics, creators]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analytics]);
 
   function refreshInsights() {
     if (!analytics) return;
@@ -170,7 +291,6 @@ export default function Analytics() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">UGC Operations</h1>
@@ -187,67 +307,20 @@ export default function Analytics() {
         </button>
       </div>
 
-      {/* Top row: Budget KPIs */}
       <div className="grid gap-4 md:grid-cols-4">
-        <KpiCard
-          title="Campaign Budget"
-          value={`$${analytics.totalBudget.toLocaleString()}`}
-          sub={`${budgetPct}% allocated`}
-          icon={DollarSign}
-        />
-        <KpiCard
-          title="Approved Payouts"
-          value={`$${analytics.approvedPayouts.toLocaleString()}`}
-          sub="Paid to creators"
-          icon={CheckCircle2}
-          accent
-        />
-        <KpiCard
-          title="Pending Approvals"
-          value={String(analytics.pendingApprovals)}
-          sub="Awaiting your review"
-          icon={Clock}
-          warn={analytics.pendingApprovals > 0}
-        />
-        <KpiCard
-          title="Budget Remaining"
-          value={`$${analytics.budgetRemaining.toLocaleString()}`}
-          sub="Available for payouts"
-          icon={DollarSign}
-        />
+        <KpiCard title="Campaign Budget" value={`$${analytics.totalBudget.toLocaleString()}`} sub={`${budgetPct}% allocated`} icon={DollarSign} />
+        <KpiCard title="Approved Payouts" value={`$${analytics.approvedPayouts.toLocaleString()}`} sub="Paid to creators" icon={CheckCircle2} accent />
+        <KpiCard title="Pending Approvals" value={String(analytics.pendingApprovals)} sub="Awaiting your review" icon={Clock} warn={analytics.pendingApprovals > 0} />
+        <KpiCard title="Budget Remaining" value={`$${analytics.budgetRemaining.toLocaleString()}`} sub="Available for payouts" icon={DollarSign} />
       </div>
 
-      {/* Second row: Production KPIs */}
       <div className="grid gap-4 md:grid-cols-4">
-        <KpiCard
-          title="Videos Delivered"
-          value={String(analytics.videosDelivered)}
-          sub={`${analytics.videosApproved} approved`}
-          icon={Video}
-        />
-        <KpiCard
-          title="Approval Rate"
-          value={`${analytics.approvalRate}%`}
-          sub="Across all submissions"
-          icon={CheckCircle2}
-          accent={analytics.approvalRate >= 80}
-          warn={analytics.approvalRate > 0 && analytics.approvalRate < 60}
-        />
-        <KpiCard
-          title="Avg Delivery Time"
-          value={analytics.avgDeliveryDays > 0 ? `${analytics.avgDeliveryDays}d` : "—"}
-          sub="Average creator turnaround"
-          icon={Clock}
-        />
-        <KpiCard
-          title="Cost / Approved Video"
-          value={analytics.costPerApprovedVideo > 0 ? `$${analytics.costPerApprovedVideo.toLocaleString()}` : "—"}
-          sub="Based on paid payouts"
-          icon={BarChart3}
-        />
+        <KpiCard title="Videos Delivered" value={String(analytics.videosDelivered)} sub={`${analytics.videosApproved} approved`} icon={Video} />
+        <KpiCard title="Approval Rate" value={`${analytics.approvalRate}%`} sub="Across all submissions" icon={CheckCircle2} accent={analytics.approvalRate >= 80} warn={analytics.approvalRate > 0 && analytics.approvalRate < 60} />
+        <KpiCard title="Avg Delivery Time" value={analytics.avgDeliveryDays > 0 ? `${analytics.avgDeliveryDays}d` : "—"} sub="Average creator turnaround" icon={Clock} />
+        <KpiCard title="Cost / Approved Video" value={analytics.costPerApprovedVideo > 0 ? `$${analytics.costPerApprovedVideo.toLocaleString()}` : "—"} sub="Based on paid payouts" icon={BarChart3} />
       </div>
 
-      {/* Budget + Revision quick stats */}
       <div className="flex items-center gap-6 flex-wrap border border-white/8 rounded-xl px-5 py-3 bg-white/2 text-sm">
         <div className="flex items-center gap-2">
           <Video className="h-3.5 w-3.5 text-muted-foreground" />
@@ -264,7 +337,7 @@ export default function Analytics() {
         <div className="flex items-center gap-2">
           <Users className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-muted-foreground">Creators on roster:</span>
-          <span className="font-bold text-white">{creators?.length ?? 0}</span>
+          <span className="font-bold text-white">{creators.length}</span>
         </div>
         {analytics.pendingApprovals > 0 && (
           <>
@@ -280,7 +353,6 @@ export default function Analytics() {
         )}
       </div>
 
-      {/* AI Insights */}
       <div className="bg-card border border-card-border rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -350,35 +422,34 @@ export default function Analytics() {
         )}
       </div>
 
-      {/* Monthly spend chart */}
       <Card className="bg-card border-card-border">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Monthly Spend vs Approved Videos</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[240px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.monthlySpend} barGap={4}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-                <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "8px" }}
-                  itemStyle={{ color: "hsl(var(--foreground))" }}
-                />
-                <Bar yAxisId="left" dataKey="spend" name="Paid ($)" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar yAxisId="right" dataKey="approved" name="Approved Videos" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} opacity={0.5} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {analytics.monthlySpend.length === 0 ? (
+            <div className="h-[240px] flex items-center justify-center text-muted-foreground text-sm">
+              No spend data yet — complete payouts to see trends.
+            </div>
+          ) : (
+            <div className="h-[240px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.monthlySpend} barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
+                  <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderColor: "hsl(var(--border))", borderRadius: "8px" }} itemStyle={{ color: "hsl(var(--foreground))" }} />
+                  <Bar yAxisId="left" dataKey="spend" name="Paid ($)" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="approved" name="Approved Videos" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} opacity={0.5} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Creator leaderboards */}
       <div className="grid gap-4 md:grid-cols-3">
-
-        {/* Top by approval rate */}
         <Card className="bg-card border-card-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -402,7 +473,6 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
-        {/* Fastest by turnaround */}
         <Card className="bg-card border-card-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -426,7 +496,6 @@ export default function Analytics() {
           </CardContent>
         </Card>
 
-        {/* Needs attention */}
         <Card className="bg-card border-card-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">

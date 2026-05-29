@@ -1,8 +1,8 @@
+import { useState, useEffect } from "react";
 import {
-  useListSubmissions, useUpdateSubmission, useGetSubmission,
-  getGetSubmissionQueryKey, getListSubmissionsQueryKey, ListSubmissionsStatus,
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+  fsSubscribeSubmissions, fsUpdateSubmission, fsGetSubmission,
+  type FsSubmission,
+} from "@/lib/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,14 +13,14 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
-
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 
 const BASE = import.meta.env.BASE_URL;
+
+type StatusFilter = FsSubmission["status"] | "all";
 
 interface AIReview {
   hookStrength: number;
@@ -46,12 +46,10 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-function AIScoreCard({ submissionId, campaignTitle, creatorName, creatorNiche, campaignDescription }: {
-  submissionId: number;
+function AIScoreCard({ submissionId, campaignTitle, creatorName }: {
+  submissionId: string;
   campaignTitle?: string;
   creatorName?: string;
-  creatorNiche?: string;
-  campaignDescription?: string;
 }) {
   const [review, setReview] = useState<AIReview | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -61,7 +59,7 @@ function AIScoreCard({ submissionId, campaignTitle, creatorName, creatorNiche, c
       const r = await fetch(`${BASE}api/openai/submission-review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId, campaignTitle, creatorName, creatorNiche, campaignDescription }),
+        body: JSON.stringify({ submissionId, campaignTitle, creatorName }),
       });
       if (!r.ok) throw new Error("Review failed");
       return r.json() as Promise<AIReview>;
@@ -169,33 +167,59 @@ function AIScoreCard({ submissionId, campaignTitle, creatorName, creatorNiche, c
   );
 }
 
+function getTimestamp(ts: unknown): string {
+  if (!ts) return new Date().toISOString();
+  if (typeof ts === "string") return ts;
+  if (ts && typeof ts === "object" && "toDate" in ts) {
+    return (ts as { toDate: () => Date }).toDate().toISOString();
+  }
+  return new Date().toISOString();
+}
+
 export default function Submissions() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<ListSubmissionsStatus | "all">("all");
-  const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+  const [selectedSub, setSelectedSub] = useState<FsSubmission | null>(null);
+  const [selectedLoading, setSelectedLoading] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const onboarding = getOnboarding();
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
-  const { data: submissions, isLoading } = useListSubmissions(
-    statusFilter !== "all" ? { status: statusFilter } : {}
-  );
-  const updateSubmission = useUpdateSubmission();
+  useEffect(() => {
+    const constraints: import("firebase/firestore").QueryConstraint[] = [];
+    const unsub = fsSubscribeSubmissions((data) => {
+      setSubmissions(data);
+      setIsLoading(false);
+    }, constraints);
+    return unsub;
+  }, []);
 
-  const { data: selectedSubmission, isLoading: selectedLoading } = useGetSubmission(selectedSubmissionId ?? 0, {
-    query: { enabled: !!selectedSubmissionId, queryKey: getGetSubmissionQueryKey(selectedSubmissionId ?? 0) }
-  });
+  const filtered = statusFilter === "all"
+    ? submissions
+    : submissions.filter(s => s.status === statusFilter);
 
-  const handleReview = (id: number, status: "approved" | "rejected" | "revision_requested") => {
-    updateSubmission.mutate({ id, data: { status } }, {
-      onSuccess: () => {
-        toast({ title: `Submission ${status.replace("_", " ")}` });
-        queryClient.invalidateQueries({ queryKey: getListSubmissionsQueryKey() });
-        if (selectedSubmissionId === id) queryClient.invalidateQueries({ queryKey: getGetSubmissionQueryKey(id) });
+  useEffect(() => {
+    if (!selectedSubmissionId) { setSelectedSub(null); return; }
+    setSelectedLoading(true);
+    fsGetSubmission(selectedSubmissionId)
+      .then(s => setSelectedSub(s))
+      .finally(() => setSelectedLoading(false));
+  }, [selectedSubmissionId]);
+
+  const handleReview = async (id: string, status: "approved" | "rejected" | "revision_requested") => {
+    try {
+      await fsUpdateSubmission(id, { status });
+      toast({ title: `Submission ${status.replace("_", " ")}` });
+      if (selectedSubmissionId === id) {
+        fsGetSubmission(id).then(s => setSelectedSub(s));
       }
-    });
+    } catch {
+      toast({ title: "Failed to update submission", variant: "destructive" });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -235,7 +259,7 @@ export default function Submissions() {
       </div>
 
       <div className="flex items-center gap-4">
-        <Select value={statusFilter} onValueChange={(val: ListSubmissionsStatus | "all") => setStatusFilter(val)}>
+        <Select value={statusFilter} onValueChange={(val: StatusFilter) => setStatusFilter(val)}>
           <SelectTrigger className="w-[180px] bg-card border-card-border" data-testid="select-submission-status">
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
@@ -254,12 +278,11 @@ export default function Submissions() {
         <div className="grid gap-4">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-xl bg-card" />)}
         </div>
-      ) : submissions && submissions.length > 0 ? (
+      ) : filtered.length > 0 ? (
         <div className="grid gap-4">
-          {submissions.map(sub => (
+          {filtered.map(sub => (
             <Card key={sub.id} className="bg-card border-card-border overflow-hidden" data-testid={`card-submission-${sub.id}`}>
               <div className="flex flex-col md:flex-row">
-                {/* Thumbnail */}
                 <div className="md:w-56 bg-muted relative aspect-video md:aspect-auto flex items-center justify-center group shrink-0">
                   {sub.thumbnailUrl ? (
                     <img src={sub.thumbnailUrl} alt="Thumbnail" className="object-cover w-full h-full" />
@@ -276,43 +299,39 @@ export default function Submissions() {
                   </a>
                 </div>
 
-                {/* Content */}
                 <div className="p-5 flex-1 flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-start mb-1">
                       <div>
                         <h3 className="font-semibold text-lg leading-snug">
-                          {sub.campaign?.title ?? `Campaign #${sub.campaignId}`}
+                          {sub.campaignTitle ?? `Campaign`}
                         </h3>
                         <div className="text-sm text-muted-foreground">
-                          by <span className="font-medium text-foreground">{sub.creator?.name ?? `Creator #${sub.creatorId}`}</span>
-                          {sub.creator?.niche && <span className="text-muted-foreground"> · {sub.creator.niche}</span>}
+                          by <span className="font-medium text-foreground">{sub.creatorName ?? "Unknown"}</span>
                         </div>
                       </div>
                       {getStatusBadge(sub.status)}
                     </div>
                     <div className="text-xs text-muted-foreground mt-2">
-                      Submitted {format(new Date(sub.createdAt), "MMM d, yyyy")}
+                      Submitted {format(new Date(getTimestamp(sub.createdAt)), "MMM d, yyyy")}
                     </div>
 
-                    {/* AI Score Card */}
                     <AIScoreCard
-                      submissionId={sub.id}
-                      campaignTitle={sub.campaign?.title}
-                      creatorName={sub.creator?.name}
-                      creatorNiche={sub.creator?.niche}
+                      submissionId={sub.id!}
+                      campaignTitle={sub.campaignTitle}
+                      creatorName={sub.creatorName}
                     />
                   </div>
 
                   <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
-                    <Button variant="secondary" size="sm" onClick={() => setSelectedSubmissionId(sub.id)}>
+                    <Button variant="secondary" size="sm" onClick={() => setSelectedSubmissionId(sub.id!)}>
                       <Eye className="h-4 w-4 mr-1.5" /> Details
                     </Button>
-                    {(sub.status === "pending" || sub.status === "reviewing") && (
+                    {!isCreator && (sub.status === "pending" || sub.status === "reviewing") && (
                       <>
                         <Button
                           size="sm"
-                          onClick={() => handleReview(sub.id, "approved")}
+                          onClick={() => handleReview(sub.id!, "approved")}
                           className="bg-primary text-primary-foreground hover:bg-primary/90"
                           data-testid={`btn-approve-${sub.id}`}
                         >
@@ -320,14 +339,14 @@ export default function Submissions() {
                         </Button>
                         <Button
                           size="sm" variant="outline"
-                          onClick={() => handleReview(sub.id, "revision_requested")}
+                          onClick={() => handleReview(sub.id!, "revision_requested")}
                           data-testid={`btn-revision-${sub.id}`}
                         >
                           Request Revision
                         </Button>
                         <Button
                           size="sm" variant="destructive"
-                          onClick={() => handleReview(sub.id, "rejected")}
+                          onClick={() => handleReview(sub.id!, "rejected")}
                           data-testid={`btn-reject-${sub.id}`}
                         >
                           <X className="h-4 w-4 mr-1.5" /> Reject
@@ -348,7 +367,6 @@ export default function Submissions() {
         </div>
       )}
 
-      {/* Detail Dialog */}
       <Dialog open={!!selectedSubmissionId} onOpenChange={(open) => !open && setSelectedSubmissionId(null)}>
         <DialogContent className="sm:max-w-[600px] bg-card border-card-border text-card-foreground">
           <DialogHeader>
@@ -357,41 +375,41 @@ export default function Submissions() {
           <div className="py-4 space-y-4">
             {selectedLoading ? (
               <Skeleton className="h-32 w-full" />
-            ) : selectedSubmission ? (
+            ) : selectedSub ? (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="text-sm font-medium text-muted-foreground">Campaign</div>
-                    <div className="font-semibold text-lg">{selectedSubmission.campaign?.title}</div>
+                    <div className="font-semibold text-lg">{selectedSub.campaignTitle ?? "Unknown Campaign"}</div>
                   </div>
-                  {getStatusBadge(selectedSubmission.status)}
+                  {getStatusBadge(selectedSub.status)}
                 </div>
                 <div className="grid grid-cols-2 gap-4 border-t border-b border-border py-4">
                   <div>
                     <div className="text-sm font-medium text-muted-foreground">Creator</div>
-                    <div>{selectedSubmission.creator?.name}</div>
+                    <div>{selectedSub.creatorName ?? "Unknown"}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-muted-foreground">Submitted At</div>
-                    <div>{format(new Date(selectedSubmission.createdAt), "MMM d, yyyy h:mm a")}</div>
+                    <div>{format(new Date(getTimestamp(selectedSub.createdAt)), "MMM d, yyyy h:mm a")}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-muted-foreground">Video Link</div>
-                    <a href={selectedSubmission.videoUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                    <a href={selectedSub.videoUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1">
                       View Video <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
-                  {selectedSubmission.payoutAmount && (
+                  {selectedSub.payoutAmount && (
                     <div>
                       <div className="text-sm font-medium text-muted-foreground">Payout Amount</div>
-                      <div>${selectedSubmission.payoutAmount}</div>
+                      <div>${selectedSub.payoutAmount}</div>
                     </div>
                   )}
                 </div>
-                {selectedSubmission.notes && (
+                {selectedSub.notes && (
                   <div>
                     <div className="text-sm font-medium text-muted-foreground mb-1">Notes</div>
-                    <div className="p-3 bg-muted rounded-md text-sm">{selectedSubmission.notes}</div>
+                    <div className="p-3 bg-muted rounded-md text-sm">{selectedSub.notes}</div>
                   </div>
                 )}
               </div>
@@ -402,7 +420,6 @@ export default function Submissions() {
         </DialogContent>
       </Dialog>
 
-      {/* Creator upload dialog */}
       <SubmitVideoDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
   );

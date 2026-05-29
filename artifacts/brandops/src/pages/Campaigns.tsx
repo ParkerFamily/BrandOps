@@ -1,6 +1,9 @@
-import { useListCampaigns, useCreateCampaign } from "@workspace/api-client-react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { fsCreateCampaign } from "@/lib/firestore";
+import {
+  fsSubscribeCampaigns, fsCreateCampaign,
+  type FsCampaign,
+} from "@/lib/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +17,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { useState, useMemo, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -59,7 +61,6 @@ interface GeneratedCampaign {
 
 type Step = "prompt" | "generating" | "result";
 
-// ── Editable plain text (textarea) ──────────────────────────────────────────
 function EditableText({
   value, onChange, placeholder, rows = 4, mono = false,
 }: {
@@ -81,7 +82,6 @@ function EditableText({
   );
 }
 
-// ── Editable ordered/unordered list ─────────────────────────────────────────
 function EditableList({
   items, onChange, numbered = false, accent = "text-primary",
 }: {
@@ -131,7 +131,6 @@ function EditableList({
   );
 }
 
-// ── Collapsible section ──────────────────────────────────────────────────────
 function Accordion({
   emoji, label, count, children, defaultOpen = false,
 }: {
@@ -173,13 +172,19 @@ function Accordion({
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
 export default function Campaigns() {
-  const { data: campaigns, isLoading } = useListCampaigns();
-  const createCampaign = useCreateCampaign();
-  const queryClient = useQueryClient();
+  const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const unsub = fsSubscribeCampaigns((data) => {
+      setCampaigns(data);
+      setIsLoading(false);
+    });
+    return unsub;
+  }, []);
 
   const [search, setSearch] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
@@ -190,14 +195,14 @@ export default function Campaigns() {
   const [deadline, setDeadline] = useState("");
   const [genStep, setGenStep] = useState(0);
   const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Patch any single field of the generated campaign
   function patch<K extends keyof GeneratedCampaign>(key: K, value: GeneratedCampaign[K]) {
     setGenerated(prev => prev ? { ...prev, [key]: value } : prev);
   }
 
   const filtered = useMemo(() =>
-    (campaigns ?? []).filter(c =>
+    campaigns.filter(c =>
       !search || c.title.toLowerCase().includes(search.toLowerCase()) || c.niche.toLowerCase().includes(search.toLowerCase())
     ), [campaigns, search]);
 
@@ -248,13 +253,10 @@ export default function Campaigns() {
     },
   });
 
-  // Parse natural language like "2 weeks", "30 days", "3 months" → ISO date
   function parseDeadline(raw: string): string {
     if (!raw) return new Date(Date.now() + 30 * 86400000).toISOString();
-    // Already a parseable date?
     const direct = new Date(raw);
     if (!isNaN(direct.getTime())) return direct.toISOString();
-    // Natural language
     const m = raw.match(/(\d+)\s*(day|week|month)/i);
     if (m) {
       const n = parseInt(m[1]);
@@ -265,64 +267,49 @@ export default function Campaigns() {
     return new Date(Date.now() + 30 * 86400000).toISOString();
   }
 
-  const handleCreateFromAI = (status: "draft" | "active" = "draft") => {
+  const handleCreateFromAI = async (status: "draft" | "active" = "draft") => {
     if (!generated) return;
+    setSaving(true);
     const deadlineStr = generated.suggestedDeadline || deadline || "30 days";
     const deadlineISO = parseDeadline(deadlineStr);
-    createCampaign.mutate({
-      data: {
+    try {
+      const fsId = await fsCreateCampaign({
         title: generated.title,
         description: generated.summary,
         platform: "tiktok",
         niche: generated.creatorType?.slice(0, 50) || "UGC",
+        status: status === "active" ? "active" : "draft",
         totalBudget: generated.estimatedTotalCost || Number(budget) || 1000,
         payoutPerVideo: generated.suggestedPayoutPerVideo || 100,
-        deadline: deadlineISO,
         videosNeeded: generated.suggestedVideoCount || 1,
         creatorType: generated.creatorType || "",
         tone: generated.toneAndStyle || "",
-      }
-    }, {
-      onSuccess: (campaign) => {
-        // Mirror to Firestore — stores the full AI-generated content too
-        fsCreateCampaign({
-          title: generated.title,
-          description: generated.summary,
-          platform: "tiktok",
-          niche: generated.creatorType?.slice(0, 50) || "UGC",
-          status: status === "active" ? "active" : "draft",
-          totalBudget: generated.estimatedTotalCost || Number(budget) || 1000,
-          payoutPerVideo: generated.suggestedPayoutPerVideo || 100,
-          videosNeeded: generated.suggestedVideoCount || 1,
-          creatorType: generated.creatorType || "",
-          tone: generated.toneAndStyle || "",
-          deadline: deadlineISO,
-          aiData: {
-            postgresId: campaign.id,
-            hookIdeas: generated.hookIdeas,
-            videoConceptIdeas: generated.videoConceptIdeas,
-            ctaIdeas: generated.ctaIdeas,
-            creatorBrief: generated.creatorBrief,
-            approvalCriteria: generated.approvalCriteria,
-            deliverables: generated.deliverables,
-            usageRights: generated.usageRights,
-            payoutStrategy: generated.payoutStrategy,
-            doList: generated.doList,
-            dontList: generated.dontList,
-            toneAndStyle: generated.toneAndStyle,
-          },
-        }).catch(err => console.warn("Firestore mirror failed (non-fatal):", err));
-
-        toast({
-          title: status === "active" ? "Campaign published!" : "Campaign saved as draft",
-          description: generated.title,
-        });
-        closeAI();
-        queryClient.invalidateQueries({ queryKey: ["listCampaigns"] });
-        navigate(`/campaigns/${campaign.id}`);
-      },
-      onError: () => toast({ title: "Failed to create campaign", variant: "destructive" }),
-    });
+        deadline: deadlineISO,
+        aiData: {
+          hookIdeas: generated.hookIdeas,
+          videoConceptIdeas: generated.videoConceptIdeas,
+          ctaIdeas: generated.ctaIdeas,
+          creatorBrief: generated.creatorBrief,
+          approvalCriteria: generated.approvalCriteria,
+          deliverables: generated.deliverables,
+          usageRights: generated.usageRights,
+          payoutStrategy: generated.payoutStrategy,
+          doList: generated.doList,
+          dontList: generated.dontList,
+          toneAndStyle: generated.toneAndStyle,
+        },
+      });
+      toast({
+        title: status === "active" ? "Campaign published!" : "Campaign saved as draft",
+        description: generated.title,
+      });
+      closeAI();
+      navigate(`/campaigns/${fsId}`);
+    } catch {
+      toast({ title: "Failed to create campaign", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -340,7 +327,6 @@ export default function Campaigns() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Campaigns</h1>
@@ -358,7 +344,6 @@ export default function Campaigns() {
         </div>
       </div>
 
-      {/* AI Banner */}
       <div className="rounded-xl border border-primary/15 bg-gradient-to-r from-primary/5 to-transparent p-4 flex items-center gap-4">
         <div className="w-9 h-9 rounded-lg bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
           <Wand2 className="h-4 w-4 text-primary" />
@@ -372,7 +357,6 @@ export default function Campaigns() {
         </Button>
       </div>
 
-      {/* Search */}
       <div className="flex items-center gap-2 max-w-sm">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -380,7 +364,6 @@ export default function Campaigns() {
         </div>
       </div>
 
-      {/* Campaign list */}
       {isLoading ? (
         <div className="grid gap-4">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl bg-card" />)}</div>
       ) : filtered.length > 0 ? (
@@ -404,16 +387,12 @@ export default function Campaigns() {
                   </div>
                   <div className="flex items-center gap-8 text-sm">
                     <div className="text-center">
-                      <div className="font-medium text-foreground">{campaign.creatorCount ?? 0}</div>
-                      <div className="text-muted-foreground">Creators</div>
+                      <div className="font-medium text-foreground">{campaign.videosNeeded ?? 0}</div>
+                      <div className="text-muted-foreground">Videos</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-medium text-foreground">{campaign.approvedCount ?? 0}</div>
-                      <div className="text-muted-foreground">Approved</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-medium text-primary">${(campaign.totalSpent ?? 0).toLocaleString()}</div>
-                      <div className="text-muted-foreground">Spent</div>
+                      <div className="font-medium text-primary">${campaign.totalBudget.toLocaleString()}</div>
+                      <div className="text-muted-foreground">Budget</div>
                     </div>
                   </div>
                 </CardContent>
@@ -437,14 +416,12 @@ export default function Campaigns() {
         </div>
       )}
 
-      {/* ─── AI Campaign Builder Modal ─── */}
       <Dialog open={aiOpen} onOpenChange={o => { if (!o) closeAI(); }}>
         <DialogContent className={cn(
           "bg-[#0e0e0e] border border-white/10 text-white p-0 max-h-[92vh] overflow-hidden flex flex-col",
           step === "result" ? "sm:max-w-[600px]" : "sm:max-w-[620px]"
         )}>
 
-          {/* Header */}
           <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/8 shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-primary/15 border border-primary/25 flex items-center justify-center">
@@ -466,7 +443,6 @@ export default function Campaigns() {
 
           <AnimatePresence mode="wait">
 
-            {/* ── PROMPT STEP ── */}
             {step === "prompt" && (
               <motion.div key="prompt" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="flex flex-col overflow-y-auto">
                 <div className="px-6 pt-5 pb-4 space-y-5">
@@ -516,232 +492,136 @@ export default function Campaigns() {
               </motion.div>
             )}
 
-            {/* ── GENERATING STEP ── */}
             {step === "generating" && (
-              <motion.div key="generating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-20 px-8 gap-8">
-                <div className="relative">
-                  <div className="w-20 h-20 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                    <Sparkles className="h-8 w-8 text-primary animate-pulse" />
-                  </div>
-                  <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping opacity-40" />
+              <motion.div key="generating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-16 px-6 gap-6">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                  <Loader2 className="h-7 w-7 text-primary animate-spin" />
                 </div>
-                <div className="w-full max-w-xs space-y-3">
+                <div className="space-y-2 w-full max-w-sm">
                   {GENERATION_STEPS.map((s, i) => (
-                    <div key={i} className={cn("flex items-center gap-3 transition-all duration-500", i < genStep ? "opacity-40" : i === genStep ? "opacity-100" : "opacity-20")}>
-                      {i < genStep ? <CheckCircle2 className="h-4 w-4 text-primary shrink-0" /> : i === genStep ? <Loader2 className="h-4 w-4 text-primary shrink-0 animate-spin" /> : <div className="h-4 w-4 rounded-full border border-white/20 shrink-0" />}
-                      <span className={cn("text-sm", i === genStep ? "text-white font-medium" : "text-white/50")}>{s}</span>
+                    <div key={s} className={cn(
+                      "flex items-center gap-2.5 text-sm transition-all duration-300",
+                      i < genStep ? "text-primary/60" : i === genStep ? "text-white font-medium" : "text-white/20"
+                    )}>
+                      {i < genStep ? <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                       : i === genStep ? <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
+                       : <div className="h-3.5 w-3.5 rounded-full border border-white/15 shrink-0" />}
+                      {s}
                     </div>
                   ))}
                 </div>
               </motion.div>
             )}
 
-            {/* ── RESULT STEP ── */}
             {step === "result" && generated && (
-              <motion.div key="result" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex flex-col overflow-hidden">
-                <div className="overflow-y-auto flex-1 px-6 pt-5 pb-2 space-y-4">
+              <motion.div key="result" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-y-auto flex-1">
+                <div className="px-6 pt-4 pb-2 space-y-4">
 
-                  {/* 1. PAYOUT HERO — editable numbers */}
-                  <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/4 p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                      <DollarSign className="h-4 w-4 text-primary" />
-                      <span className="text-xs font-bold text-primary uppercase tracking-wider">Recommended Payout Strategy</span>
+                  <div className="p-3 rounded-lg bg-primary/8 border border-primary/15 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-sm font-semibold text-primary">Campaign generated</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 mb-3">
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">Videos</div>
-                        <input
-                          type="number" min="1"
-                          className="w-full bg-white/8 border border-white/15 rounded-lg px-2.5 py-1.5 text-2xl font-bold text-white focus:outline-none focus:border-primary/50 transition-colors"
-                          value={generated.suggestedVideoCount}
-                          onChange={e => {
-                            const v = Math.max(1, parseInt(e.target.value) || 1);
-                            patch("suggestedVideoCount", v);
-                            patch("estimatedTotalCost", v * generated.suggestedPayoutPerVideo);
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">Per approved video</div>
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-primary text-lg font-bold">$</span>
-                          <input
-                            type="number" min="1"
-                            className="w-full bg-white/8 border border-white/15 rounded-lg pl-6 pr-2.5 py-1.5 text-2xl font-bold text-primary focus:outline-none focus:border-primary/50 transition-colors"
-                            value={generated.suggestedPayoutPerVideo}
-                            onChange={e => {
-                              const v = Math.max(1, parseInt(e.target.value) || 1);
-                              patch("suggestedPayoutPerVideo", v);
-                              patch("estimatedTotalCost", generated.suggestedVideoCount * v);
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground mb-1">Est. spend</div>
-                        <div className="text-2xl font-bold text-white pt-1.5">
-                          ${(generated.suggestedVideoCount * generated.suggestedPayoutPerVideo).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                    <EditableText
-                      value={generated.payoutStrategy}
-                      onChange={v => patch("payoutStrategy", v)}
-                      placeholder="Payout notes…"
-                      rows={2}
+                    <button onClick={() => setStep("prompt")} className="text-xs text-white/40 hover:text-white flex items-center gap-1 transition-colors">
+                      <RotateCcw className="h-3 w-3" /> Regenerate
+                    </button>
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-1">Campaign Title</p>
+                    <input
+                      className="w-full bg-white/4 border border-white/10 rounded-lg px-3 py-2 text-base font-semibold text-white focus:outline-none focus:border-primary/40 transition-colors"
+                      value={generated.title}
+                      onChange={e => patch("title", e.target.value)}
                     />
                   </div>
 
-                  {/* 2. KEY FACTS — editable title, summary, deadline, creator type */}
-                  <div className="rounded-xl border border-white/8 bg-white/2 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/6 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          className="flex-1 bg-transparent font-bold text-base text-white focus:outline-none border-b border-transparent focus:border-white/20 pb-0.5 transition-colors"
-                          value={generated.title}
-                          onChange={e => patch("title", e.target.value)}
-                          placeholder="Campaign title…"
-                        />
-                        <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                  <div className="grid grid-cols-3 gap-2 p-3 bg-white/3 rounded-lg border border-white/6 text-center">
+                    <div>
+                      <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                        <DollarSign className="h-3 w-3" />
+                        <span className="text-[10px] uppercase font-semibold tracking-wide">Budget</span>
                       </div>
-                      <textarea
-                        rows={2}
-                        className="w-full bg-transparent text-xs text-muted-foreground leading-relaxed resize-none focus:outline-none focus:text-white/70 transition-colors placeholder:text-white/15"
-                        value={generated.summary}
-                        onChange={e => patch("summary", e.target.value)}
-                        placeholder="Campaign summary…"
-                      />
+                      <div className="font-bold text-sm">${generated.estimatedTotalCost.toLocaleString()}</div>
                     </div>
-                    <div className="grid grid-cols-2 divide-x divide-white/6">
-                      {[
-                        { icon: Clock, label: "Deadline", key: "suggestedDeadline" as const },
-                        { icon: Users, label: "Creator type", key: "creatorType" as const },
-                      ].map(({ icon: Icon, label, key }) => (
-                        <div key={label} className="flex items-center gap-2.5 px-4 py-2.5">
-                          <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</div>
-                            <input
-                              className="w-full bg-transparent text-xs font-medium text-white focus:outline-none border-b border-transparent focus:border-white/20 transition-colors truncate"
-                              value={generated[key]}
-                              onChange={e => patch(key, e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                    <div>
+                      <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                        <Users className="h-3 w-3" />
+                        <span className="text-[10px] uppercase font-semibold tracking-wide">Videos</span>
+                      </div>
+                      <div className="font-bold text-sm">{generated.suggestedVideoCount}</div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                        <Clock className="h-3 w-3" />
+                        <span className="text-[10px] uppercase font-semibold tracking-wide">Deadline</span>
+                      </div>
+                      <div className="font-bold text-sm text-primary">{generated.suggestedDeadline}</div>
                     </div>
                   </div>
 
-                  {/* 3. COLLAPSIBLE SECTIONS — all editable */}
-                  <div>
-                    <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-2.5">AI Recommendations — edit anything</p>
-                    <div className="space-y-2">
+                  <Accordion emoji="📝" label="Campaign Brief" defaultOpen>
+                    <EditableText value={generated.creatorBrief} onChange={v => patch("creatorBrief", v)} rows={5} />
+                  </Accordion>
 
-                      {generated.hookIdeas?.length > 0 && (
-                        <Accordion emoji="🔥" label="Hook Ideas" count={generated.hookIdeas.length} defaultOpen>
-                          <EditableList
-                            items={generated.hookIdeas}
-                            onChange={v => patch("hookIdeas", v)}
-                            numbered
-                          />
-                        </Accordion>
-                      )}
+                  <Accordion emoji="🎯" label="Deliverables">
+                    <EditableText value={generated.deliverables} onChange={v => patch("deliverables", v)} rows={3} />
+                  </Accordion>
 
-                      {generated.videoConceptIdeas?.length > 0 && (
-                        <Accordion emoji="🎬" label="Video Concepts" count={generated.videoConceptIdeas.length}>
-                          <EditableList
-                            items={generated.videoConceptIdeas}
-                            onChange={v => patch("videoConceptIdeas", v)}
-                          />
-                        </Accordion>
-                      )}
+                  <Accordion emoji="💡" label={`Hook Ideas`} count={generated.hookIdeas.length}>
+                    <EditableList items={generated.hookIdeas} onChange={v => patch("hookIdeas", v)} accent="text-primary" />
+                  </Accordion>
 
-                      {generated.ctaIdeas?.length > 0 && (
-                        <Accordion emoji="📣" label="CTA Ideas" count={generated.ctaIdeas.length}>
-                          <EditableList
-                            items={generated.ctaIdeas}
-                            onChange={v => patch("ctaIdeas", v)}
-                          />
-                        </Accordion>
-                      )}
+                  <Accordion emoji="🎬" label={`Video Concepts`} count={generated.videoConceptIdeas.length}>
+                    <EditableList items={generated.videoConceptIdeas} onChange={v => patch("videoConceptIdeas", v)} numbered accent="text-blue-400" />
+                  </Accordion>
 
-                      <Accordion emoji="📋" label="Creator Brief" defaultOpen={false}>
-                        <EditableText
-                          value={generated.creatorBrief}
-                          onChange={v => patch("creatorBrief", v)}
-                          placeholder="Describe what creators should film and how…"
-                          rows={6}
-                        />
-                        <div className="grid grid-cols-2 gap-3 mt-3">
-                          <div className="p-3 rounded-lg bg-primary/5 border border-primary/15">
-                            <div className="text-xs font-bold text-primary mb-1">✓ DO</div>
-                            <EditableList
-                              items={generated.doList ?? []}
-                              onChange={v => patch("doList", v)}
-                              accent="text-primary"
-                            />
-                          </div>
-                          <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/15">
-                            <div className="text-xs font-bold text-red-400 mb-1">✗ DON'T</div>
-                            <EditableList
-                              items={generated.dontList ?? []}
-                              onChange={v => patch("dontList", v)}
-                              accent="text-red-400"
-                            />
-                          </div>
-                        </div>
-                      </Accordion>
+                  <Accordion emoji="📣" label={`CTA Ideas`} count={generated.ctaIdeas.length}>
+                    <EditableList items={generated.ctaIdeas} onChange={v => patch("ctaIdeas", v)} accent="text-yellow-400" />
+                  </Accordion>
 
-                      {generated.approvalCriteria?.length > 0 && (
-                        <Accordion emoji="✅" label="Approval Criteria" count={generated.approvalCriteria.length}>
-                          <EditableList
-                            items={generated.approvalCriteria}
-                            onChange={v => patch("approvalCriteria", v)}
-                          />
-                        </Accordion>
-                      )}
+                  <Accordion emoji="✅" label={`Approval Criteria`} count={generated.approvalCriteria.length}>
+                    <EditableList items={generated.approvalCriteria} onChange={v => patch("approvalCriteria", v)} numbered accent="text-green-400" />
+                  </Accordion>
 
-                      <Accordion emoji="📦" label="Deliverables">
-                        <EditableText
-                          value={generated.deliverables}
-                          onChange={v => patch("deliverables", v)}
-                          placeholder="Format, resolution, caption requirements…"
-                          rows={3}
-                        />
-                      </Accordion>
-
-                      <Accordion emoji="⚖️" label="Usage Rights">
-                        <EditableText
-                          value={generated.usageRights}
-                          onChange={v => patch("usageRights", v)}
-                          placeholder="Usage rights terms…"
-                          rows={3}
-                        />
-                      </Accordion>
-
+                  <Accordion emoji="✅" label="Do's & Don'ts">
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      <div>
+                        <p className="text-[10px] text-green-400 font-semibold uppercase tracking-wide mb-1">Do</p>
+                        <EditableList items={generated.doList} onChange={v => patch("doList", v)} accent="text-green-400" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-red-400 font-semibold uppercase tracking-wide mb-1">Don't</p>
+                        <EditableList items={generated.dontList} onChange={v => patch("dontList", v)} accent="text-red-400" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="h-1" />
+                  </Accordion>
+
+                  <Accordion emoji="⚖️" label="Usage Rights & Payout">
+                    <EditableText value={generated.usageRights} onChange={v => patch("usageRights", v)} rows={2} />
+                    <EditableText value={generated.payoutStrategy} onChange={v => patch("payoutStrategy", v)} rows={2} />
+                  </Accordion>
+
                 </div>
 
-                {/* Action bar */}
-                <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-white/8 shrink-0 bg-[#0e0e0e]">
-                  <button
-                    onClick={() => { setStep("prompt"); setGenerated(null); }}
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+                <div className="sticky bottom-0 px-6 py-4 border-t border-white/8 bg-[#0e0e0e] flex gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-white/15 text-white/70 hover:text-white gap-1.5"
+                    onClick={() => handleCreateFromAI("draft")}
+                    disabled={saving}
                   >
-                    <RotateCcw className="h-3.5 w-3.5" /> Regenerate
-                  </button>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleCreateFromAI("draft")} disabled={createCampaign.isPending} className="gap-1.5 border-white/10 text-white/70 hover:text-white">
-                      {createCampaign.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      Save Draft
-                    </Button>
-                    <Button size="sm" onClick={() => handleCreateFromAI("active")} disabled={createCampaign.isPending} className="bg-primary text-black hover:bg-primary/90 font-bold gap-1.5">
-                      {createCampaign.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                      Publish Campaign
-                    </Button>
-                  </div>
+                    <Save className="h-3.5 w-3.5" />
+                    {saving ? "Saving…" : "Save Draft"}
+                  </Button>
+                  <Button
+                    className="flex-1 bg-primary text-black hover:bg-primary/90 font-bold gap-1.5"
+                    onClick={() => handleCreateFromAI("active")}
+                    disabled={saving}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {saving ? "Publishing…" : "Publish Now"}
+                  </Button>
                 </div>
               </motion.div>
             )}
