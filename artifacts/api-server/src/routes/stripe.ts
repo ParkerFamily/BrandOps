@@ -304,6 +304,15 @@ router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => 
       });
       return;
     }
+    if (msg.includes('platform-profile') || msg.includes('managing losses')) {
+      req.log.warn({ uid }, 'Stripe Connect platform profile incomplete');
+      res.status(402).json({
+        error: 'platform_profile_incomplete',
+        message: 'Your Stripe Connect platform profile is not complete.',
+        activationUrl: 'https://dashboard.stripe.com/settings/connect/platform-profile',
+      });
+      return;
+    }
     req.log.error({ err, uid }, 'creator-connect/start failed');
     res.status(500).json({ error: 'Internal server error', message: msg });
   }

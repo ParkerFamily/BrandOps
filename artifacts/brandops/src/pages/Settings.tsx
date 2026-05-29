@@ -65,6 +65,7 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
   const [starting, setStarting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [connectNotEnabled, setConnectNotEnabled] = useState(false);
+  const [platformProfileIncomplete, setPlatformProfileIncomplete] = useState(false);
 
   const { data: connectStatus, isLoading } = useQuery<ConnectStatus>({
     queryKey: ["creator-connect-status", uid],
@@ -80,6 +81,7 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
   const startOnboarding = async () => {
     setStarting(true);
     setConnectNotEnabled(false);
+    setPlatformProfileIncomplete(false);
     try {
       const res = await fetch(`${BASE}api/stripe/creator-connect/start`, {
         method: "POST",
@@ -89,6 +91,11 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
       const data = await res.json() as { url?: string; error?: string; activationUrl?: string };
       if (res.status === 402 && data.error === "connect_not_enabled") {
         setConnectNotEnabled(true);
+        setStarting(false);
+        return;
+      }
+      if (res.status === 402 && data.error === "platform_profile_incomplete") {
+        setPlatformProfileIncomplete(true);
         setStarting(false);
         return;
       }
@@ -136,6 +143,34 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Platform profile incomplete — actionable step */}
+        {platformProfileIncomplete && (
+          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/30 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-yellow-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Stripe Connect platform profile is incomplete
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Stripe requires you to fill out a short platform profile before creators can onboard.
+              This is a one-time step — takes under a minute.
+            </p>
+            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside leading-relaxed">
+              <li>Click the link below to open your Stripe Connect settings</li>
+              <li>Fill in the platform profile form and save</li>
+              <li>Come back and click <span className="text-foreground font-medium">"Set Up Payouts"</span> again</li>
+            </ol>
+            <a
+              href="https://dashboard.stripe.com/settings/connect/platform-profile"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary font-medium underline underline-offset-2"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open Stripe → Connect Platform Profile
+            </a>
+          </div>
+        )}
+
         {/* Stripe Connect not enabled — actionable step */}
         {connectNotEnabled && (
           <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/30 space-y-3">
