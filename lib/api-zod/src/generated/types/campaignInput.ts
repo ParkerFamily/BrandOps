@@ -14,7 +14,11 @@ export interface CampaignInput {
   totalBudget: number;
   payoutPerVideo: number;
   platform: CampaignInputPlatform;
-  niche: string;
+  niche?: string;
   deadline: Date;
   inspirationUrls?: string;
+  videoStyle?: string;
+  tone?: string;
+  videosNeeded?: number;
+  creatorType?: string;
 }

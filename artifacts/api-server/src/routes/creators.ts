@@ -12,6 +12,26 @@ import {
 
 const router: IRouter = Router();
 
+function parseContentStyles(raw: string): string[] {
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function enrichCreator(creator: typeof creatorsTable.$inferSelect, pays: { status: string; amount: string }[], subs: { status: string }[]) {
+  return {
+    ...creator,
+    engagementRate: parseFloat(creator.engagementRate),
+    approvalRate: parseFloat(creator.approvalRate),
+    revisionRate: parseFloat(creator.revisionRate),
+    onTimeDeliveryRate: parseFloat(creator.onTimeDeliveryRate),
+    avgTurnaroundDays: parseFloat(creator.avgTurnaroundDays),
+    brandRating: parseFloat(creator.brandRating),
+    suggestedPayout: parseFloat(creator.suggestedPayout),
+    contentStyles: parseContentStyles(creator.contentStyles),
+    totalEarnings: pays.filter(p => p.status === "paid").reduce((sum, p) => sum + parseFloat(p.amount), 0),
+    approvedVideos: subs.filter(s => s.status === "approved" || s.status === "paid").length,
+  };
+}
+
 router.get("/creators", async (req, res): Promise<void> => {
   const parsed = ListCreatorsQueryParams.safeParse(req.query);
   const creators = await db.select().from(creatorsTable).orderBy(sql`${creatorsTable.createdAt} desc`);
@@ -29,13 +49,8 @@ router.get("/creators", async (req, res): Promise<void> => {
 
   const enriched = filtered.map(creator => {
     const subs = allSubmissions.filter(s => s.creatorId === creator.id);
-    const pays = allPayments.filter(p => p.creatorId === creator.id && p.status === "paid");
-    return {
-      ...creator,
-      engagementRate: parseFloat(creator.engagementRate),
-      totalEarnings: pays.reduce((sum, p) => sum + parseFloat(p.amount), 0),
-      approvedVideos: subs.filter(s => s.status === "approved" || s.status === "paid").length,
-    };
+    const pays = allPayments.filter(p => p.creatorId === creator.id);
+    return enrichCreator(creator, pays, subs);
   });
 
   res.json(enriched);
@@ -54,10 +69,18 @@ router.post("/creators", async (req, res): Promise<void> => {
     email: data.email,
     platform: data.platform,
     handle: data.handle,
-    niche: data.niche,
+    niche: data.niche ?? "",
     followerCount: data.followerCount ?? 0,
     engagementRate: String(data.engagementRate ?? 0),
     avatarUrl: data.avatarUrl ?? null,
+    approvalRate: String(data.approvalRate ?? 0),
+    revisionRate: String(data.revisionRate ?? 0),
+    completedCampaigns: data.completedCampaigns ?? 0,
+    onTimeDeliveryRate: String(data.onTimeDeliveryRate ?? 0),
+    avgTurnaroundDays: String(data.avgTurnaroundDays ?? 0),
+    brandRating: String(data.brandRating ?? 0),
+    suggestedPayout: String(data.suggestedPayout ?? 0),
+    contentStyles: JSON.stringify(data.contentStyles ?? []),
   }).returning();
 
   await db.insert(activityTable).values({
@@ -71,7 +94,7 @@ router.post("/creators", async (req, res): Promise<void> => {
     void sendWelcomeEmail(creator.email, creator.name);
   }
 
-  res.status(201).json({ ...creator, engagementRate: parseFloat(creator.engagementRate), totalEarnings: 0, approvedVideos: 0 });
+  res.status(201).json(enrichCreator(creator, [], []));
 });
 
 router.get("/creators/:id", async (req, res): Promise<void> => {
@@ -90,12 +113,7 @@ router.get("/creators/:id", async (req, res): Promise<void> => {
   const subs = await db.select().from(submissionsTable).where(eq(submissionsTable.creatorId, creator.id));
   const pays = await db.select().from(paymentsTable).where(eq(paymentsTable.creatorId, creator.id));
 
-  res.json({
-    ...creator,
-    engagementRate: parseFloat(creator.engagementRate),
-    totalEarnings: pays.filter(p => p.status === "paid").reduce((sum, p) => sum + parseFloat(p.amount), 0),
-    approvedVideos: subs.filter(s => s.status === "approved" || s.status === "paid").length,
-  });
+  res.json(enrichCreator(creator, pays, subs));
 });
 
 router.patch("/creators/:id", async (req, res): Promise<void> => {
@@ -121,6 +139,14 @@ router.patch("/creators/:id", async (req, res): Promise<void> => {
   if (data.engagementRate !== undefined) updateData.engagementRate = String(data.engagementRate);
   if (data.avatarUrl !== undefined) updateData.avatarUrl = data.avatarUrl;
   if (data.status !== undefined) updateData.status = data.status;
+  if (data.approvalRate !== undefined) updateData.approvalRate = String(data.approvalRate);
+  if (data.revisionRate !== undefined) updateData.revisionRate = String(data.revisionRate);
+  if (data.completedCampaigns !== undefined) updateData.completedCampaigns = data.completedCampaigns;
+  if (data.onTimeDeliveryRate !== undefined) updateData.onTimeDeliveryRate = String(data.onTimeDeliveryRate);
+  if (data.avgTurnaroundDays !== undefined) updateData.avgTurnaroundDays = String(data.avgTurnaroundDays);
+  if (data.brandRating !== undefined) updateData.brandRating = String(data.brandRating);
+  if (data.suggestedPayout !== undefined) updateData.suggestedPayout = String(data.suggestedPayout);
+  if (data.contentStyles !== undefined) updateData.contentStyles = JSON.stringify(data.contentStyles);
 
   const [creator] = await db.update(creatorsTable).set(updateData).where(eq(creatorsTable.id, params.data.id)).returning();
   if (!creator) {
@@ -128,7 +154,7 @@ router.patch("/creators/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({ ...creator, engagementRate: parseFloat(creator.engagementRate) });
+  res.json(enrichCreator(creator, [], []));
 });
 
 export default router;

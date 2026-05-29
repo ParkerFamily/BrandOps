@@ -163,16 +163,20 @@ export default function CreatorDetail() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5 py-5 border-t border-border">
             <div>
-              <div className="text-xs text-muted-foreground mb-1">Niche</div>
-              <div className="font-semibold capitalize">{creator.niche}</div>
+              <div className="text-xs text-muted-foreground mb-1">Approval Rate</div>
+              <div className="font-semibold text-lg text-primary">
+                {(creator.approvalRate ?? 0) > 0 ? `${creator.approvalRate}%` : "—"}
+              </div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground mb-1">Followers</div>
-              <div className="font-semibold text-lg">{(creator.followerCount / 1000).toFixed(1)}k</div>
+              <div className="text-xs text-muted-foreground mb-1">On-Time Delivery</div>
+              <div className="font-semibold text-lg">
+                {(creator.onTimeDeliveryRate ?? 0) > 0 ? `${creator.onTimeDeliveryRate}%` : "—"}
+              </div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground mb-1">Engagement</div>
-              <div className="font-semibold text-lg text-primary">{creator.engagementRate}%</div>
+              <div className="text-xs text-muted-foreground mb-1">Campaigns Done</div>
+              <div className="font-semibold text-lg">{creator.completedCampaigns ?? 0}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground mb-1">Total Earned</div>
@@ -210,12 +214,46 @@ export default function CreatorDetail() {
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
                   <div className="text-sm font-medium">Approval Rate</div>
-                  <div className="font-bold text-primary">—</div>
+                  <div className="font-bold text-primary">
+                    {(creator.approvalRate ?? 0) > 0 ? `${creator.approvalRate}%` : "—"}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
-                  <div className="text-sm font-medium">Avg. Turnaround</div>
-                  <div className="font-bold">—</div>
+                  <div className="text-sm font-medium">On-Time Delivery</div>
+                  <div className="font-bold">
+                    {(creator.onTimeDeliveryRate ?? 0) > 0 ? `${creator.onTimeDeliveryRate}%` : "—"}
+                  </div>
                 </div>
+                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
+                  <div className="text-sm font-medium">Avg Turnaround</div>
+                  <div className="font-bold">
+                    {(creator.avgTurnaroundDays ?? 0) > 0 ? `${creator.avgTurnaroundDays} days` : "—"}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
+                  <div className="text-sm font-medium">Brand Rating</div>
+                  <div className="font-bold text-yellow-400">
+                    {(creator.brandRating ?? 0) > 0 ? `${creator.brandRating} / 5` : "—"}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
+                  <div className="text-sm font-medium">Suggested Payout</div>
+                  <div className="font-bold">
+                    {(creator.suggestedPayout ?? 0) > 0 ? `$${creator.suggestedPayout}/video` : "—"}
+                  </div>
+                </div>
+                {(creator.contentStyles ?? []).length > 0 && (
+                  <div className="p-3 rounded-lg bg-muted/30 border border-border">
+                    <div className="text-sm font-medium mb-2">Content Styles</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(creator.contentStyles ?? []).map((s: string) => (
+                        <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -18,4 +18,8 @@ export interface CampaignUpdate {
   deadline?: Date;
   status?: CampaignUpdateStatus;
   inspirationUrls?: string;
+  videoStyle?: string;
+  tone?: string;
+  videosNeeded?: number;
+  creatorType?: string;
 }

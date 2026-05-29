@@ -704,6 +704,7 @@ components:
         - niche
         - status
         - deadline
+        - videosNeeded
         - createdAt
         - updatedAt
       properties:
@@ -730,6 +731,14 @@ components:
           format: date-time
         inspirationUrls:
           type: ["string", "null"]
+        videoStyle:
+          type: string
+        tone:
+          type: string
+        videosNeeded:
+          type: integer
+        creatorType:
+          type: string
         creatorCount:
           type: integer
         approvedCount:
@@ -753,7 +762,6 @@ components:
         - totalBudget
         - payoutPerVideo
         - platform
-        - niche
         - deadline
       properties:
         title:
@@ -774,6 +782,14 @@ components:
           type: string
           format: date-time
         inspirationUrls:
+          type: string
+        videoStyle:
+          type: string
+        tone:
+          type: string
+        videosNeeded:
+          type: integer
+        creatorType:
           type: string
 
     CampaignUpdate:
@@ -799,6 +815,14 @@ components:
           type: string
           enum: [draft, active, paused, completed, archived]
         inspirationUrls:
+          type: string
+        videoStyle:
+          type: string
+        tone:
+          type: string
+        videosNeeded:
+          type: integer
+        creatorType:
           type: string
 
     CampaignStats:
@@ -838,9 +862,6 @@ components:
         - email
         - platform
         - handle
-        - niche
-        - followerCount
-        - engagementRate
         - status
         - createdAt
         - updatedAt
@@ -867,6 +888,24 @@ components:
         status:
           type: string
           enum: [active, inactive, suspended]
+        approvalRate:
+          type: number
+        revisionRate:
+          type: number
+        completedCampaigns:
+          type: integer
+        onTimeDeliveryRate:
+          type: number
+        avgTurnaroundDays:
+          type: number
+        brandRating:
+          type: number
+        suggestedPayout:
+          type: number
+        contentStyles:
+          type: array
+          items:
+            type: string
         totalEarnings:
           type: number
         approvedVideos:
@@ -885,7 +924,6 @@ components:
         - email
         - platform
         - handle
-        - niche
       properties:
         name:
           type: string
@@ -905,6 +943,24 @@ components:
           type: number
         avatarUrl:
           type: string
+        approvalRate:
+          type: number
+        revisionRate:
+          type: number
+        completedCampaigns:
+          type: integer
+        onTimeDeliveryRate:
+          type: number
+        avgTurnaroundDays:
+          type: number
+        brandRating:
+          type: number
+        suggestedPayout:
+          type: number
+        contentStyles:
+          type: array
+          items:
+            type: string
 
     CreatorUpdate:
       type: object
@@ -927,6 +983,24 @@ components:
         status:
           type: string
           enum: [active, inactive, suspended]
+        approvalRate:
+          type: number
+        revisionRate:
+          type: number
+        completedCampaigns:
+          type: integer
+        onTimeDeliveryRate:
+          type: number
+        avgTurnaroundDays:
+          type: number
+        brandRating:
+          type: number
+        suggestedPayout:
+          type: number
+        contentStyles:
+          type: array
+          items:
+            type: string
 
     Submission:
       type: object

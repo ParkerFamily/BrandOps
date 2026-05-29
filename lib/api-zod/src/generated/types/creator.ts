@@ -14,12 +14,20 @@ export interface Creator {
   email: string;
   platform: CreatorPlatform;
   handle: string;
-  niche: string;
-  followerCount: number;
-  engagementRate: number;
+  niche?: string;
+  followerCount?: number;
+  engagementRate?: number;
   /** @nullable */
   avatarUrl?: string | null;
   status: CreatorStatus;
+  approvalRate?: number;
+  revisionRate?: number;
+  completedCampaigns?: number;
+  onTimeDeliveryRate?: number;
+  avgTurnaroundDays?: number;
+  brandRating?: number;
+  suggestedPayout?: number;
+  contentStyles?: string[];
   totalEarnings?: number;
   approvedVideos?: number;
   createdAt: Date;

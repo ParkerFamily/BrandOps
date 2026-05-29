@@ -13,6 +13,11 @@ export const campaignsTable = pgTable("campaigns", {
   status: text("status").notNull().default("draft"),
   deadline: timestamp("deadline", { withTimezone: true }).notNull().defaultNow(),
   inspirationUrls: text("inspiration_urls"),
+  // UGC production targeting
+  videoStyle: text("video_style").notNull().default(""),
+  tone: text("tone").notNull().default(""),
+  videosNeeded: integer("videos_needed").notNull().default(1),
+  creatorType: text("creator_type").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

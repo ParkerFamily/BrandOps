@@ -74,6 +74,10 @@ export interface Campaign {
   deadline: string;
   /** @nullable */
   inspirationUrls?: string | null;
+  videoStyle?: string;
+  tone?: string;
+  videosNeeded: number;
+  creatorType?: string;
   creatorCount?: number;
   approvedCount?: number;
   pendingCount?: number;
@@ -98,9 +102,13 @@ export interface CampaignInput {
   totalBudget: number;
   payoutPerVideo: number;
   platform: CampaignInputPlatform;
-  niche: string;
+  niche?: string;
   deadline: string;
   inspirationUrls?: string;
+  videoStyle?: string;
+  tone?: string;
+  videosNeeded?: number;
+  creatorType?: string;
 }
 
 export type CampaignUpdatePlatform = typeof CampaignUpdatePlatform[keyof typeof CampaignUpdatePlatform];
@@ -133,6 +141,10 @@ export interface CampaignUpdate {
   deadline?: string;
   status?: CampaignUpdateStatus;
   inspirationUrls?: string;
+  videoStyle?: string;
+  tone?: string;
+  videosNeeded?: number;
+  creatorType?: string;
 }
 
 export interface CampaignStats {
@@ -170,12 +182,20 @@ export interface Creator {
   email: string;
   platform: CreatorPlatform;
   handle: string;
-  niche: string;
-  followerCount: number;
-  engagementRate: number;
+  niche?: string;
+  followerCount?: number;
+  engagementRate?: number;
   /** @nullable */
   avatarUrl?: string | null;
   status: CreatorStatus;
+  approvalRate?: number;
+  revisionRate?: number;
+  completedCampaigns?: number;
+  onTimeDeliveryRate?: number;
+  avgTurnaroundDays?: number;
+  brandRating?: number;
+  suggestedPayout?: number;
+  contentStyles?: string[];
   totalEarnings?: number;
   approvedVideos?: number;
   createdAt: string;
@@ -197,10 +217,18 @@ export interface CreatorInput {
   email: string;
   platform: CreatorInputPlatform;
   handle: string;
-  niche: string;
+  niche?: string;
   followerCount?: number;
   engagementRate?: number;
   avatarUrl?: string;
+  approvalRate?: number;
+  revisionRate?: number;
+  completedCampaigns?: number;
+  onTimeDeliveryRate?: number;
+  avgTurnaroundDays?: number;
+  brandRating?: number;
+  suggestedPayout?: number;
+  contentStyles?: string[];
 }
 
 export type CreatorUpdatePlatform = typeof CreatorUpdatePlatform[keyof typeof CreatorUpdatePlatform];
@@ -230,6 +258,14 @@ export interface CreatorUpdate {
   engagementRate?: number;
   avatarUrl?: string;
   status?: CreatorUpdateStatus;
+  approvalRate?: number;
+  revisionRate?: number;
+  completedCampaigns?: number;
+  onTimeDeliveryRate?: number;
+  avgTurnaroundDays?: number;
+  brandRating?: number;
+  suggestedPayout?: number;
+  contentStyles?: string[];
 }
 
 export type SubmissionStatus = typeof SubmissionStatus[keyof typeof SubmissionStatus];

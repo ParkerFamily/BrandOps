@@ -20,6 +20,10 @@ export interface Campaign {
   deadline: Date;
   /** @nullable */
   inspirationUrls?: string | null;
+  videoStyle?: string;
+  tone?: string;
+  videosNeeded: number;
+  creatorType?: string;
   creatorCount?: number;
   approvedCount?: number;
   pendingCount?: number;

@@ -58,9 +58,13 @@ router.post("/campaigns", async (req, res): Promise<void> => {
     totalBudget: String(data.totalBudget),
     payoutPerVideo: String(data.payoutPerVideo),
     platform: data.platform,
-    niche: data.niche,
+    niche: data.niche ?? "",
     deadline: new Date(data.deadline),
     inspirationUrls: data.inspirationUrls ?? null,
+    videoStyle: data.videoStyle ?? "",
+    tone: data.tone ?? "",
+    videosNeeded: data.videosNeeded ?? 1,
+    creatorType: data.creatorType ?? "",
   }).returning();
 
   await db.insert(activityTable).values({
@@ -124,6 +128,10 @@ router.patch("/campaigns/:id", async (req, res): Promise<void> => {
   if (data.deadline !== undefined) updateData.deadline = new Date(data.deadline);
   if (data.status !== undefined) updateData.status = data.status;
   if (data.inspirationUrls !== undefined) updateData.inspirationUrls = data.inspirationUrls;
+  if (data.videoStyle !== undefined) updateData.videoStyle = data.videoStyle;
+  if (data.tone !== undefined) updateData.tone = data.tone;
+  if (data.videosNeeded !== undefined) updateData.videosNeeded = data.videosNeeded;
+  if (data.creatorType !== undefined) updateData.creatorType = data.creatorType;
 
   const [campaign] = await db.update(campaignsTable).set(updateData).where(eq(campaignsTable.id, params.data.id)).returning();
   if (!campaign) {

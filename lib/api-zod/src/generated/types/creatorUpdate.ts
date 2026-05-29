@@ -17,4 +17,12 @@ export interface CreatorUpdate {
   engagementRate?: number;
   avatarUrl?: string;
   status?: CreatorUpdateStatus;
+  approvalRate?: number;
+  revisionRate?: number;
+  completedCampaigns?: number;
+  onTimeDeliveryRate?: number;
+  avgTurnaroundDays?: number;
+  brandRating?: number;
+  suggestedPayout?: number;
+  contentStyles?: string[];
 }

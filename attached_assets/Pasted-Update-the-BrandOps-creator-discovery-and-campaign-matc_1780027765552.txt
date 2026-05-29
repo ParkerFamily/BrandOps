@@ -1,0 +1,129 @@
+Update the BrandOps creator discovery and campaign matching logic based on the new product direction.
+
+Do NOT redesign the whole app. Refine the current web SaaS build.
+
+Core product clarification:
+BrandOps is NOT mainly an influencer-posting marketplace.
+BrandOps is for brands to hire creators to produce UGC videos that the BRAND will post/run on the brand’s own social pages and ads.
+
+Because of this:
+
+* Creator follower count should NOT be the main metric.
+* Creator engagement rate should NOT be the main metric.
+* Creator niche should NOT be hard-coded as the main identity.
+* The brand’s campaign defines what type of creator/content is needed.
+
+Update Creator cards to focus on UGC production value:
+
+Show:
+
+* AI Match %
+* Brand rating
+* Completed campaigns
+* On-time delivery %
+* Average turnaround time
+* Approval rate
+* Revision rate
+* Suggested payout
+* Content style strengths:
+
+  * Talking head
+  * Product demo
+  * Lifestyle
+  * Voiceover
+  * Testimonial
+  * Comedy
+  * Tutorial
+
+Remove/demote:
+
+* follower count
+* engagement rate
+* average views
+* fixed niche labels like Beauty, Fitness, Fashion as primary identity
+
+Social platform icons can stay, but only as “content format experience,” not as audience size proof.
+
+Campaign matching logic:
+When a brand creates a campaign, the campaign should define what matters:
+
+* creator type
+* age range
+* gender/presentation if relevant
+* video style
+* tone
+* product category
+* platform format
+* deadline
+* budget
+* payout per approved video
+* number of videos needed
+
+Then BrandOps calculates AI Match based on:
+
+* similar completed campaign history
+* approval rate
+* delivery speed
+* brand ratings
+* content style fit
+* revision history
+* campaign requirements
+
+Creator cards should show “Why matched” instead of fixed niche identity.
+
+Examples:
+
+* Strong product demo history
+* 96% approval rate
+* Delivers within 48 hours
+* Similar campaign experience
+* Low revision rate
+* Strong talking-head performance
+
+Budget / payout logic:
+Brands set a total campaign budget first.
+Then brands can assign payout amounts to individual creators within that total budget.
+
+Example:
+Total campaign budget: $5,000
+
+Creator payouts:
+
+* Creator A: $100/video
+* Creator B: $150/video
+* Creator C: $250/video
+* Creator D: $75/video
+
+Budget should update live as creators are assigned and videos are approved.
+
+Add UI for:
+
+* total campaign budget
+* remaining budget
+* payout per approved video
+* custom payout per creator
+* approved payout queue
+* estimated remaining videos based on budget
+
+Important payment rule:
+Money should only become payable after brand approves a submitted video.
+
+Flow:
+Campaign created →
+Creators invited/apply →
+Brand assigns or confirms payout →
+Creator submits video →
+Brand approves →
+Payout moves to approved queue →
+Stripe payout can be triggered.
+
+Creator discovery page should feel less like an influencer database and more like a UGC production roster.
+
+Positioning copy:
+“Match creators by quality, reliability, and fit — not follower count.”
+
+Add this idea in UI:
+“BrandOps ranks creators based on campaign fit, delivery history, and approval performance.”
+
+Keep the current dark/neon lime SaaS aesthetic.
+Make the experience feel premium, fast, and operational.

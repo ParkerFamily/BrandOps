@@ -13,8 +13,16 @@ export interface CreatorInput {
   email: string;
   platform: CreatorInputPlatform;
   handle: string;
-  niche: string;
+  niche?: string;
   followerCount?: number;
   engagementRate?: number;
   avatarUrl?: string;
+  approvalRate?: number;
+  revisionRate?: number;
+  completedCampaigns?: number;
+  onTimeDeliveryRate?: number;
+  avgTurnaroundDays?: number;
+  brandRating?: number;
+  suggestedPayout?: number;
+  contentStyles?: string[];
 }
