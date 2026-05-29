@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /campaigns/{id} {
+      allow read, write: if true;
+    }
+    match /creators/{id} {
+      allow read, write: if true;
+    }
+    match /{document=**} {
+      // Existing rules for all other collections remain unchanged
+      allow read, write: if false;
+    }
+  }
+}
