@@ -247,8 +247,26 @@ export default function Campaigns() {
     },
   });
 
+  // Parse natural language like "2 weeks", "30 days", "3 months" → ISO date
+  function parseDeadline(raw: string): string {
+    if (!raw) return new Date(Date.now() + 30 * 86400000).toISOString();
+    // Already a parseable date?
+    const direct = new Date(raw);
+    if (!isNaN(direct.getTime())) return direct.toISOString();
+    // Natural language
+    const m = raw.match(/(\d+)\s*(day|week|month)/i);
+    if (m) {
+      const n = parseInt(m[1]);
+      const unit = m[2].toLowerCase();
+      const ms = unit === "week" ? n * 7 * 86400000 : unit === "month" ? n * 30 * 86400000 : n * 86400000;
+      return new Date(Date.now() + ms).toISOString();
+    }
+    return new Date(Date.now() + 30 * 86400000).toISOString();
+  }
+
   const handleCreateFromAI = (status: "draft" | "active" = "draft") => {
     if (!generated) return;
+    const deadlineStr = generated.suggestedDeadline || deadline || "30 days";
     createCampaign.mutate({
       data: {
         title: generated.title,
@@ -257,7 +275,10 @@ export default function Campaigns() {
         niche: generated.creatorType?.slice(0, 50) || "UGC",
         totalBudget: generated.estimatedTotalCost || Number(budget) || 1000,
         payoutPerVideo: generated.suggestedPayoutPerVideo || 100,
-        deadline: generated.suggestedDeadline || deadline || "30 days",
+        deadline: parseDeadline(deadlineStr),
+        videosNeeded: generated.suggestedVideoCount || 1,
+        creatorType: generated.creatorType || "",
+        tone: generated.toneAndStyle || "",
       }
     }, {
       onSuccess: (campaign) => {
