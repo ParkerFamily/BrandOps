@@ -97,21 +97,46 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
+const ONBOARDING_KEY = "brandops_onboarded";
+const PROFILE_KEY = "brandops_profile";
+
+function getOnboarding() {
+  try { const r = localStorage.getItem(ONBOARDING_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+function getProfile() {
+  try { const r = localStorage.getItem(PROFILE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+
 function buildContext(stats: any, campaigns: any[], creators: any[]): string {
   const activeCampaigns = campaigns?.filter((c) => c.status === "active") ?? [];
   const topCreator = creators?.sort((a, b) => (b.engagementRate ?? 0) - (a.engagementRate ?? 0))[0];
   const totalBudget = campaigns?.reduce((s, c) => s + (c.totalBudget ?? 0), 0) ?? 0;
 
-  return `
-LIVE PLATFORM CONTEXT (use this to give specific, data-driven answers):
+  const onboarding = getOnboarding();
+  const profile = getProfile();
+
+  const profileSection = onboarding ? `
+USER PROFILE (use this to personalize every response):
+- Account type: ${onboarding.accountType || "Brand"}
+- Primary goal / role: ${onboarding.goal || "not specified"}
+- Budget / rate: ${onboarding.budget || "not specified"}
+- Niches: ${onboarding.niches?.join(", ") || "not specified"}
+- Video channels / services: ${onboarding.platforms?.join(", ") || "not specified"}
+- Team size / setup: ${onboarding.teamSize || "not specified"}${onboarding.turnaround ? `\n- Turnaround speed: ${onboarding.turnaround}` : ""}${profile?.brandName ? `\n- Workspace name: ${profile.brandName}` : ""}${profile?.website ? `\n- Website: ${profile.website}` : ""}
+`.trim() : "";
+
+  const liveSection = `
+LIVE PLATFORM DATA (reference actual numbers in your answers):
 - Active campaigns: ${activeCampaigns.length} (${campaigns?.length ?? 0} total)
 - Total campaign budget: $${totalBudget.toLocaleString()}
 - Creators in roster: ${creators?.length ?? 0}
 - Pending submissions: ${stats?.pendingSubmissions ?? 0}
 - Pending payouts: $${stats?.pendingPayouts ?? 0}
-- Top creator by engagement: ${topCreator ? `${topCreator.name} (${topCreator.engagementRate}% eng rate, ${topCreator.followerCount?.toLocaleString()} followers)` : "none"}
-- Active campaign titles: ${activeCampaigns.slice(0, 3).map((c) => c.title).join(", ") || "none"}
+- Top creator by engagement: ${topCreator ? `${topCreator.name} (${topCreator.engagementRate}% eng, ${topCreator.followerCount?.toLocaleString()} followers)` : "none"}
+- Active campaign titles: ${activeCampaigns.slice(0, 3).map((c: any) => c.title).join(", ") || "none"}
 `.trim();
+
+  return [profileSection, liveSection].filter(Boolean).join("\n\n");
 }
 
 function ContextBadge({ campaigns, creators }: { campaigns: any[]; creators: any[] }) {

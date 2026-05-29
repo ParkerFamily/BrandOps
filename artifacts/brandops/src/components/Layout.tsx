@@ -9,11 +9,12 @@ import {
   UsersRound,
   Settings,
   Menu,
-  Activity,
   LogOut,
   Sparkles,
   Zap,
   Command,
+  Video,
+  DollarSign,
 } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { useState } from "react";
@@ -21,13 +22,30 @@ import { useHealthCheck } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
+const ONBOARDING_KEY = "brandops_onboarded";
+
+function getOnboarding() {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+const BRAND_NAV = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/campaigns", label: "Campaigns", icon: Megaphone },
   { path: "/creators", label: "Creators", icon: Users },
   { path: "/submissions", label: "Submissions", icon: Inbox },
   { path: "/payments", label: "Payments", icon: CreditCard },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
+  { path: "/ai", label: "AI Assistant", icon: Sparkles },
+];
+
+const CREATOR_NAV = [
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/campaigns", label: "Available Campaigns", icon: Megaphone },
+  { path: "/submissions", label: "My Submissions", icon: Video },
+  { path: "/payments", label: "My Earnings", icon: DollarSign },
   { path: "/ai", label: "AI Assistant", icon: Sparkles },
 ];
 
@@ -52,6 +70,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: health } = useHealthCheck();
   const { user, logout } = useAuth();
+
+  const onboarding = getOnboarding();
+  const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
+  const NAV_ITEMS = isCreator ? CREATOR_NAV : BRAND_NAV;
+  const workspaceName = onboarding?.accountType ?? "BrandOps";
 
   const NavLinks = ({ items }: { items: typeof NAV_ITEMS }) => (
     <>
@@ -129,7 +152,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 BrandOps
               </div>
               <div className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase mt-0.5">
-                AI Campaign OS
+                {isCreator ? "Creator Hub" : "AI Campaign OS"}
               </div>
             </div>
           </Link>
