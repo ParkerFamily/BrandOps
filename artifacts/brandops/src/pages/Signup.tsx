@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ONBOARDING_KEY = "brandops_onboarded";
+import { getOnboarded, clearOnboarded } from "@/lib/onboarding";
 
 /* ─── Account types ─────────────────────────────────────────────────────── */
 const ACCOUNT_TYPES = [
@@ -155,8 +155,7 @@ export default function Signup() {
   // If already authenticated when landing on /signup, send to onboarding
   useEffect(() => {
     if (user && !creating) {
-      const onboarded = localStorage.getItem(ONBOARDING_KEY);
-      setLocation(onboarded ? "/dashboard" : "/onboarding");
+      setLocation(getOnboarded() ? "/dashboard" : "/onboarding");
     }
   }, [user, creating, setLocation]);
 
@@ -206,7 +205,7 @@ export default function Signup() {
     try {
       await signInWithGoogle();
       // On the signup page, Google auth always starts onboarding — never skip it
-      localStorage.removeItem(ONBOARDING_KEY);
+      clearOnboarded();
       setLocation("/onboarding");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google sign-in failed.";

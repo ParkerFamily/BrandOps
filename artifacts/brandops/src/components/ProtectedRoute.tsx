@@ -2,8 +2,7 @@ import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
-
-const ONBOARDING_KEY = "brandops_onboarded";
+import { getOnboarded } from "@/lib/onboarding";
 
 export function ProtectedRoute({
   children,
@@ -22,8 +21,7 @@ export function ProtectedRoute({
       return;
     }
     if (requireOnboarding && location !== "/onboarding") {
-      const onboarded = localStorage.getItem(ONBOARDING_KEY);
-      if (!onboarded) {
+      if (!getOnboarded()) {
         setLocation("/onboarding");
       }
     }

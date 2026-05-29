@@ -24,10 +24,7 @@ import { useLocation } from "wouter";
 import { useState } from "react";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
 
-const ONBOARDING_KEY = "brandops_onboarded";
-function getOnboarding() {
-  try { const r = localStorage.getItem(ONBOARDING_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-}
+import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 
 export default function CampaignDetail() {
   const [, params] = useRoute("/campaigns/:id");

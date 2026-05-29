@@ -22,14 +22,8 @@ import { useHealthCheck } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
-const ONBOARDING_KEY = "brandops_onboarded";
-
-function getOnboarding() {
-  try {
-    const raw = localStorage.getItem(ONBOARDING_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
+import { getOnboarded } from "@/lib/onboarding";
+const getOnboarding = getOnboarded;
 
 const BRAND_NAV = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },

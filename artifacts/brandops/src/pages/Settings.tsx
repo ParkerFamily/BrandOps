@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Check, User, Briefcase, Globe, CreditCard, Shield, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ONBOARDING_KEY = "brandops_onboarded";
+import { getOnboarded, clearOnboarded } from "@/lib/onboarding";
 const PROFILE_KEY = "brandops_profile";
 
 interface OnboardingData {
@@ -27,14 +27,7 @@ interface Profile {
   website: string;
 }
 
-function loadOnboarding(): OnboardingData | null {
-  try {
-    const raw = localStorage.getItem(ONBOARDING_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
+const loadOnboarding = (): OnboardingData | null => getOnboarded() as OnboardingData | null;
 
 function loadProfile(): Profile {
   try {
@@ -213,7 +206,7 @@ export default function Settings() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                To change these, <button onClick={() => { localStorage.removeItem(ONBOARDING_KEY); window.location.href = "/onboarding"; }} className="text-primary underline underline-offset-2">re-run onboarding</button>.
+                To change these, <button onClick={() => { clearOnboarded(); window.location.href = "/onboarding"; }} className="text-primary underline underline-offset-2">re-run onboarding</button>.
               </p>
             </CardContent>
           </Card>

@@ -97,12 +97,10 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
-const ONBOARDING_KEY = "brandops_onboarded";
+import { getOnboarded } from "@/lib/onboarding";
 const PROFILE_KEY = "brandops_profile";
 
-function getOnboarding() {
-  try { const r = localStorage.getItem(ONBOARDING_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-}
+const getOnboarding = getOnboarded;
 function getProfile() {
   try { const r = localStorage.getItem(PROFILE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
 }

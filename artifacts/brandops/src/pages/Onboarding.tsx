@@ -15,7 +15,7 @@ import type { LucideIcon } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { cn } from "@/lib/utils";
 
-const ONBOARDING_KEY = "brandops_onboarded";
+import { setOnboarded } from "@/lib/onboarding";
 const ACCOUNT_TYPE_KEY = "brandops_account_type";
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
@@ -946,7 +946,7 @@ export default function Onboarding() {
 
   const handleDone = async () => {
     const payload = { ...data, completedAt: new Date().toISOString() };
-    localStorage.setItem(ONBOARDING_KEY, JSON.stringify(payload));
+    setOnboarded(payload);
     localStorage.removeItem(ACCOUNT_TYPE_KEY);
     if (auth.currentUser) {
       try { await updateProfile(auth.currentUser, { displayName: auth.currentUser.displayName ?? "" }); } catch {}

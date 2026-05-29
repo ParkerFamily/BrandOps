@@ -7,7 +7,7 @@ import { SiGoogle } from "react-icons/si";
 import { Loader2, ArrowLeft, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ONBOARDING_KEY = "brandops_onboarded";
+import { getOnboarded } from "@/lib/onboarding";
 
 function InputField({
   label, type = "text", value, onChange, placeholder, error, rightEl,
@@ -54,8 +54,7 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      const onboarded = localStorage.getItem(ONBOARDING_KEY);
-      setLocation(onboarded ? "/dashboard" : "/onboarding");
+      setLocation(getOnboarded() ? "/dashboard" : "/onboarding");
     }
   }, [user, setLocation]);
 
@@ -72,8 +71,7 @@ export default function Login() {
     setGlobalError("");
     try {
       await signInWithEmail(email, password);
-      const onboarded = localStorage.getItem(ONBOARDING_KEY);
-      setLocation(onboarded ? "/dashboard" : "/onboarding");
+      setLocation(getOnboarded() ? "/dashboard" : "/onboarding");
     } catch {
       setGlobalError("Incorrect email or password. Please try again.");
     } finally {
@@ -86,8 +84,7 @@ export default function Login() {
     setGlobalError("");
     try {
       await signInWithGoogle();
-      const onboarded = localStorage.getItem(ONBOARDING_KEY);
-      setLocation(onboarded ? "/dashboard" : "/onboarding");
+      setLocation(getOnboarded() ? "/dashboard" : "/onboarding");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google sign-in failed.";
       setGlobalError(msg.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/, "").trim());

@@ -18,10 +18,7 @@ import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
 
-const ONBOARDING_KEY = "brandops_onboarded";
-function getOnboarding() {
-  try { const r = localStorage.getItem(ONBOARDING_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-}
+import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 
 const BASE = import.meta.env.BASE_URL;
 
