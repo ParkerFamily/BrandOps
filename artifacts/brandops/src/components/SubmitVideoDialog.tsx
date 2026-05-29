@@ -1,6 +1,9 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useListCampaigns, getListSubmissionsQueryKey } from "@workspace/api-client-react";
+import { useState, useEffect } from "react";
+import {
+  fsSubscribeCampaigns,
+  fsCreateSubmission,
+  type FsCampaign,
+} from "@/lib/firestore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,60 +15,59 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Upload, Link, CheckCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const BASE = import.meta.env.BASE_URL;
-
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  preselectedCampaignId?: number;
+  preselectedCampaignId?: string;
   preselectedCampaignTitle?: string;
-}
-
-async function findOrCreateCreator(name: string, email: string) {
-  const r = await fetch(`${BASE}api/creators/find-or-create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email }),
-  });
-  if (!r.ok) throw new Error("Failed to identify creator");
-  return r.json() as Promise<{ id: number }>;
-}
-
-async function createSubmission(campaignId: number, creatorId: number, videoUrl: string, notes?: string) {
-  const r = await fetch(`${BASE}api/submissions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ campaignId, creatorId, videoUrl, notes }),
-  });
-  if (!r.ok) throw new Error("Failed to submit video");
-  return r.json();
 }
 
 export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, preselectedCampaignTitle }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const qc = useQueryClient();
 
-  const { data: campaigns } = useListCampaigns();
-  const activeCampaigns = campaigns?.filter((c) => c.status === "active" || c.status === "draft") ?? [];
-
-  const [campaignId, setCampaignId] = useState<string>(preselectedCampaignId ? String(preselectedCampaignId) : "");
+  const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
+  const [campaignId, setCampaignId] = useState<string>(preselectedCampaignId ?? "");
   const [videoUrl, setVideoUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
-  const submit = useMutation({
-    mutationFn: async () => {
-      if (!campaignId || !videoUrl.trim()) throw new Error("Missing fields");
-      const creator = await findOrCreateCreator(
-        user?.displayName ?? user?.email ?? "Creator",
-        user?.email ?? ""
-      );
-      return createSubmission(Number(campaignId), creator.id, videoUrl.trim(), notes.trim() || undefined);
-    },
-    onSuccess: () => {
+  useEffect(() => {
+    const unsub = fsSubscribeCampaigns((data) => {
+      setCampaigns(data.filter(c => c.status === "active"));
+    });
+    return unsub;
+  }, []);
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      setCampaignId(preselectedCampaignId ?? "");
+      setVideoUrl("");
+      setNotes("");
+      setDone(false);
+    }
+  }, [open, preselectedCampaignId]);
+
+  const canSubmit = !!campaignId && !!videoUrl.trim() && !submitting && !done;
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      const selected = campaigns.find(c => c.id === campaignId);
+      await fsCreateSubmission({
+        campaignId,
+        creatorId: user?.uid ?? "unknown",
+        creatorName: user?.displayName ?? user?.email ?? "Creator",
+        creatorEmail: user?.email ?? "",
+        campaignTitle: selected?.title ?? preselectedCampaignTitle ?? "",
+        videoUrl: videoUrl.trim(),
+        status: "pending",
+        notes: notes.trim() || undefined,
+      });
       setDone(true);
-      qc.invalidateQueries({ queryKey: getListSubmissionsQueryKey() });
       toast({ title: "Video submitted!", description: "The brand team will review your submission shortly." });
       setTimeout(() => {
         setDone(false);
@@ -73,13 +75,12 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
         setNotes("");
         onOpenChange(false);
       }, 2000);
-    },
-    onError: (e: Error) => {
-      toast({ title: "Submission failed", description: e.message, variant: "destructive" });
-    },
-  });
-
-  const canSubmit = !!campaignId && !!videoUrl.trim() && !submit.isPending && !done;
+    } catch (e) {
+      toast({ title: "Submission failed", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -107,7 +108,7 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
               <Label>Campaign</Label>
               {preselectedCampaignId ? (
                 <div className="px-3 py-2.5 rounded-lg bg-background border border-border text-sm font-medium">
-                  {preselectedCampaignTitle ?? `Campaign #${preselectedCampaignId}`}
+                  {preselectedCampaignTitle ?? `Campaign ${preselectedCampaignId}`}
                 </div>
               ) : (
                 <Select value={campaignId} onValueChange={setCampaignId}>
@@ -115,14 +116,14 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
                     <SelectValue placeholder="Select a campaign" />
                   </SelectTrigger>
                   <SelectContent>
-                    {activeCampaigns.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>
+                    {campaigns.map((c) => (
+                      <SelectItem key={c.id} value={c.id!}>
                         {c.title}
                         {c.payoutPerVideo ? ` — $${c.payoutPerVideo}/video` : ""}
                       </SelectItem>
                     ))}
-                    {activeCampaigns.length === 0 && (
-                      <SelectItem value="none" disabled>No active campaigns</SelectItem>
+                    {campaigns.length === 0 && (
+                      <SelectItem value="__none" disabled>No active campaigns</SelectItem>
                     )}
                   </SelectContent>
                 </Select>
@@ -160,14 +161,16 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
             </div>
 
             <Button
-              onClick={() => submit.mutate()}
+              onClick={handleSubmit}
               disabled={!canSubmit}
               className={cn(
                 "w-full gap-2 font-semibold",
-                canSubmit ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.15)]" : "opacity-40"
+                canSubmit
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.15)]"
+                  : "opacity-40"
               )}
             >
-              {submit.isPending ? (
+              {submitting ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</>
               ) : (
                 <><Upload className="h-4 w-4" /> Submit Video</>

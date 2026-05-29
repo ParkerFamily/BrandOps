@@ -305,7 +305,7 @@ export default function CampaignDetail() {
         <SubmitVideoDialog
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          preselectedCampaignId={id}
+          preselectedCampaignId={params?.id ?? String(id)}
           preselectedCampaignTitle={campaign.title}
         />
       )}
