@@ -13,10 +13,11 @@ import {
 import { formatDistanceToNow, format } from "date-fns";
 import { Link, useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { getOnboarded } from "@/lib/onboarding";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -89,18 +90,47 @@ function statusBadge(status: string) {
 
 /* ─────────────────────────── CREATOR DASHBOARD ─────────────────────────── */
 
+interface CreatorEarnings {
+  totalEarned: number;
+  pendingAmount: number;
+  payments: Array<{
+    stripeId: string | null;
+    amount: number;
+    currency: string;
+    stripeStatus: string;
+    campaignTitle: string | null;
+    dbStatus: string | null;
+    paidAt: string | null;
+    createdAt: string;
+  }>;
+}
+
 function CreatorDashboard() {
+  const { user } = useAuth();
   const { data: campaigns, isLoading: campaignsLoading } = useListCampaigns();
   const { data: submissions, isLoading: submissionsLoading } = useListSubmissions({});
-  const { data: payments, isLoading: paymentsLoading } = useListPayments();
   const [, navigate] = useLocation();
   const [uploadOpen, setUploadOpen] = useState(false);
+
+  // Real Stripe + DB earnings for this creator, keyed by their Firebase email
+  const { data: earningsData, isLoading: earningsLoading } = useQuery<CreatorEarnings>({
+    queryKey: ["creator-earnings", user?.email],
+    queryFn: async () => {
+      if (!user?.email) return { totalEarned: 0, pendingAmount: 0, payments: [] };
+      const res = await fetch(`${BASE}api/stripe/creator-earnings?email=${encodeURIComponent(user.email)}`);
+      if (!res.ok) return { totalEarned: 0, pendingAmount: 0, payments: [] };
+      return res.json() as Promise<CreatorEarnings>;
+    },
+    enabled: !!user?.email,
+    staleTime: 60_000,
+  });
 
   const activeCampaigns = campaigns?.filter(c => c.status === "active") ?? [];
   const mySubmissions = submissions ?? [];
   const approvedCount = mySubmissions.filter(s => s.status === "approved").length;
   const pendingCount = mySubmissions.filter(s => s.status === "pending" || s.status === "reviewing").length;
-  const totalEarned = payments?.filter(p => p.status === "paid").reduce((sum, p) => sum + p.amount, 0) ?? 0;
+  const totalEarned = earningsData?.totalEarned ?? 0;
+  const realPayments = earningsData?.payments ?? [];
 
   return (
     <div className="space-y-8">
@@ -295,6 +325,11 @@ function CreatorDashboard() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-muted-foreground" />
                   My Earnings
+                  {earningsData?.pendingAmount ? (
+                    <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
+                      ${earningsData.pendingAmount.toFixed(0)} pending
+                    </Badge>
+                  ) : null}
                 </CardTitle>
                 <Link href="/payments">
                   <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground h-7">
@@ -304,30 +339,34 @@ function CreatorDashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              {paymentsLoading ? (
+              {earningsLoading ? (
                 <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-              ) : (payments?.length ?? 0) === 0 ? (
+              ) : realPayments.length === 0 ? (
                 <div className="text-center py-6 text-sm text-muted-foreground">
                   <DollarSign className="h-7 w-7 mx-auto mb-2 opacity-20" />
                   No earnings yet — submit a video to get paid.
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {payments?.slice(0, 5).map(p => (
-                    <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/30 transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{p.campaign?.title ?? "Campaign"}</div>
-                        <Badge variant="outline" className={cn("text-xs mt-0.5",
-                          p.status === "paid" ? "text-green-400 border-green-500/30" :
-                          p.status === "pending" ? "text-yellow-400 border-yellow-500/30" :
-                          "text-muted-foreground"
-                        )}>
-                          {p.status === "paid" ? "Paid" : p.status === "pending" ? "Pending" : p.status}
-                        </Badge>
+                  {realPayments.slice(0, 5).map((p, i) => {
+                    const isPaid = p.stripeStatus === "succeeded" || p.dbStatus === "paid";
+                    const isCanceled = p.stripeStatus === "canceled";
+                    return (
+                      <div key={p.stripeId ?? i} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/30 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{p.campaignTitle ?? "Campaign"}</div>
+                          <Badge variant="outline" className={cn("text-xs mt-0.5",
+                            isPaid ? "text-green-400 border-green-500/30" :
+                            isCanceled ? "text-red-400 border-red-500/30" :
+                            "text-yellow-400 border-yellow-500/30"
+                          )}>
+                            {isPaid ? "Paid" : isCanceled ? "Canceled" : "Pending"}
+                          </Badge>
+                        </div>
+                        <div className="text-sm font-bold text-primary ml-3 shrink-0">${p.amount.toLocaleString()}</div>
                       </div>
-                      <div className="text-sm font-bold text-primary ml-3 shrink-0">${p.amount}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {totalEarned > 0 && (
                     <div className="pt-2 mt-1 border-t border-border flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Total paid out</span>
