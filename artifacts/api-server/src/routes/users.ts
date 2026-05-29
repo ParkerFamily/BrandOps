@@ -22,6 +22,7 @@ router.get("/users/:uid", async (req, res) => {
       stripeConnectAccountId: row.stripeConnectAccountId ?? null,
       stripeConnectOnboarded: row.stripeConnectOnboarded,
       stripeCustomerId: row.stripeCustomerId ?? null,
+      payoutInfo: row.payoutInfo ?? null,
     });
   } catch (err) {
     req.log.error({ err }, "GET /users/:uid failed");

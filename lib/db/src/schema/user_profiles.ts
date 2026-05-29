@@ -7,6 +7,7 @@ export const userProfilesTable = pgTable("user_profiles", {
   stripeConnectAccountId: text("stripe_connect_account_id"),
   stripeConnectOnboarded: boolean("stripe_connect_onboarded").notNull().default(false),
   stripeCustomerId: text("stripe_customer_id"),
+  payoutInfo: jsonb("payout_info"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
