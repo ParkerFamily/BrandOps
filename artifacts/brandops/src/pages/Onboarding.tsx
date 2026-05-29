@@ -9,8 +9,9 @@ import {
   User, Laptop, DollarSign, Target, TrendingUp, Megaphone,
   Smartphone, Globe, Loader2, Sparkles, Bot, BarChart3,
   Play, ArrowRight, UserCheck, Video, Star, ChevronRight,
-  Mail, MonitorPlay, LayoutGrid,
+  Mail, MonitorPlay, LayoutGrid, Briefcase, Package, RefreshCw, FileText,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { cn } from "@/lib/utils";
 
@@ -333,86 +334,465 @@ const ACCOUNT_TYPES = [
   { icon: Star, label: "Creator", desc: "Join brand campaigns & earn" },
 ];
 
-const GOALS = [
-  { icon: TrendingUp, label: "Drive Sales", desc: "Turn UGC into direct revenue" },
-  { icon: Megaphone, label: "Brand Awareness", desc: "Grow reach and share of voice" },
-  { icon: Smartphone, label: "App Installs", desc: "Acquire users via creator content" },
-  { icon: Sparkles, label: "Organic UGC", desc: "Build an authentic content library" },
-  { icon: Target, label: "Paid Ads", desc: "Source high-performing ad creative" },
-  { icon: Video, label: "Product Launch", desc: "Create launch momentum fast" },
-];
-
-const VIDEO_USES = [
-  { icon: Megaphone, label: "Paid Ads", stat: "Highest ROI" },
-  { icon: ShoppingBag, label: "Product Pages", stat: "Boosts CVR" },
-  { icon: MonitorPlay, label: "Organic Social", stat: "Brand channels" },
-  { icon: Mail, label: "Email Campaigns", stat: "Embed in flows" },
-  { icon: Globe, label: "Brand Website", stat: "Hero & landing" },
-  { icon: LayoutGrid, label: "Everything", stat: "Multi-channel" },
-];
-
-const BUDGETS = [
-  { label: "< $1k/mo", value: "under-1k", roi: "2.1x avg ROI" },
-  { label: "$1k–$5k", value: "1k-5k", roi: "3.4x avg ROI" },
-  { label: "$5k–$20k", value: "5k-20k", roi: "4.2x avg ROI" },
-  { label: "$20k–$50k", value: "20k-50k", roi: "5.8x avg ROI" },
-  { label: "$50k+", value: "50k-plus", roi: "7.1x avg ROI" },
-];
-
 const NICHES = ["Beauty", "Fitness", "Food & Drink", "Fashion", "Tech", "Lifestyle", "Finance", "Gaming", "Travel", "Health", "Pets", "Home & Decor"];
-
-const TEAM_SIZES = [
-  { icon: User, label: "Just me", desc: "Solo operator" },
-  { icon: Users, label: "2–5 people", desc: "Small team" },
-  { icon: Building2, label: "6–20 people", desc: "Growing team" },
-  { icon: Globe, label: "20+ people", desc: "Enterprise" },
-];
-
-const CREATOR_CONTENT_STYLES = [
-  { icon: Video, label: "Product Demos", desc: "Review products on camera" },
-  { icon: Play, label: "Lifestyle / B-roll", desc: "Natural, candid footage" },
-  { icon: User, label: "Talking Head", desc: "Direct-to-camera testimonials" },
-  { icon: ShoppingBag, label: "Unboxing", desc: "First impressions & reveals" },
-  { icon: Megaphone, label: "Voiceover Ads", desc: "Narrate over footage or stills" },
-  { icon: Star, label: "Multiple Styles", desc: "I can do all of the above" },
-];
-
-const CREATOR_RATES = [
-  { label: "< $50 / video", value: "under-50", note: "Great for building portfolio" },
-  { label: "$50 – $150 / video", value: "50-150", note: "Most common entry range" },
-  { label: "$150 – $300 / video", value: "150-300", note: "Mid-tier specialist" },
-  { label: "$300 – $500 / video", value: "300-500", note: "High-demand creators" },
-  { label: "$500+ / video", value: "500-plus", note: "Premium production quality" },
-];
-
-const CREATOR_TURNAROUNDS = [
-  { icon: Zap, label: "Same day", desc: "Deliver within 24 hours" },
-  { icon: TrendingUp, label: "2–3 days", desc: "Most campaigns request this" },
-  { icon: BarChart3, label: "Within a week", desc: "Standard project timelines" },
-  { icon: Target, label: "Depends on brief", desc: "Varies by scope and revisions" },
-];
-
-const CREATOR_SETUPS = [
-  { icon: Smartphone, label: "Smartphone", desc: "iPhone or Android camera" },
-  { icon: Laptop, label: "DSLR / Mirrorless", desc: "Cinema-quality footage" },
-  { icon: MonitorPlay, label: "Pro Studio", desc: "Lighting, backdrops, full rig" },
-  { icon: LayoutGrid, label: "Multiple setups", desc: "Adapts to any brief" },
-];
+const APP_NICHES = ["Gaming", "Productivity", "Health & Fitness", "Finance", "Social", "Shopping", "Education", "Entertainment", "Travel", "Food & Drink"];
 
 const CREATOR_ROLES = ["Creator", "Creator Manager"];
 const TOTAL_STEPS = 6;
+
+/* ─── Per-account-type flow config ──────────────────────────────────────── */
+
+type StepType = "grid-single" | "radio" | "multi-grid" | "multi-pills";
+type ScalarField = "goal" | "budget" | "teamSize" | "turnaround";
+type ArrayField = "platforms" | "niches";
+
+interface FlowStep {
+  label: string;
+  question: string;
+  sub: string;
+  type: StepType;
+  field: ScalarField | ArrayField;
+  options: Array<{ icon?: LucideIcon; label: string; desc?: string; note?: string; stat?: string }>;
+  confirmMsg?: (n: number) => string;
+}
+
+const BRAND_FLOW: FlowStep[] = [
+  { label: "Goal", question: "What's your #1 goal?", sub: "Your primary outcome drives your AI campaign strategy.", type: "grid-single", field: "goal",
+    options: [
+      { icon: TrendingUp, label: "Drive Sales", desc: "Turn UGC into direct revenue" },
+      { icon: Megaphone, label: "Brand Awareness", desc: "Grow reach and share of voice" },
+      { icon: Sparkles, label: "Organic UGC", desc: "Build an authentic content library" },
+      { icon: Target, label: "Paid Ad Creative", desc: "Source high-performing ad assets" },
+      { icon: Video, label: "Product Launch", desc: "Create launch momentum fast" },
+      { icon: Globe, label: "All of the above", desc: "Full-funnel UGC strategy" },
+    ] },
+  { label: "Video Use", question: "Where will you run the videos?", sub: "Select all channels where the brand distributes the content.", type: "multi-grid", field: "platforms",
+    options: [
+      { icon: Megaphone, label: "Paid Ads", stat: "Highest ROI" },
+      { icon: ShoppingBag, label: "Product Pages", stat: "Boosts CVR" },
+      { icon: MonitorPlay, label: "Organic Social", stat: "Brand channels" },
+      { icon: Mail, label: "Email Campaigns", stat: "Embed in flows" },
+      { icon: Globe, label: "Brand Website", stat: "Hero & landing" },
+      { icon: LayoutGrid, label: "Everything", stat: "Multi-channel" },
+    ],
+    confirmMsg: (n) => `${n} channel${n > 1 ? "s" : ""} selected — brief templates configured` },
+  { label: "Budget", question: "What's your monthly creator budget?", sub: "Configures creator tiers and payout recommendations.", type: "radio", field: "budget",
+    options: [
+      { label: "< $1k / mo", note: "2.1x avg ROI" },
+      { label: "$1k – $5k", note: "3.4x avg ROI" },
+      { label: "$5k – $20k", note: "4.2x avg ROI" },
+      { label: "$20k – $50k", note: "5.8x avg ROI" },
+      { label: "$50k+", note: "7.1x avg ROI" },
+    ] },
+  { label: "Niche", question: "What's your product niche?", sub: "AI matches you with creators who know your category.", type: "multi-pills", field: "niches", options: [],
+    confirmMsg: (n) => `AI matching ${n} niche${n > 1 ? "s" : ""} across 2.4M creators` },
+  { label: "Team", question: "How big is your team?", sub: "Configures collaboration tools and workspace permissions.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: User, label: "Just me", desc: "Solo operator" },
+      { icon: Users, label: "2–5 people", desc: "Small team" },
+      { icon: Building2, label: "6–20 people", desc: "Growing team" },
+      { icon: Globe, label: "20+ people", desc: "Enterprise" },
+    ] },
+];
+
+const AGENCY_FLOW: FlowStep[] = [
+  { label: "Service Type", question: "What campaigns do you lead with?", sub: "Determines your default dashboard view and AI suggestions.", type: "grid-single", field: "goal",
+    options: [
+      { icon: TrendingUp, label: "Performance / ROAS", desc: "Drive measurable revenue" },
+      { icon: Megaphone, label: "Brand & Awareness", desc: "Build recognition and reach" },
+      { icon: Video, label: "Content Production", desc: "Scale high-volume UGC output" },
+      { icon: Target, label: "Paid Media Buying", desc: "Source creative for paid ads" },
+      { icon: LayoutGrid, label: "Full Service", desc: "End-to-end campaign management" },
+      { icon: BarChart3, label: "Mixed / Varies", desc: "Depends on the client" },
+    ] },
+  { label: "Client Niches", question: "What niches are your clients in?", sub: "Pre-filters your creator pool by client industry.", type: "multi-pills", field: "niches", options: [],
+    confirmMsg: (n) => `${n} niche${n > 1 ? "s" : ""} added — creator pools filtered for your clients` },
+  { label: "Total Spend", question: "Combined monthly UGC spend across all clients?", sub: "Configures your platform tier and account limits.", type: "radio", field: "budget",
+    options: [
+      { label: "< $10k / mo", note: "Starter agency" },
+      { label: "$10k – $50k", note: "Growing agency" },
+      { label: "$50k – $200k", note: "Mid-market" },
+      { label: "$200k – $1M", note: "Enterprise agency" },
+      { label: "$1M+", note: "Top-tier agency" },
+    ] },
+  { label: "Services", question: "What do you handle for your clients?", sub: "Unlocks the right workflow modules in your agency dashboard.", type: "multi-grid", field: "platforms",
+    options: [
+      { icon: FileText, label: "Brief Writing", stat: "Core service" },
+      { icon: Users, label: "Creator Sourcing", stat: "High demand" },
+      { icon: LayoutGrid, label: "Campaign Management", stat: "Most popular" },
+      { icon: DollarSign, label: "Payment Processing", stat: "Full service" },
+      { icon: BarChart3, label: "Reporting & Analytics", stat: "Retention driver" },
+      { icon: Globe, label: "Everything", stat: "White-label" },
+    ],
+    confirmMsg: (n) => `${n} service${n > 1 ? "s" : ""} enabled — workflow tools configured` },
+  { label: "Agency Size", question: "How big is your agency?", sub: "Sets up team roles, sub-accounts, and permissions.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: User, label: "Solo Consultant", desc: "Just you" },
+      { icon: Users, label: "2–10 people", desc: "Boutique agency" },
+      { icon: Building2, label: "11–50 people", desc: "Mid-size agency" },
+      { icon: Globe, label: "50+ people", desc: "Large / enterprise" },
+    ] },
+];
+
+const STARTUP_FLOW: FlowStep[] = [
+  { label: "Stage", question: "What stage is your startup at?", sub: "Sets your growth benchmarks and AI campaign recommendations.", type: "grid-single", field: "goal",
+    options: [
+      { icon: Rocket, label: "Pre-launch", desc: "Building toward launch" },
+      { icon: Zap, label: "Just Launched", desc: "Live, getting first users" },
+      { icon: TrendingUp, label: "Early Traction", desc: "Seeing real growth signals" },
+      { icon: BarChart3, label: "Scaling Fast", desc: "Strong PMF, growing quick" },
+      { icon: Building2, label: "Series A+", desc: "Funded and expanding" },
+      { icon: DollarSign, label: "Profitable", desc: "Profitable and reinvesting" },
+    ] },
+  { label: "Growth Goals", question: "What are you trying to achieve?", sub: "Select all goals you want to hit with UGC campaigns.", type: "multi-grid", field: "platforms",
+    options: [
+      { icon: Users, label: "Acquire Users", stat: "Most common" },
+      { icon: DollarSign, label: "Drive Revenue", stat: "High ROI" },
+      { icon: Megaphone, label: "Build Brand", stat: "Long-term" },
+      { icon: Video, label: "Generate Content", stat: "Always on" },
+      { icon: Target, label: "Lower CAC", stat: "Efficiency" },
+      { icon: Star, label: "Go Viral", stat: "High upside" },
+    ],
+    confirmMsg: (n) => `${n} goal${n > 1 ? "s" : ""} selected — AI strategy configured` },
+  { label: "Budget", question: "Monthly UGC budget?", sub: "Sets creator tier recommendations and pacing suggestions.", type: "radio", field: "budget",
+    options: [
+      { label: "< $1k / mo", note: "Lean startup" },
+      { label: "$1k – $3k", note: "Early growth" },
+      { label: "$3k – $10k", note: "Scaling up" },
+      { label: "$10k – $50k", note: "Series A spend" },
+      { label: "$50k+", note: "Growth-stage fuel" },
+    ] },
+  { label: "Category", question: "What category is your product in?", sub: "Unlocks niche creator pools and category benchmarks.", type: "multi-pills", field: "niches", options: [],
+    confirmMsg: (n) => `${n} categor${n > 1 ? "ies" : "y"} — creator matching configured` },
+  { label: "Team", question: "How big is your team right now?", sub: "Configures workflows and collaboration permissions for your size.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: User, label: "Solo Founder", desc: "Just me for now" },
+      { icon: Users, label: "2–5 people", desc: "Small founding team" },
+      { icon: Building2, label: "6–20 people", desc: "Growing startup" },
+      { icon: Rocket, label: "VC-backed team", desc: "Funded and hiring" },
+    ] },
+];
+
+const SOLO_FLOW: FlowStep[] = [
+  { label: "What You're Building", question: "What are you building?", sub: "Shapes your AI templates and creator brief formats.", type: "grid-single", field: "goal",
+    options: [
+      { icon: Laptop, label: "SaaS / App", desc: "Software or digital product" },
+      { icon: Package, label: "Physical Product", desc: "Ships to customers" },
+      { icon: Briefcase, label: "Service Business", desc: "Freelance or consulting" },
+      { icon: ShoppingBag, label: "E-commerce", desc: "Online store" },
+      { icon: MonitorPlay, label: "Content / Media", desc: "Newsletter, course, media" },
+      { icon: Globe, label: "Something Else", desc: "Tell us later" },
+    ] },
+  { label: "Top Priorities", question: "What do you need most right now?", sub: "Focuses your AI recommendations on what actually matters.", type: "multi-grid", field: "platforms",
+    options: [
+      { icon: Target, label: "Validate idea", stat: "Low cost" },
+      { icon: DollarSign, label: "Drive first sales", stat: "High priority" },
+      { icon: Star, label: "Social proof", stat: "Converts best" },
+      { icon: UserCheck, label: "Get testimonials", stat: "High impact" },
+      { icon: Megaphone, label: "Grow brand", stat: "Organic" },
+      { icon: Video, label: "Content for ads", stat: "ROI focused" },
+    ],
+    confirmMsg: (n) => `${n} priority area${n > 1 ? "s" : ""} — AI focused on what matters most` },
+  { label: "Budget", question: "Monthly creator budget?", sub: "No fluff — bootstrappers keep it lean and we're built for that.", type: "radio", field: "budget",
+    options: [
+      { label: "< $500 / mo", note: "Pure bootstrap" },
+      { label: "$500 – $2k", note: "Scrappy but growing" },
+      { label: "$2k – $5k", note: "Gaining traction" },
+      { label: "$5k – $15k", note: "Reinvesting revenue" },
+      { label: "$15k+", note: "Scaling solo" },
+    ] },
+  { label: "Niche", question: "What niche are you in?", sub: "AI finds creators who genuinely know your space.", type: "multi-pills", field: "niches", options: [],
+    confirmMsg: (n) => `${n} niche${n > 1 ? "s" : ""} — matching creators who know your audience` },
+  { label: "Setup", question: "How are you operating?", sub: "Configures your workflow for the way you actually work.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: User, label: "Fully solo", desc: "I handle everything" },
+      { icon: Users, label: "I have a VA", desc: "Virtual assistant support" },
+      { icon: Laptop, label: "I use contractors", desc: "Flexible outside help" },
+      { icon: Rocket, label: "Hiring soon", desc: "Building the team" },
+    ] },
+];
+
+const APP_FLOW: FlowStep[] = [
+  { label: "Primary KPI", question: "What's your primary KPI?", sub: "Shapes creator brief templates and campaign goals.", type: "grid-single", field: "goal",
+    options: [
+      { icon: Smartphone, label: "Drive Installs", desc: "Volume of new app downloads" },
+      { icon: Target, label: "Reduce CPI", desc: "Lower cost per install" },
+      { icon: TrendingUp, label: "Improve Retention", desc: "D1/D7/D30 retention rates" },
+      { icon: DollarSign, label: "In-App Revenue", desc: "Purchases, subscriptions, IAP" },
+      { icon: Star, label: "App Store Rating", desc: "Reviews and star rating lift" },
+      { icon: RefreshCw, label: "Re-engagement", desc: "Win back lapsed users" },
+    ] },
+  { label: "Ad Channels", question: "Where do you run paid installs?", sub: "Creators produce assets optimized for your active channels.", type: "multi-grid", field: "platforms",
+    options: [
+      { icon: Megaphone, label: "Meta Ads", stat: "Highest volume" },
+      { icon: Target, label: "Google UAC", stat: "Broad reach" },
+      { icon: Video, label: "TikTok Ads", stat: "Fastest growth" },
+      { icon: Smartphone, label: "Apple Search", stat: "High intent" },
+      { icon: MonitorPlay, label: "YouTube", stat: "Long-form" },
+      { icon: Globe, label: "All channels", stat: "Full scale" },
+    ],
+    confirmMsg: (n) => `${n} channel${n > 1 ? "s" : ""} — creators briefed for your ad formats` },
+  { label: "Budget", question: "Monthly creator budget?", sub: "Sets creator tier recommendations for app UA campaigns.", type: "radio", field: "budget",
+    options: [
+      { label: "< $2k / mo", note: "Testing phase" },
+      { label: "$2k – $10k", note: "Early UA spend" },
+      { label: "$10k – $50k", note: "Scaling UA" },
+      { label: "$50k – $200k", note: "Performance UA" },
+      { label: "$200k+", note: "Enterprise UA" },
+    ] },
+  { label: "App Category", question: "What category is your app?", sub: "Unlocks creators with experience in your app vertical.", type: "multi-pills", field: "niches",
+    options: APP_NICHES.map((l) => ({ label: l })),
+    confirmMsg: (n) => `${n} categor${n > 1 ? "ies" : "y"} — matching app-vertical creators` },
+  { label: "Team", question: "How big is your team?", sub: "Configures workspace and collaboration permissions.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: User, label: "Just me", desc: "Solo app founder" },
+      { icon: Users, label: "2–5 people", desc: "Small founding team" },
+      { icon: Building2, label: "6–20 people", desc: "Growing startup" },
+      { icon: Globe, label: "20+ people", desc: "Established company" },
+    ] },
+];
+
+const ECOM_FLOW: FlowStep[] = [
+  { label: "Priority", question: "What's your top priority right now?", sub: "AI builds campaign templates around your most urgent goal.", type: "grid-single", field: "goal",
+    options: [
+      { icon: TrendingUp, label: "Improve ROAS", desc: "More revenue per ad dollar" },
+      { icon: Rocket, label: "Product Launch", desc: "Build launch momentum fast" },
+      { icon: Video, label: "Content Library", desc: "Build reusable UGC assets" },
+      { icon: Target, label: "Reduce CAC", desc: "Lower cost to acquire customers" },
+      { icon: BarChart3, label: "Scale Winning Ads", desc: "Double down on what works" },
+      { icon: Globe, label: "Enter New Market", desc: "Expand to new audiences" },
+    ] },
+  { label: "Sales Channels", question: "Where are you selling?", sub: "Creators produce content optimized for your distribution.", type: "multi-grid", field: "platforms",
+    options: [
+      { icon: ShoppingBag, label: "Shopify / DTC", stat: "Most common" },
+      { icon: Globe, label: "Amazon", stat: "High volume" },
+      { icon: Video, label: "TikTok Shop", stat: "Fast growing" },
+      { icon: MonitorPlay, label: "Instagram Shop", stat: "Visual-first" },
+      { icon: Building2, label: "Walmart / Retail", stat: "Scale" },
+      { icon: LayoutGrid, label: "Multi-channel", stat: "Full coverage" },
+    ],
+    confirmMsg: (n) => `${n} channel${n > 1 ? "s" : ""} — creators briefed for your storefronts` },
+  { label: "Budget", question: "Monthly creator budget?", sub: "Sets pacing and creator tier recommendations.", type: "radio", field: "budget",
+    options: [
+      { label: "< $2k / mo", note: "Early testing" },
+      { label: "$2k – $10k", note: "Growing spend" },
+      { label: "$10k – $50k", note: "Scaling creative" },
+      { label: "$50k – $200k", note: "Performance brand" },
+      { label: "$200k+", note: "Enterprise DTC" },
+    ] },
+  { label: "Category", question: "What are you selling?", sub: "Matches creators who already know your product category.", type: "multi-pills", field: "niches", options: [],
+    confirmMsg: (n) => `${n} categor${n > 1 ? "ies" : "y"} — creator pool filtered for your products` },
+  { label: "Team", question: "How big is your team?", sub: "Configures workflows and approval chains.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: User, label: "Solo founder", desc: "I run the whole store" },
+      { icon: Users, label: "2–5 people", desc: "Small ecom team" },
+      { icon: Building2, label: "6–20 people", desc: "Growing brand" },
+      { icon: Globe, label: "20+ people", desc: "Enterprise brand" },
+    ] },
+];
+
+const CREATOR_MGR_FLOW: FlowStep[] = [
+  { label: "Roster Type", question: "What best describes your roster?", sub: "Shapes how BrandOps organizes and matches your creators.", type: "grid-single", field: "goal",
+    options: [
+      { icon: Video, label: "UGC Specialists", desc: "Creators who only do UGC ads" },
+      { icon: Star, label: "Lifestyle Creators", desc: "Natural, authentic content" },
+      { icon: LayoutGrid, label: "Multi-format", desc: "Adapt to any brief type" },
+      { icon: Target, label: "Niche Specific", desc: "Deep in one category" },
+      { icon: Users, label: "Mixed Roster", desc: "All types across niches" },
+      { icon: Rocket, label: "Just Starting Out", desc: "Building my first roster" },
+    ] },
+  { label: "Creator Niches", question: "What niches is your roster in?", sub: "Used to match your creators with the right brand campaigns.", type: "multi-pills", field: "niches", options: [],
+    confirmMsg: (n) => `${n} niche${n > 1 ? "s" : ""} — campaigns matched to your roster` },
+  { label: "Deal Size", question: "Average deal size per video?", sub: "AI prioritizes campaigns that fit your creators' tier.", type: "radio", field: "budget",
+    options: [
+      { label: "< $100 / video", note: "Entry-level creators" },
+      { label: "$100 – $300", note: "Mid-tier roster" },
+      { label: "$300 – $750", note: "Established creators" },
+      { label: "$750 – $2k", note: "Premium roster" },
+      { label: "$2k+", note: "Top-tier talent" },
+    ] },
+  { label: "Services", question: "What do you handle for your creators?", sub: "Unlocks the right management tools in your dashboard.", type: "multi-grid", field: "platforms",
+    options: [
+      { icon: Target, label: "Campaign Matching", stat: "Core" },
+      { icon: FileText, label: "Contract Review", stat: "Legal" },
+      { icon: DollarSign, label: "Payment Collection", stat: "Always" },
+      { icon: Check, label: "Content QA", stat: "Quality" },
+      { icon: Megaphone, label: "Brand Relations", stat: "Retention" },
+      { icon: Globe, label: "Full Management", stat: "White-glove" },
+    ],
+    confirmMsg: (n) => `${n} service${n > 1 ? "s" : ""} — management workflow configured` },
+  { label: "Roster Size", question: "How many creators are you managing?", sub: "Sets account limits and bulk campaign tools.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: User, label: "1–5 creators", desc: "Building my roster" },
+      { icon: Users, label: "6–15 creators", desc: "Small managed roster" },
+      { icon: Building2, label: "16–30 creators", desc: "Established manager" },
+      { icon: Globe, label: "30+ creators", desc: "Full-scale operation" },
+    ] },
+];
+
+const CREATOR_FLOW: FlowStep[] = [
+  { label: "Content Style", question: "What type of videos do you make?", sub: "Brands filter campaigns by format — pick your style.", type: "grid-single", field: "goal",
+    options: [
+      { icon: Video, label: "Product Demos", desc: "Review products on camera" },
+      { icon: Play, label: "Lifestyle / B-roll", desc: "Natural, candid footage" },
+      { icon: User, label: "Talking Head", desc: "Direct-to-camera testimonials" },
+      { icon: ShoppingBag, label: "Unboxing", desc: "First impressions & reveals" },
+      { icon: Megaphone, label: "Voiceover Ads", desc: "Narrate over footage or stills" },
+      { icon: Star, label: "Multiple Styles", desc: "I can do all of the above" },
+    ] },
+  { label: "Your Niche", question: "What category do you create in?", sub: "Niche brands prefer niche creators — unlocks relevant campaigns.", type: "multi-pills", field: "niches", options: [],
+    confirmMsg: (n) => `${n} niche${n > 1 ? "s" : ""} selected — unlocking matching brand campaigns` },
+  { label: "Your Rate", question: "What's your target payout per video?", sub: "Sets your minimum — AI only shows campaigns within your range.", type: "radio", field: "budget",
+    options: [
+      { label: "< $50 / video", note: "Great for building portfolio" },
+      { label: "$50 – $150", note: "Most common entry range" },
+      { label: "$150 – $300", note: "Mid-tier specialist" },
+      { label: "$300 – $500", note: "High-demand creators" },
+      { label: "$500+", note: "Premium production quality" },
+    ] },
+  { label: "Turnaround", question: "How fast can you deliver?", sub: "Faster turnaround = more campaign invites from brands.", type: "grid-single", field: "turnaround",
+    options: [
+      { icon: Zap, label: "Same day", desc: "Deliver within 24 hours" },
+      { icon: TrendingUp, label: "2–3 days", desc: "Most campaigns request this" },
+      { icon: BarChart3, label: "Within a week", desc: "Standard project timelines" },
+      { icon: Target, label: "Depends on brief", desc: "Varies by scope & revisions" },
+    ] },
+  { label: "Your Setup", question: "What's your filming setup?", sub: "Brands match to your production quality for the right brief type.", type: "grid-single", field: "teamSize",
+    options: [
+      { icon: Smartphone, label: "Smartphone", desc: "iPhone or Android camera" },
+      { icon: Laptop, label: "DSLR / Mirrorless", desc: "Cinema-quality footage" },
+      { icon: MonitorPlay, label: "Pro Studio", desc: "Lighting, backdrops, full rig" },
+      { icon: LayoutGrid, label: "Multiple setups", desc: "Adapts to any brief" },
+    ] },
+];
+
+function getFlow(accountType: string): FlowStep[] {
+  switch (accountType) {
+    case "Agency": return AGENCY_FLOW;
+    case "Startup": return STARTUP_FLOW;
+    case "Solo Founder": return SOLO_FLOW;
+    case "App Founder": return APP_FLOW;
+    case "Ecommerce Brand": return ECOM_FLOW;
+    case "Creator Manager": return CREATOR_MGR_FLOW;
+    case "Creator": return CREATOR_FLOW;
+    default: return BRAND_FLOW;
+  }
+}
+
+/* ─── Generic step renderer ─────────────────────────────────────────────── */
+
+function StepContent({ config, data, onChange, onToggle }: {
+  config: FlowStep;
+  data: OnboardingData;
+  onChange: <K extends keyof OnboardingData>(k: K, v: OnboardingData[K]) => void;
+  onToggle: (k: "platforms" | "niches", v: string) => void;
+}) {
+  const { type, field, options, confirmMsg } = config;
+
+  if (type === "grid-single") {
+    const val = data[field as ScalarField] as string;
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {options.map(({ icon, label, desc }) => (
+          <SelectCard key={label} icon={icon!} label={label} desc={desc ?? ""} selected={val === label}
+            onClick={() => onChange(field as ScalarField, label as never)} />
+        ))}
+      </div>
+    );
+  }
+
+  if (type === "radio") {
+    const val = data[field as ScalarField] as string;
+    return (
+      <div className="space-y-3">
+        {options.map(({ label, note }) => (
+          <motion.button key={label}
+            onClick={() => onChange(field as ScalarField, label as never)}
+            whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}
+            className={cn("w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left group",
+              val === label ? "border-[#C6FF00]/60 bg-[#C6FF00]/8" : "border-white/8 bg-white/2 hover:border-white/15")}
+          >
+            <div className="flex items-center gap-3">
+              <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                val === label ? "border-[#C6FF00] bg-[#C6FF00]" : "border-white/20")}>
+                {val === label && <div className="w-2 h-2 rounded-full bg-black" />}
+              </div>
+              <span className={cn("font-semibold text-sm", val === label ? "text-white" : "text-white/70")}>{label}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {note && <span className={cn("text-xs font-medium", val === label ? "text-[#C6FF00]" : "text-white/25 group-hover:text-white/40")}>{note}</span>}
+              <ChevronRight className={cn("h-3.5 w-3.5 transition-colors", val === label ? "text-[#C6FF00]" : "text-white/20")} />
+            </div>
+          </motion.button>
+        ))}
+      </div>
+    );
+  }
+
+  if (type === "multi-grid") {
+    const arr = data[field as ArrayField] as string[];
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {options.map(({ icon: Icon, label, desc, stat }) => (
+            <motion.button key={label}
+              onClick={() => onToggle(field as ArrayField, label)}
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              className={cn("flex flex-col items-center gap-2.5 p-4 rounded-2xl border transition-all",
+                arr.includes(label) ? "border-[#C6FF00]/60 bg-[#C6FF00]/8" : "border-white/8 bg-white/2 hover:border-white/20")}
+            >
+              {Icon && <Icon className={cn("h-6 w-6", arr.includes(label) ? "text-[#C6FF00]" : "text-white/50")} />}
+              <span className={cn("font-semibold text-sm text-center", arr.includes(label) ? "text-white" : "text-white/60")}>{label}</span>
+              {(stat ?? desc) && <span className="text-white/30 text-xs text-center">{stat ?? desc}</span>}
+            </motion.button>
+          ))}
+        </div>
+        {arr.length > 0 && confirmMsg && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl px-3 py-2.5 text-xs text-[#C6FF00]">
+            <Check className="h-3.5 w-3.5 shrink-0" />
+            {confirmMsg(arr.length)}
+          </motion.div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === "multi-pills") {
+    const arr = data[field as ArrayField] as string[];
+    const pillItems = options.length > 0 ? options.map((o) => o.label) : NICHES;
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {pillItems.map((label) => (
+            <PillToggle key={label} label={label} selected={arr.includes(label)}
+              onClick={() => onToggle(field as ArrayField, label)} />
+          ))}
+        </div>
+        {arr.length > 0 && confirmMsg && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl px-3 py-2.5 text-xs text-[#C6FF00]">
+            <Bot className="h-3.5 w-3.5 shrink-0" />
+            {confirmMsg(arr.length)}
+          </motion.div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
 
 /* ─── AI Loading screen ─────────────────────────────────────────────────── */
 
 function AILoadingScreen({ data, onDone }: { data: OnboardingData; onDone: () => void }) {
   const [stepIdx, setStepIdx] = useState(0);
-  const isCreator = CREATOR_ROLES.includes(data.accountType);
   const steps = [
     "Analyzing your profile…",
-    `Building ${data.accountType || "your"} creator recommendations…`,
-    `Calibrating for ${data.goal || "your goals"}…`,
-    `Configuring templates for ${data.platforms.join(" & ") || "your channels"}…`,
-    "Configuring AI campaign templates…",
+    `Personalizing your ${data.accountType || "account"} workspace…`,
+    `Configuring AI for ${data.goal || "your goals"}…`,
+    "Setting up campaign preferences…",
+    "Loading creator recommendations…",
     "Your workspace is ready ✓",
   ];
 
@@ -456,7 +836,7 @@ function AILoadingScreen({ data, onDone }: { data: OnboardingData; onDone: () =>
         transition={{ delay: 0.3 }}
         className="text-3xl font-black text-white mb-3 text-center"
       >
-        {isCreator ? "Setting up your creator hub" : "Building your AI workspace"}
+        {"Building your AI workspace"}
       </motion.h2>
       <motion.p
         initial={{ opacity: 0 }}
@@ -539,22 +919,16 @@ export default function Onboarding() {
       return { ...d, [k]: arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v] };
     });
 
+  const flow = getFlow(data.accountType);
+
   const canProceed = () => {
     if (step === 0) return !!data.accountType;
-    if (isCreator) {
-      if (step === 1) return !!data.goal;
-      if (step === 2) return data.niches.length > 0;
-      if (step === 3) return !!data.budget;
-      if (step === 4) return !!data.turnaround;
-      if (step === 5) return !!data.teamSize;
-    } else {
-      if (step === 1) return !!data.goal;
-      if (step === 2) return data.platforms.length > 0;
-      if (step === 3) return !!data.budget;
-      if (step === 4) return data.niches.length > 0;
-      if (step === 5) return !!data.teamSize;
+    const cfg = flow[step - 1];
+    if (!cfg) return true;
+    if (cfg.type === "multi-grid" || cfg.type === "multi-pills") {
+      return (data[cfg.field as ArrayField] as string[]).length > 0;
     }
-    return true;
+    return !!(data[cfg.field as ScalarField] as string);
   };
 
   const next = () => {
@@ -580,23 +954,10 @@ export default function Onboarding() {
     setLocation(isCreator ? "/settings" : "/dashboard");
   };
 
-  const BRAND_STEP_TITLES = [
+  const STEP_TITLES = [
     { label: "Account type", question: "Who are you?", sub: "This personalizes your entire BrandOps experience." },
-    { label: "Goal", question: "What's your #1 goal?", sub: "Your primary outcome drives your AI campaign strategy." },
-    { label: "Video Use", question: "Where will you run these videos?", sub: "Select all the channels where the brand will distribute the content." },
-    { label: "Budget", question: "What's your monthly creator budget?", sub: "Used to configure creator tiers and ROI projections." },
-    { label: "Niche", question: "What's your product niche?", sub: "AI matches you with creators who know your category." },
-    { label: "Team", question: "How big is your team?", sub: "Configures collaboration tools and workspace permissions." },
+    ...flow.map((s) => ({ label: s.label, question: s.question, sub: s.sub })),
   ];
-  const CREATOR_STEP_TITLES = [
-    { label: "Account type", question: "Who are you?", sub: "This personalizes your entire BrandOps experience." },
-    { label: "Content Style", question: "What type of videos do you make?", sub: "Brands filter campaigns by content format — pick your style." },
-    { label: "Your Niche", question: "What category do you create in?", sub: "Niche brands prefer niche creators — unlocks relevant campaigns." },
-    { label: "Your Rate", question: "What's your target payout per video?", sub: "Sets your minimum — AI only shows campaigns within your range." },
-    { label: "Turnaround", question: "How fast can you deliver?", sub: "Faster turnaround = more campaign invites from brands." },
-    { label: "Your Setup", question: "What's your filming setup?", sub: "Brands match to your production quality for the right brief type." },
-  ];
-  const STEP_TITLES = isCreator ? CREATOR_STEP_TITLES : BRAND_STEP_TITLES;
 
   const current = STEP_TITLES[step];
 
@@ -687,189 +1048,14 @@ export default function Onboarding() {
                   </div>
                 )}
 
-                {/* ── Step 1: Goal (brand) / Content Style (creator) ── */}
-                {step === 1 && !isCreator && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {GOALS.map(({ icon, label, desc }) => (
-                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.goal === label} onClick={() => set("goal", label)} />
-                    ))}
-                  </div>
-                )}
-                {step === 1 && isCreator && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {CREATOR_CONTENT_STYLES.map(({ icon, label, desc }) => (
-                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.goal === label} onClick={() => set("goal", label)} />
-                    ))}
-                  </div>
-                )}
-
-                {/* ── Step 2: Video Use (brand) / Niche (creator) ───── */}
-                {step === 2 && !isCreator && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {VIDEO_USES.map(({ icon: Icon, label, stat }) => (
-                        <motion.button
-                          key={label}
-                          onClick={() => toggle("platforms", label)}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.97 }}
-                          className={cn(
-                            "flex flex-col items-center gap-2.5 p-4 rounded-2xl border transition-all",
-                            data.platforms.includes(label)
-                              ? "border-[#C6FF00]/60 bg-[#C6FF00]/8"
-                              : "border-white/8 bg-white/2 hover:border-white/20"
-                          )}
-                        >
-                          <Icon className={cn("h-6 w-6", data.platforms.includes(label) ? "text-[#C6FF00]" : "text-white/50")} />
-                          <span className={cn("font-semibold text-sm", data.platforms.includes(label) ? "text-white" : "text-white/60")}>{label}</span>
-                          <span className="text-white/30 text-xs">{stat}</span>
-                        </motion.button>
-                      ))}
-                    </div>
-                    {data.platforms.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-2 bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl px-3 py-2.5 text-xs text-[#C6FF00]"
-                      >
-                        <Check className="h-3.5 w-3.5 shrink-0" />
-                        {data.platforms.length} channel{data.platforms.length > 1 ? "s" : ""} selected — AI will tailor brief templates accordingly
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-                {step === 2 && isCreator && (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      {NICHES.map((n) => (
-                        <PillToggle key={n} label={n} selected={data.niches.includes(n)} onClick={() => toggle("niches", n)} />
-                      ))}
-                    </div>
-                    {data.niches.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-2 bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl px-3 py-2.5 text-xs text-[#C6FF00]"
-                      >
-                        <Check className="h-3.5 w-3.5 shrink-0" />
-                        {data.niches.length} niche{data.niches.length > 1 ? "s" : ""} selected — unlocks matching brand campaigns
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── Step 3: Budget (brand) / Rate (creator) ─────── */}
-                {step === 3 && !isCreator && (
-                  <div className="space-y-4">
-                    {BUDGETS.map(({ label, value, roi }) => (
-                      <motion.button
-                        key={value}
-                        onClick={() => set("budget", value)}
-                        whileHover={{ x: 4 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={cn(
-                          "w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left group",
-                          data.budget === value
-                            ? "border-[#C6FF00]/60 bg-[#C6FF00]/8"
-                            : "border-white/8 bg-white/2 hover:border-white/15"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
-                            data.budget === value ? "border-[#C6FF00] bg-[#C6FF00]" : "border-white/20"
-                          )}>
-                            {data.budget === value && <div className="w-2 h-2 rounded-full bg-black" />}
-                          </div>
-                          <span className={cn("font-semibold text-sm", data.budget === value ? "text-white" : "text-white/70")}>{label}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={cn("text-xs font-medium", data.budget === value ? "text-[#C6FF00]" : "text-white/25 group-hover:text-white/40")}>
-                            {roi}
-                          </span>
-                          <ChevronRight className={cn("h-3.5 w-3.5 transition-colors", data.budget === value ? "text-[#C6FF00]" : "text-white/20")} />
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
-                )}
-                {step === 3 && isCreator && (
-                  <div className="space-y-3">
-                    {CREATOR_RATES.map(({ label, value, note }) => (
-                      <motion.button
-                        key={value}
-                        onClick={() => set("budget", value)}
-                        whileHover={{ x: 4 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={cn(
-                          "w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left group",
-                          data.budget === value
-                            ? "border-[#C6FF00]/60 bg-[#C6FF00]/8"
-                            : "border-white/8 bg-white/2 hover:border-white/15"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
-                            data.budget === value ? "border-[#C6FF00] bg-[#C6FF00]" : "border-white/20"
-                          )}>
-                            {data.budget === value && <div className="w-2 h-2 rounded-full bg-black" />}
-                          </div>
-                          <span className={cn("font-semibold text-sm", data.budget === value ? "text-white" : "text-white/70")}>{label}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={cn("text-xs font-medium", data.budget === value ? "text-[#C6FF00]" : "text-white/25 group-hover:text-white/40")}>
-                            {note}
-                          </span>
-                          <ChevronRight className={cn("h-3.5 w-3.5 transition-colors", data.budget === value ? "text-[#C6FF00]" : "text-white/20")} />
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
-                )}
-
-                {/* ── Step 4: Niche (brand) / Turnaround (creator) ─── */}
-                {step === 4 && !isCreator && (
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      {NICHES.map((n) => (
-                        <PillToggle key={n} label={n} selected={data.niches.includes(n)} onClick={() => toggle("niches", n)} />
-                      ))}
-                    </div>
-                    {data.niches.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-2 bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl px-3 py-2.5 text-xs text-[#C6FF00]"
-                      >
-                        <Bot className="h-3.5 w-3.5 shrink-0" />
-                        AI matching {data.niches.length} niche{data.niches.length > 1 ? "s" : ""} across 2.4M creators
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-                {step === 4 && isCreator && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {CREATOR_TURNAROUNDS.map(({ icon, label, desc }) => (
-                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.turnaround === label} onClick={() => set("turnaround", label)} />
-                    ))}
-                  </div>
-                )}
-
-                {/* ── Step 5: Team size (brand) / Setup (creator) ──── */}
-                {step === 5 && !isCreator && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {TEAM_SIZES.map(({ icon, label, desc }) => (
-                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.teamSize === label} onClick={() => set("teamSize", label)} />
-                    ))}
-                  </div>
-                )}
-                {step === 5 && isCreator && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {CREATOR_SETUPS.map(({ icon, label, desc }) => (
-                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.teamSize === label} onClick={() => set("teamSize", label)} />
-                    ))}
-                  </div>
+                {/* ── Steps 1–5: driven by account-type flow config ── */}
+                {step > 0 && flow[step - 1] && (
+                  <StepContent
+                    config={flow[step - 1]}
+                    data={data}
+                    onChange={set}
+                    onToggle={toggle}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>
