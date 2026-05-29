@@ -25,4 +25,6 @@ export interface CreatorInput {
   brandRating?: number;
   suggestedPayout?: number;
   contentStyles?: string[];
+  paymentMethod?: string | null;
+  paymentDetails?: string | null;
 }

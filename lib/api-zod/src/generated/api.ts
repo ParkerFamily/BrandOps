@@ -364,6 +364,8 @@ export const ListCreatorsResponseItem = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -394,7 +396,9 @@ export const CreateCreatorBody = zod.object({
   "avgTurnaroundDays": zod.number().optional(),
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
-  "contentStyles": zod.array(zod.string()).optional()
+  "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish()
 })
 
 
@@ -424,6 +428,8 @@ export const GetCreatorResponse = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -454,7 +460,9 @@ export const UpdateCreatorBody = zod.object({
   "avgTurnaroundDays": zod.number().optional(),
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
-  "contentStyles": zod.array(zod.string()).optional()
+  "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish()
 })
 
 export const UpdateCreatorResponse = zod.object({
@@ -476,6 +484,8 @@ export const UpdateCreatorResponse = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -542,6 +552,8 @@ export const ListSubmissionsResponseItem = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -621,6 +633,8 @@ export const GetSubmissionResponse = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -694,6 +708,8 @@ export const UpdateSubmissionResponse = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -740,6 +756,8 @@ export const ListPaymentsResponseItem = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -818,6 +836,8 @@ export const GetPaymentResponse = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),
@@ -888,6 +908,8 @@ export const UpdatePaymentResponse = zod.object({
   "brandRating": zod.number().optional(),
   "suggestedPayout": zod.number().optional(),
   "contentStyles": zod.array(zod.string()).optional(),
+  "paymentMethod": zod.string().nullish(),
+  "paymentDetails": zod.string().nullish(),
   "totalEarnings": zod.number().optional(),
   "approvedVideos": zod.number().optional(),
   "createdAt": zod.coerce.date(),

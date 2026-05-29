@@ -22,6 +22,8 @@ export const creatorsTable = pgTable("creators", {
   brandRating: numeric("brand_rating", { precision: 3, scale: 1 }).notNull().default("0"),
   suggestedPayout: numeric("suggested_payout", { precision: 10, scale: 2 }).notNull().default("0"),
   contentStyles: text("content_styles").notNull().default("[]"),
+  paymentMethod: text("payment_method"),
+  paymentDetails: text("payment_details"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

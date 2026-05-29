@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { CreditCard, DollarSign, Send, CheckCircle2, Clock, AlertCircle, Zap } from "lucide-react";
+import { CreditCard, DollarSign, Send, CheckCircle2, Clock, AlertCircle, Zap, TriangleAlert } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -288,6 +288,11 @@ export default function Payments() {
                     <TableCell>
                       <div className="font-medium text-foreground text-sm">{payment.creator?.name ?? "Unknown"}</div>
                       <div className="text-xs text-muted-foreground">{payment.creator?.handle}</div>
+                      {payment.creator && !(payment.creator as { paymentMethod?: string | null }).paymentMethod && (
+                        <div className="flex items-center gap-1 text-xs text-yellow-400 mt-0.5">
+                          <TriangleAlert className="h-3 w-3" /> No payment info
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm">{payment.campaign?.title ?? "Unknown"}</TableCell>
                     <TableCell>{getStatusBadge(payment.status)}</TableCell>

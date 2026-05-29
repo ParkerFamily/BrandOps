@@ -196,6 +196,8 @@ export interface Creator {
   brandRating?: number;
   suggestedPayout?: number;
   contentStyles?: string[];
+  paymentMethod?: string | null;
+  paymentDetails?: string | null;
   totalEarnings?: number;
   approvedVideos?: number;
   createdAt: string;
@@ -229,6 +231,8 @@ export interface CreatorInput {
   brandRating?: number;
   suggestedPayout?: number;
   contentStyles?: string[];
+  paymentMethod?: string | null;
+  paymentDetails?: string | null;
 }
 
 export type CreatorUpdatePlatform = typeof CreatorUpdatePlatform[keyof typeof CreatorUpdatePlatform];
@@ -266,6 +270,8 @@ export interface CreatorUpdate {
   brandRating?: number;
   suggestedPayout?: number;
   contentStyles?: string[];
+  paymentMethod?: string | null;
+  paymentDetails?: string | null;
 }
 
 export type SubmissionStatus = typeof SubmissionStatus[keyof typeof SubmissionStatus];

@@ -906,6 +906,12 @@ components:
           type: array
           items:
             type: string
+        paymentMethod:
+          type: string
+          nullable: true
+        paymentDetails:
+          type: string
+          nullable: true
         totalEarnings:
           type: number
         approvedVideos:
@@ -961,6 +967,12 @@ components:
           type: array
           items:
             type: string
+        paymentMethod:
+          type: string
+          nullable: true
+        paymentDetails:
+          type: string
+          nullable: true
 
     CreatorUpdate:
       type: object
@@ -1001,6 +1013,12 @@ components:
           type: array
           items:
             type: string
+        paymentMethod:
+          type: string
+          nullable: true
+        paymentDetails:
+          type: string
+          nullable: true
 
     Submission:
       type: object

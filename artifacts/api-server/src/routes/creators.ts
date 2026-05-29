@@ -27,6 +27,8 @@ function enrichCreator(creator: typeof creatorsTable.$inferSelect, pays: { statu
     brandRating: parseFloat(creator.brandRating),
     suggestedPayout: parseFloat(creator.suggestedPayout),
     contentStyles: parseContentStyles(creator.contentStyles),
+    paymentMethod: creator.paymentMethod ?? null,
+    paymentDetails: creator.paymentDetails ?? null,
     totalEarnings: pays.filter(p => p.status === "paid").reduce((sum, p) => sum + parseFloat(p.amount), 0),
     approvedVideos: subs.filter(s => s.status === "approved" || s.status === "paid").length,
   };
@@ -147,6 +149,8 @@ router.patch("/creators/:id", async (req, res): Promise<void> => {
   if (data.brandRating !== undefined) updateData.brandRating = String(data.brandRating);
   if (data.suggestedPayout !== undefined) updateData.suggestedPayout = String(data.suggestedPayout);
   if (data.contentStyles !== undefined) updateData.contentStyles = JSON.stringify(data.contentStyles);
+  if (data.paymentMethod !== undefined) updateData.paymentMethod = data.paymentMethod ?? null;
+  if (data.paymentDetails !== undefined) updateData.paymentDetails = data.paymentDetails ?? null;
 
   const [creator] = await db.update(creatorsTable).set(updateData).where(eq(creatorsTable.id, params.data.id)).returning();
   if (!creator) {

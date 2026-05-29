@@ -7,10 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { UserCircle2, Mail, PlayCircle, Sparkles, Loader2, Target, TrendingUp, DollarSign, Star } from "lucide-react";
-import { SiTiktok, SiInstagram, SiYoutube } from "react-icons/si";
+import {
+  UserCircle2, Mail, PlayCircle, Sparkles, Loader2, Target,
+  TrendingUp, DollarSign, Star, CreditCard, CheckCircle2, AlertCircle,
+} from "lucide-react";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -26,6 +30,16 @@ interface CreatorMatchResult {
   audienceInsight: string;
   riskFactors: string;
 }
+
+type PaymentMethodType = "paypal" | "venmo" | "zelle" | "bank_transfer" | "check";
+
+const PAYMENT_METHODS: { value: PaymentMethodType; label: string; placeholder: string }[] = [
+  { value: "paypal",        label: "PayPal",         placeholder: "PayPal email address" },
+  { value: "venmo",         label: "Venmo",          placeholder: "Venmo handle (e.g. @username)" },
+  { value: "zelle",         label: "Zelle",          placeholder: "Phone number or email for Zelle" },
+  { value: "bank_transfer", label: "Bank Transfer",  placeholder: "Routing #, Account #, Bank name" },
+  { value: "check",         label: "Check",          placeholder: "Mailing address for check" },
+];
 
 function MatchScoreRing({ score }: { score: number }) {
   const color = score >= 80 ? "text-primary" : score >= 60 ? "text-yellow-400" : "text-red-400";
@@ -43,6 +57,164 @@ function MatchScoreRing({ score }: { score: number }) {
       </svg>
       <span className={cn("text-xl font-black z-10", color)}>{score}</span>
     </div>
+  );
+}
+
+function PaymentSetupCard({
+  creatorId,
+  currentMethod,
+  currentDetails,
+}: {
+  creatorId: number;
+  currentMethod: string | null | undefined;
+  currentDetails: string | null | undefined;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const updateCreator = useUpdateCreator();
+
+  const [editing, setEditing] = useState(!currentMethod);
+  const [method, setMethod] = useState<PaymentMethodType | "">(
+    (currentMethod as PaymentMethodType) ?? ""
+  );
+  const [details, setDetails] = useState(currentDetails ?? "");
+
+  const methodMeta = PAYMENT_METHODS.find(m => m.value === method);
+  const isSetup = !!currentMethod && !!currentDetails;
+
+  const handleSave = () => {
+    if (!method || !details.trim()) {
+      toast({ title: "Fill in all payment fields", variant: "destructive" });
+      return;
+    }
+    updateCreator.mutate(
+      { id: creatorId, data: { paymentMethod: method, paymentDetails: details.trim() } },
+      {
+        onSuccess: () => {
+          toast({ title: "Payment info saved" });
+          queryClient.invalidateQueries({ queryKey: getGetCreatorQueryKey(creatorId) });
+          setEditing(false);
+        },
+        onError: () => toast({ title: "Failed to save payment info", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleClear = () => {
+    updateCreator.mutate(
+      { id: creatorId, data: { paymentMethod: null, paymentDetails: null } },
+      {
+        onSuccess: () => {
+          toast({ title: "Payment info removed" });
+          queryClient.invalidateQueries({ queryKey: getGetCreatorQueryKey(creatorId) });
+          setMethod("");
+          setDetails("");
+          setEditing(true);
+        },
+      }
+    );
+  };
+
+  return (
+    <Card className="bg-card border-card-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-primary" />
+            Payment Setup
+          </span>
+          {isSetup && !editing && (
+            <span className="flex items-center gap-1.5 text-xs text-primary font-normal">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Ready
+            </span>
+          )}
+          {!isSetup && (
+            <span className="flex items-center gap-1.5 text-xs text-yellow-400 font-normal">
+              <AlertCircle className="h-3.5 w-3.5" /> Not set up
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!editing && isSetup ? (
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg bg-muted/30 border border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground uppercase tracking-wide">Method</span>
+                <span className="text-sm font-semibold">
+                  {PAYMENT_METHODS.find(m => m.value === currentMethod)?.label ?? currentMethod}
+                </span>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">Details</span>
+                <span className="text-sm text-right break-all">{currentDetails}</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => { setMethod((currentMethod as PaymentMethodType) ?? ""); setDetails(currentDetails ?? ""); setEditing(true); }}>
+                Edit
+              </Button>
+              <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={handleClear} disabled={updateCreator.isPending}>
+                Remove
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Payment Method</Label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {PAYMENT_METHODS.map(m => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setMethod(m.value)}
+                    className={cn(
+                      "text-left px-3 py-2 rounded-lg border text-sm font-medium transition-all",
+                      method === m.value
+                        ? "border-primary/50 bg-primary/10 text-primary"
+                        : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {method && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                  {methodMeta?.label} Details
+                </Label>
+                <Input
+                  value={details}
+                  onChange={e => setDetails(e.target.value)}
+                  placeholder={methodMeta?.placeholder}
+                  className="bg-muted/20 border-border"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              {isSetup && (
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditing(false)}>
+                  Cancel
+                </Button>
+              )}
+              <Button
+                size="sm"
+                className={cn("bg-primary text-primary-foreground hover:bg-primary/90", isSetup ? "flex-1" : "w-full")}
+                onClick={handleSave}
+                disabled={updateCreator.isPending || !method || !details.trim()}
+              >
+                {updateCreator.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Payment Info"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -88,15 +260,6 @@ export default function CreatorDetail() {
         queryClient.invalidateQueries({ queryKey: getGetCreatorQueryKey(id) });
       }
     });
-  };
-
-  const getPlatformIcon = (platform: string) => {
-    switch (platform) {
-      case "tiktok": return <SiTiktok className="h-5 w-5" />;
-      case "instagram": return <SiInstagram className="h-5 w-5" />;
-      case "youtube": return <SiYoutube className="h-5 w-5" />;
-      default: return null;
-    }
   };
 
   const tierColor = (tier?: string) => {
@@ -145,7 +308,6 @@ export default function CreatorDetail() {
                   </div>
                   <div className="flex flex-wrap items-center gap-4 mt-1.5 text-muted-foreground text-sm">
                     <div className="flex items-center gap-1.5">
-                      {getPlatformIcon(creator.platform)}
                       <span className="font-medium">{creator.handle}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -187,7 +349,7 @@ export default function CreatorDetail() {
       </Card>
 
       <div className="grid md:grid-cols-3 gap-6">
-        {/* Submissions */}
+        {/* Left: submissions + performance */}
         <div className="md:col-span-2 space-y-6">
           <Card className="bg-card border-card-border">
             <CardHeader>
@@ -201,7 +363,6 @@ export default function CreatorDetail() {
             </CardContent>
           </Card>
 
-          {/* Performance */}
           <Card className="bg-card border-card-border">
             <CardHeader>
               <CardTitle className="text-base">Performance Metrics</CardTitle>
@@ -259,8 +420,14 @@ export default function CreatorDetail() {
           </Card>
         </div>
 
-        {/* AI Match Panel */}
-        <div>
+        {/* Right: payment setup + AI match */}
+        <div className="space-y-6">
+          <PaymentSetupCard
+            creatorId={id}
+            currentMethod={creator.paymentMethod}
+            currentDetails={creator.paymentDetails}
+          />
+
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -298,7 +465,6 @@ export default function CreatorDetail() {
 
               {matchResult && (
                 <div className="space-y-4">
-                  {/* Score ring */}
                   <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 border border-border">
                     <MatchScoreRing score={matchResult.matchScore} />
                     <div>
@@ -313,7 +479,6 @@ export default function CreatorDetail() {
                     </div>
                   </div>
 
-                  {/* Why fits */}
                   <div className="space-y-1">
                     <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                       <Star className="h-3 w-3" /> Why They Fit
@@ -321,7 +486,6 @@ export default function CreatorDetail() {
                     <p className="text-sm leading-relaxed text-muted-foreground">{matchResult.whyFits}</p>
                   </div>
 
-                  {/* Key details */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border">
                       <DollarSign className="h-4 w-4 text-primary shrink-0" />
@@ -339,13 +503,11 @@ export default function CreatorDetail() {
                     </div>
                   </div>
 
-                  {/* Audience insight */}
                   <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/15">
                     <div className="text-xs font-semibold text-blue-400 mb-1">Audience Insight</div>
                     <p className="text-xs text-muted-foreground leading-relaxed">{matchResult.audienceInsight}</p>
                   </div>
 
-                  {/* Risk factors */}
                   {matchResult.riskFactors && matchResult.riskFactors.toLowerCase() !== "none identified" && (
                     <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/15">
                       <div className="text-xs font-semibold text-yellow-400 mb-1">Considerations</div>
