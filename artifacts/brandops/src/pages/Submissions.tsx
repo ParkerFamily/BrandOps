@@ -11,11 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2 } from "lucide-react";
+import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
+
+const ONBOARDING_KEY = "brandops_onboarded";
+function getOnboarding() {
+  try { const r = localStorage.getItem(ONBOARDING_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -171,6 +177,10 @@ export default function Submissions() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<ListSubmissionsStatus | "all">("all");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const onboarding = getOnboarding();
+  const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
   const { data: submissions, isLoading } = useListSubmissions(
     statusFilter !== "all" ? { status: statusFilter } : {}
@@ -207,9 +217,24 @@ export default function Submissions() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Review Queue</h1>
-          <p className="text-muted-foreground mt-1">Review and approve UGC submissions — use AI scoring to decide faster.</p>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {isCreator ? "My Submissions" : "Review Queue"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {isCreator
+              ? "Track the status of videos you've submitted to brand campaigns."
+              : "Review and approve UGC submissions — use AI scoring to decide faster."}
+          </p>
         </div>
+        {isCreator && (
+          <Button
+            onClick={() => setUploadOpen(true)}
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.15)]"
+          >
+            <Upload className="h-4 w-4" />
+            Upload Video
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -379,6 +404,9 @@ export default function Submissions() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Creator upload dialog */}
+      <SubmitVideoDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
   );
 }

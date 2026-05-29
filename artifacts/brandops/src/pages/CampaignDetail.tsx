@@ -18,9 +18,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, PlayCircle, ExternalLink, Trash2 } from "lucide-react";
+import { Check, X, PlayCircle, ExternalLink, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
+import { useState } from "react";
+import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
+
+const ONBOARDING_KEY = "brandops_onboarded";
+function getOnboarding() {
+  try { const r = localStorage.getItem(ONBOARDING_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
 
 export default function CampaignDetail() {
   const [, params] = useRoute("/campaigns/:id");
@@ -28,6 +35,10 @@ export default function CampaignDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const onboarding = getOnboarding();
+  const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
   const { data: campaign, isLoading: campaignLoading } = useGetCampaign(id, { 
     query: { enabled: !!id, queryKey: getGetCampaignQueryKey(id) } 
@@ -124,19 +135,31 @@ export default function CampaignDetail() {
           <p className="text-muted-foreground mt-1">Due {format(new Date(campaign.deadline), "MMM d, yyyy")}</p>
         </div>
         <div className="flex gap-2">
-          {campaign.status === "draft" && (
-            <Button onClick={handlePublish} disabled={publishCampaign.isPending} data-testid="button-publish-campaign">
-              {publishCampaign.isPending ? "Publishing..." : "Publish"}
+          {isCreator ? (
+            <Button
+              onClick={() => setUploadOpen(true)}
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.15)]"
+            >
+              <Upload className="h-4 w-4" />
+              Submit Your Video
             </Button>
+          ) : (
+            <>
+              {campaign.status === "draft" && (
+                <Button onClick={handlePublish} disabled={publishCampaign.isPending} data-testid="button-publish-campaign">
+                  {publishCampaign.isPending ? "Publishing..." : "Publish"}
+                </Button>
+              )}
+              {campaign.status === "active" && (
+                <Button variant="secondary" onClick={handlePause} disabled={updateCampaign.isPending} data-testid="button-pause-campaign">
+                  Pause
+                </Button>
+              )}
+              <Button variant="destructive" size="icon" onClick={handleDelete} disabled={deleteCampaign.isPending} data-testid="button-delete-campaign">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </>
           )}
-          {campaign.status === "active" && (
-            <Button variant="secondary" onClick={handlePause} disabled={updateCampaign.isPending} data-testid="button-pause-campaign">
-              Pause
-            </Button>
-          )}
-          <Button variant="destructive" size="icon" onClick={handleDelete} disabled={deleteCampaign.isPending} data-testid="button-delete-campaign">
-            <Trash2 className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
@@ -173,10 +196,16 @@ export default function CampaignDetail() {
           <Tabs defaultValue="submissions">
             <div className="flex items-center justify-between">
               <TabsList className="bg-muted">
-                <TabsTrigger value="submissions">Submissions</TabsTrigger>
-                <TabsTrigger value="creators">Creators</TabsTrigger>
+                <TabsTrigger value="submissions">{isCreator ? "My Submissions" : "Submissions"}</TabsTrigger>
+                {!isCreator && <TabsTrigger value="creators">Creators</TabsTrigger>}
               </TabsList>
-              <Button variant="outline" size="sm" onClick={handleCreateMockSubmission}>Add Mock Submission</Button>
+              {isCreator ? (
+                <Button size="sm" onClick={() => setUploadOpen(true)} className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Upload className="h-3.5 w-3.5" /> Submit Video
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" onClick={handleCreateMockSubmission}>Add Mock Submission</Button>
+              )}
             </div>
             
             <TabsContent value="submissions" className="mt-4 space-y-4">
@@ -208,7 +237,7 @@ export default function CampaignDetail() {
                           <div className="text-sm mt-2 text-muted-foreground">Submitted {format(new Date(sub.createdAt), "MMM d, yyyy")}</div>
                         </div>
                         
-                        {sub.status === "reviewing" || sub.status === "pending" ? (
+                        {!isCreator && (sub.status === "reviewing" || sub.status === "pending") && (
                           <div className="flex gap-2 mt-4 pt-4 border-t border-border">
                             <Button size="sm" onClick={() => handleReview(sub.id, "approved")} className="bg-primary text-primary-foreground hover:bg-primary/90" data-testid={`btn-approve-${sub.id}`}>
                               <Check className="h-4 w-4 mr-1" /> Approve
@@ -220,7 +249,7 @@ export default function CampaignDetail() {
                               <X className="h-4 w-4 mr-1" /> Reject
                             </Button>
                           </div>
-                        ) : null}
+                        )}
                       </div>
                     </div>
                   </Card>
@@ -273,6 +302,16 @@ export default function CampaignDetail() {
           </Card>
         </div>
       </div>
+
+      {/* Creator video upload dialog */}
+      {campaign && (
+        <SubmitVideoDialog
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          preselectedCampaignId={id}
+          preselectedCampaignTitle={campaign.title}
+        />
+      )}
     </div>
   );
 }

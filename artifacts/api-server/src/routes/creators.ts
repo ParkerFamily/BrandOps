@@ -99,6 +99,37 @@ router.post("/creators", async (req, res): Promise<void> => {
   res.status(201).json(enrichCreator(creator, [], []));
 });
 
+router.post("/creators/find-or-create", async (req, res): Promise<void> => {
+  const { name, email } = req.body as { name?: string; email?: string };
+  if (!email?.trim()) { res.status(400).json({ error: "email is required" }); return; }
+
+  const existing = await db.select().from(creatorsTable).where(eq(creatorsTable.email, email.trim()));
+  if (existing.length > 0) {
+    const subs = await db.select().from(submissionsTable).where(eq(submissionsTable.creatorId, existing[0].id));
+    const pays = await db.select().from(paymentsTable).where(eq(paymentsTable.creatorId, existing[0].id));
+    res.json(enrichCreator(existing[0], pays, subs));
+    return;
+  }
+
+  const displayName = name?.trim() || email.split("@")[0] || "Creator";
+  const [creator] = await db.insert(creatorsTable).values({
+    name: displayName,
+    email: email.trim(),
+    platform: "tiktok",
+    handle: `@${displayName.toLowerCase().replace(/\s+/g, "")}`,
+    niche: "",
+  }).returning();
+
+  await db.insert(activityTable).values({
+    type: "creator_joined",
+    message: `Creator ${creator.name} joined the platform`,
+    entityId: creator.id,
+    entityType: "creator",
+  });
+
+  res.status(201).json(enrichCreator(creator, [], []));
+});
+
 router.get("/creators/:id", async (req, res): Promise<void> => {
   const params = GetCreatorParams.safeParse(req.params);
   if (!params.success) {
