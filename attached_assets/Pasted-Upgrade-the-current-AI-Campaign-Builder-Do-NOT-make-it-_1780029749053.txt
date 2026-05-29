@@ -1,0 +1,119 @@
+Upgrade the current AI Campaign Builder. Do NOT make it feel like a manual form.
+
+Current problem:
+The AI Campaign Builder looks too much like the manual campaign creation modal. It has too many standard input fields and does not feel AI-powered.
+
+New direction:
+The AI Campaign Builder should feel like ChatGPT for launching UGC campaigns.
+
+Replace the current form-style AI Campaign Builder with a conversational AI campaign creation experience.
+
+Core UX:
+
+* One large prompt box
+* User can type naturally:
+  “I have a fitness app and need 20 UGC videos for TikTok ads. Budget is $5,000. I want relatable creators, strong hooks, and videos that push app installs.”
+* AI extracts:
+
+  * product/app name
+  * campaign goal
+  * budget
+  * payout per approved video
+  * creator requirements
+  * video format
+  * tone/style
+  * platform format
+  * deliverables
+  * timeline
+  * usage rights
+  * suggested creator count
+
+AI Builder layout:
+
+1. Top heading:
+   “Tell BrandOps what you need”
+
+2. Subheading:
+   “Describe your product, budget, audience, and goal. AI will turn it into a complete UGC campaign.”
+
+3. Large textarea prompt:
+   Placeholder:
+   “Example: I’m launching a skincare brand and need 15 short UGC videos for TikTok and Reels. Budget is $3,000. I want product demos, testimonials, and strong hooks for paid ads.”
+
+4. Quick chips under prompt:
+
+* App installs
+* Product demo
+* TikTok ads
+* Instagram Reels
+* Testimonials
+* Talking head
+* Lifestyle
+* Fast turnaround
+
+Clicking chips should add context to the prompt.
+
+5. Optional small fields ONLY:
+
+* Total budget
+* Deadline
+  These should be secondary, not the main UI.
+
+6. Button:
+   “Generate Campaign”
+
+7. AI generation state:
+   Show animated steps:
+
+* Reading campaign goal
+* Building creator requirements
+* Writing UGC brief
+* Estimating payout strategy
+* Preparing campaign draft
+
+8. Generated campaign preview:
+   After OpenAI returns, show a polished editable preview with sections:
+
+* Campaign title
+* Campaign summary
+* Creator brief
+* Deliverables
+* Video concepts
+* Hook ideas
+* CTA ideas
+* Suggested payout plan
+* Suggested number of videos
+* Usage rights language
+* Timeline
+* Approval criteria
+
+9. Add actions:
+
+* Regenerate
+* Edit sections
+* Save Draft
+* Publish Campaign
+
+10. Use OpenAI API:
+    Use existing OpenAI setup.
+    Send the full natural language prompt to OpenAI.
+    Return structured JSON for the campaign draft.
+    Do not hardcode fake AI output.
+
+11. AI should infer missing details:
+    If user does not provide payout per video, estimate it from total budget and target video count.
+    If user does not provide video count, suggest based on budget.
+    If user does not provide platforms, default to TikTok/Reels style UGC.
+    If user does not provide creator type, suggest based on product and campaign goal.
+
+12. Keep manual creation separate:
+    Manual campaign creation can still exist as its own button.
+    AI Campaign Builder should NOT look like the manual version.
+
+13. Design:
+    Keep current BrandOps black + neon lime theme.
+    Make the modal wider and more premium.
+    Use glowing borders, streaming text, subtle motion, and polished AI states.
+
+Goal:
+The user should feel like they can describe their campaign in plain English and BrandOps figures everything out.

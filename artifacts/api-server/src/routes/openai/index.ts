@@ -78,41 +78,45 @@ router.post("/openai/conversations/:id/messages", async (req, res): Promise<void
 // ─── AI Campaign Builder ──────────────────────────────────────────────────────
 
 router.post("/openai/campaign-builder", async (req, res): Promise<void> => {
-  const { productName, goal, budget, payoutPerVideo, creatorType, platforms, tone, notes } = req.body;
-  if (!productName || !goal || !budget) { res.status(400).json({ error: "productName, goal, and budget are required" }); return; }
+  const { prompt, budget, deadline } = req.body as { prompt?: string; budget?: number; deadline?: string };
+  if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
 
-  const suggestedCount = Math.max(1, Math.floor(Number(budget) / Number(payoutPerVideo || 100)));
+  const systemPrompt = `You are a world-class UGC campaign strategist for brands (NOT influencer marketing). Brands hire creators to produce video content that the BRAND posts as ads or organic content. Respond ONLY with a valid JSON object — no markdown, no explanation, no code fences.`;
 
-  const systemPrompt = `You are a world-class UGC campaign strategist. Respond ONLY with a valid JSON object, no markdown, no explanation.`;
-  const userPrompt = `Create a complete UGC campaign brief for:
-Product/App: ${productName}
-Campaign Goal: ${goal}
-Total Budget: $${budget}
-Payout per approved video: $${payoutPerVideo || "negotiable"}
-Target Creator Type: ${creatorType || "lifestyle/micro-influencer"}
-Platforms: ${Array.isArray(platforms) ? platforms.join(", ") : platforms || "TikTok, Instagram"}
-Tone/Style: ${tone || "authentic, relatable"}
-Notes: ${notes || "none"}
-Suggested video count: ${suggestedCount}
+  const userPrompt = `A brand described their UGC campaign need in plain English. Extract all details and write a complete campaign brief.
 
-Return ONLY this JSON structure:
+Brand's description:
+"${prompt}"
+${budget ? `Total Budget: $${budget}` : ""}
+${deadline ? `Deadline: ${deadline}` : ""}
+
+Infer any missing details (video count from budget, payout per video, creator type, format, etc.).
+
+Return ONLY this exact JSON:
 {
   "title": "compelling campaign title",
-  "description": "2-3 sentence campaign description that excites creators",
-  "creatorInstructions": "detailed brief for creators with clear dos and don'ts (use newlines for each point)",
-  "hookIdeas": ["hook idea 1", "hook idea 2", "hook idea 3", "hook idea 4"],
-  "deliverables": "specific format, length, and submission requirements",
-  "usageRights": "usage rights terms (e.g. 12-month non-exclusive license to use content across paid and organic channels)",
+  "summary": "2-3 sentences that capture the goal and energy of this campaign",
+  "creatorBrief": "full creator brief — what to film, how to deliver it, what makes a winning video. Use clear paragraphs.",
+  "deliverables": "specific format (e.g. vertical 9:16, 15-30s), resolution, caption requirements, submission method",
+  "videoConceptIdeas": ["concept 1", "concept 2", "concept 3"],
+  "hookIdeas": ["hook line 1", "hook line 2", "hook line 3", "hook line 4"],
+  "ctaIdeas": ["cta 1", "cta 2", "cta 3"],
+  "payoutStrategy": "e.g. $150 per approved video, bonus $50 for top performers",
+  "suggestedVideoCount": 20,
+  "suggestedPayoutPerVideo": 150,
+  "estimatedTotalCost": 3000,
+  "usageRights": "full usage rights language — e.g. 12-month non-exclusive license for paid ads and organic across all channels",
   "suggestedDeadline": "e.g. 14 days from campaign acceptance",
-  "suggestedVideoCount": ${suggestedCount},
-  "toneGuidance": "2-3 sentences on the specific tone and style expected",
+  "approvalCriteria": ["criterion 1", "criterion 2", "criterion 3"],
+  "creatorType": "description of the ideal creator for this campaign",
+  "toneAndStyle": "2-3 sentences on tone, energy, and visual feel",
   "doList": ["do 1", "do 2", "do 3"],
   "dontList": ["don't 1", "don't 2", "don't 3"]
 }`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.4",
-    max_completion_tokens: 2000,
+    max_completion_tokens: 3000,
     messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
   });
 
@@ -121,7 +125,7 @@ Return ONLY this JSON structure:
   try {
     result = JSON.parse(raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim());
   } catch {
-    result = { title: productName + " UGC Campaign", description: raw, hookIdeas: [], creatorInstructions: "" };
+    result = { title: "UGC Campaign", summary: raw, hookIdeas: [], creatorBrief: "" };
   }
   res.json(result);
 });
