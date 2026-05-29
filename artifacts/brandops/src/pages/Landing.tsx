@@ -350,27 +350,39 @@ const TESTIMONIALS = [
 const PRICING = [
   {
     name: "Starter",
-    price: 49,
+    monthlyPrice: 49,
+    annualMonthly: 24.5,
+    annualTotal: 294,
     desc: "For solo founders and small brands just getting started.",
     features: ["3 active campaigns", "50 creator slots", "AI campaign builder", "Basic analytics", "Stripe payouts", "Email support"],
     cta: "Start Free Trial",
     highlight: false,
+    stripeMonthly: "price_1TcK62BUl8zlcM3knvtdpFiN",
+    stripeAnnual: "price_1TcK6TBUl8zlcM3kxKUJu2Wt",
   },
   {
     name: "Growth",
-    price: 149,
+    monthlyPrice: 149,
+    annualMonthly: 74.5,
+    annualTotal: 894,
     desc: "For growing brands running multiple campaigns.",
     features: ["Unlimited campaigns", "500 creator slots", "AI campaign builder", "AI submission review", "Advanced analytics", "AI assistant", "Priority support", "Team members (5)"],
     cta: "Start Free Trial",
     highlight: true,
+    stripeMonthly: "price_1TcK62BUl8zlcM3k0XFy9OXv",
+    stripeAnnual: "price_1TcK6TBUl8zlcM3kmsgowctu",
   },
   {
     name: "Enterprise",
-    price: null,
+    monthlyPrice: null,
+    annualMonthly: null,
+    annualTotal: null,
     desc: "For agencies and enterprise brands at scale.",
     features: ["Unlimited everything", "Custom creator network", "White-label option", "Custom AI training", "Dedicated account manager", "SLA guarantee", "Custom integrations"],
     cta: "Contact Sales",
     highlight: false,
+    stripeMonthly: null,
+    stripeAnnual: null,
   },
 ];
 
@@ -431,6 +443,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 export default function Landing() {
   const [, setLocation] = useLocation();
+  const [annual, setAnnual] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
@@ -636,68 +649,117 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-16"
+            className="text-center mb-12"
           >
             <div className="text-[#C6FF00] text-sm font-semibold tracking-widest uppercase mb-4">Pricing</div>
             <h2 className="text-4xl font-black mb-4">Simple, transparent pricing</h2>
-            <p className="text-white/50">14-day free trial on all plans. No credit card required.</p>
+            <p className="text-white/50 mb-8">14-day free trial on all plans. No credit card required.</p>
+
+            {/* Billing toggle */}
+            <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-full p-1">
+              <button
+                onClick={() => setAnnual(false)}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-semibold transition-all",
+                  !annual ? "bg-white text-black" : "text-white/50 hover:text-white"
+                )}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setAnnual(true)}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2",
+                  annual ? "bg-white text-black" : "text-white/50 hover:text-white"
+                )}
+              >
+                Yearly
+                <span className={cn(
+                  "text-xs font-bold px-2 py-0.5 rounded-full transition-all",
+                  annual ? "bg-[#C6FF00] text-black" : "bg-[#C6FF00]/20 text-[#C6FF00]"
+                )}>
+                  Save 50%
+                </span>
+              </button>
+            </div>
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {PRICING.map(({ name, price, desc, features, cta, highlight }, i) => (
-              <motion.div
-                key={name}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className={cn(
-                  "rounded-2xl border p-7 flex flex-col relative",
-                  highlight
-                    ? "bg-[#C6FF00]/5 border-[#C6FF00]/30 shadow-[0_0_60px_rgba(198,255,0,0.08)]"
-                    : "bg-white/3 border-white/8"
-                )}
-              >
-                {highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#C6FF00] text-black text-xs font-bold px-4 py-1 rounded-full">
-                    Most Popular
-                  </div>
-                )}
-                <div className="mb-6">
-                  <div className="text-white font-bold text-lg mb-1">{name}</div>
-                  <p className="text-white/40 text-sm">{desc}</p>
-                </div>
-                <div className="mb-6">
-                  {price ? (
-                    <div className="flex items-end gap-1">
-                      <span className="text-4xl font-black">${price}</span>
-                      <span className="text-white/40 text-sm mb-1">/month</span>
-                    </div>
-                  ) : (
-                    <div className="text-3xl font-black">Custom</div>
-                  )}
-                </div>
-                <ul className="space-y-3 mb-8 flex-1">
-                  {features.map((f) => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm text-white/70">
-                      <Check className={cn("h-4 w-4 shrink-0", highlight ? "text-[#C6FF00]" : "text-white/40")} />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => setLocation("/login")}
+            {PRICING.map(({ name, monthlyPrice, annualMonthly, annualTotal, desc, features, cta, highlight }, i) => {
+              const displayPrice = annual ? annualMonthly : monthlyPrice;
+              const originalPrice = annual ? monthlyPrice : null;
+              return (
+                <motion.div
+                  key={name}
+                  initial={{ opacity: 0, y: 24 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
                   className={cn(
-                    "w-full py-3 rounded-xl font-semibold text-sm transition-all",
+                    "rounded-2xl border p-7 flex flex-col relative",
                     highlight
-                      ? "bg-[#C6FF00] text-black hover:bg-[#d4ff33] hover:scale-105"
-                      : "bg-white/5 text-white hover:bg-white/10 border border-white/10"
+                      ? "bg-[#C6FF00]/5 border-[#C6FF00]/30 shadow-[0_0_60px_rgba(198,255,0,0.08)]"
+                      : "bg-white/3 border-white/8"
                   )}
                 >
-                  {cta}
-                </button>
-              </motion.div>
-            ))}
+                  {highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#C6FF00] text-black text-xs font-bold px-4 py-1 rounded-full">
+                      Most Popular
+                    </div>
+                  )}
+                  <div className="mb-6">
+                    <div className="text-white font-bold text-lg mb-1">{name}</div>
+                    <p className="text-white/40 text-sm">{desc}</p>
+                  </div>
+                  <div className="mb-6">
+                    {displayPrice ? (
+                      <div>
+                        <div className="flex items-end gap-2">
+                          {originalPrice && annual && (
+                            <span className="text-white/30 line-through text-xl font-bold mb-0.5">${originalPrice}</span>
+                          )}
+                          <span className="text-4xl font-black">${displayPrice}</span>
+                          <span className="text-white/40 text-sm mb-1">/mo</span>
+                        </div>
+                        {annual && annualTotal && (
+                          <motion.p
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="text-[#C6FF00] text-xs mt-1 font-medium"
+                          >
+                            Billed ${annualTotal}/year · 50% off
+                          </motion.p>
+                        )}
+                        {!annual && (
+                          <p className="text-white/30 text-xs mt-1">or ${annualMonthly}/mo billed yearly</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-3xl font-black">Custom</div>
+                    )}
+                  </div>
+                  <ul className="space-y-3 mb-8 flex-1">
+                    {features.map((f) => (
+                      <li key={f} className="flex items-center gap-2.5 text-sm text-white/70">
+                        <Check className={cn("h-4 w-4 shrink-0", highlight ? "text-[#C6FF00]" : "text-white/40")} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() => setLocation("/login")}
+                    className={cn(
+                      "w-full py-3 rounded-xl font-semibold text-sm transition-all",
+                      highlight
+                        ? "bg-[#C6FF00] text-black hover:bg-[#d4ff33] hover:scale-105"
+                        : "bg-white/5 text-white hover:bg-white/10 border border-white/10"
+                    )}
+                  >
+                    {cta}
+                  </button>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>
