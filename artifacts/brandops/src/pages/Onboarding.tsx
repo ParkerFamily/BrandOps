@@ -26,6 +26,7 @@ interface OnboardingData {
   budget: string;
   niches: string[];
   teamSize: string;
+  turnaround: string;
 }
 
 /* ─── Left panel visual data per step ──────────────────────────────────── */
@@ -37,6 +38,15 @@ const AI_MESSAGES: Record<number, string[]> = {
   3: ["Budget unlocks creator tier recommendations.", "AI payout strategies auto-configured.", "ROI modeling based on your budget range."],
   4: ["Niche sharpens your creator matching.", "AI finds top-performing niche creators.", "Category benchmarks loaded into your dashboard."],
   5: ["Team size configures collaboration tools.", "Roles and permissions auto-assigned.", "Your workspace is almost ready."],
+};
+
+const CREATOR_AI_MESSAGES: Record<number, string[]> = {
+  0: ["Sign up to get paid for your creativity.", "Brands come to you — no cold pitching.", "Takes about 60 seconds to set up."],
+  1: ["Content style matches you with relevant briefs.", "Brands filter campaigns by video format.", "Product demos are the highest-demand right now."],
+  2: ["Niche brands prefer niche creators.", "Category specialists earn 2x more per video.", "Your niche unlocks exclusive campaigns."],
+  3: ["Your rate sets your minimum payout floor.", "AI matches you within your preferred range.", "Top creators here earn $300+ per video."],
+  4: ["Fast delivery = more campaign invites.", "Brands prioritize reliable turnarounds.", "2–3 day creators get 3x more offers."],
+  5: ["Better equipment = higher earning tier.", "Brands match to your production quality.", "Your setup unlocks the right campaign types."],
 };
 
 const STEP_STATS: Record<number, { label: string; value: string; delta?: string }[]> = {
@@ -69,6 +79,39 @@ const STEP_STATS: Record<number, { label: string; value: string; delta?: string 
     { label: "Team features", value: "Unlocked" },
     { label: "AI briefs/mo", value: "Unlimited" },
     { label: "Setup time", value: "< 2 min" },
+  ],
+};
+
+const CREATOR_STEP_STATS: Record<number, { label: string; value: string }[]> = {
+  0: [
+    { label: "Active campaigns", value: "4,800+" },
+    { label: "Avg payout / video", value: "$220" },
+    { label: "Creators earning", value: "38,000" },
+  ],
+  1: [
+    { label: "Product demo demand", value: "High" },
+    { label: "Campaigns open now", value: "1,200+" },
+    { label: "Avg demo payout", value: "$180" },
+  ],
+  2: [
+    { label: "Beauty campaigns", value: "340" },
+    { label: "Fitness campaigns", value: "210" },
+    { label: "Tech campaigns", value: "185" },
+  ],
+  3: [
+    { label: "Top creator rate", value: "$500+" },
+    { label: "Avg deal size", value: "$220" },
+    { label: "Payout speed", value: "< 24h" },
+  ],
+  4: [
+    { label: "Fastest turnaround", value: "6h" },
+    { label: "On-time rate target", value: "98%" },
+    { label: "Avg revisions", value: "< 1" },
+  ],
+  5: [
+    { label: "Smartphone creators", value: "68%" },
+    { label: "DSLR tier earnings +", value: "40%" },
+    { label: "Pro studio avg rate", value: "$420" },
   ],
 };
 
@@ -125,10 +168,10 @@ function LiveNotification({ text, delay }: { text: string; delay: number }) {
   );
 }
 
-function LeftPanel({ step, data }: { step: number; data: OnboardingData }) {
+function LeftPanel({ step, data, isCreator }: { step: number; data: OnboardingData; isCreator: boolean }) {
   const [msgIdx, setMsgIdx] = useState(0);
-  const messages = AI_MESSAGES[Math.min(step, 5)] ?? AI_MESSAGES[0];
-  const stats = STEP_STATS[Math.min(step, 5)] ?? STEP_STATS[0];
+  const messages = (isCreator ? CREATOR_AI_MESSAGES : AI_MESSAGES)[Math.min(step, 5)] ?? AI_MESSAGES[0];
+  const stats = (isCreator ? CREATOR_STEP_STATS : STEP_STATS)[Math.min(step, 5)] ?? STEP_STATS[0];
 
   useEffect(() => {
     setMsgIdx(0);
@@ -325,6 +368,37 @@ const TEAM_SIZES = [
   { icon: Globe, label: "20+ people", desc: "Enterprise" },
 ];
 
+const CREATOR_CONTENT_STYLES = [
+  { icon: Video, label: "Product Demos", desc: "Review products on camera" },
+  { icon: Play, label: "Lifestyle / B-roll", desc: "Natural, candid footage" },
+  { icon: User, label: "Talking Head", desc: "Direct-to-camera testimonials" },
+  { icon: ShoppingBag, label: "Unboxing", desc: "First impressions & reveals" },
+  { icon: Megaphone, label: "Voiceover Ads", desc: "Narrate over footage or stills" },
+  { icon: Star, label: "Multiple Styles", desc: "I can do all of the above" },
+];
+
+const CREATOR_RATES = [
+  { label: "< $50 / video", value: "under-50", note: "Great for building portfolio" },
+  { label: "$50 – $150 / video", value: "50-150", note: "Most common entry range" },
+  { label: "$150 – $300 / video", value: "150-300", note: "Mid-tier specialist" },
+  { label: "$300 – $500 / video", value: "300-500", note: "High-demand creators" },
+  { label: "$500+ / video", value: "500-plus", note: "Premium production quality" },
+];
+
+const CREATOR_TURNAROUNDS = [
+  { icon: Zap, label: "Same day", desc: "Deliver within 24 hours" },
+  { icon: TrendingUp, label: "2–3 days", desc: "Most campaigns request this" },
+  { icon: BarChart3, label: "Within a week", desc: "Standard project timelines" },
+  { icon: Target, label: "Depends on brief", desc: "Varies by scope and revisions" },
+];
+
+const CREATOR_SETUPS = [
+  { icon: Smartphone, label: "Smartphone", desc: "iPhone or Android camera" },
+  { icon: Laptop, label: "DSLR / Mirrorless", desc: "Cinema-quality footage" },
+  { icon: MonitorPlay, label: "Pro Studio", desc: "Lighting, backdrops, full rig" },
+  { icon: LayoutGrid, label: "Multiple setups", desc: "Adapts to any brief" },
+];
+
 const CREATOR_ROLES = ["Creator", "Creator Manager"];
 const TOTAL_STEPS = 6;
 
@@ -451,6 +525,7 @@ export default function Onboarding() {
     budget: "",
     niches: [],
     teamSize: "",
+    turnaround: "",
   });
 
   const isCreator = CREATOR_ROLES.includes(data.accountType);
@@ -466,11 +541,19 @@ export default function Onboarding() {
 
   const canProceed = () => {
     if (step === 0) return !!data.accountType;
-    if (step === 1) return !!data.goal;
-    if (step === 2) return data.platforms.length > 0;
-    if (step === 3) return !!data.budget;
-    if (step === 4) return data.niches.length > 0;
-    if (step === 5) return !!data.teamSize;
+    if (isCreator) {
+      if (step === 1) return !!data.goal;
+      if (step === 2) return data.niches.length > 0;
+      if (step === 3) return !!data.budget;
+      if (step === 4) return !!data.turnaround;
+      if (step === 5) return !!data.teamSize;
+    } else {
+      if (step === 1) return !!data.goal;
+      if (step === 2) return data.platforms.length > 0;
+      if (step === 3) return !!data.budget;
+      if (step === 4) return data.niches.length > 0;
+      if (step === 5) return !!data.teamSize;
+    }
     return true;
   };
 
@@ -497,7 +580,7 @@ export default function Onboarding() {
     setLocation(isCreator ? "/settings" : "/dashboard");
   };
 
-  const STEP_TITLES = [
+  const BRAND_STEP_TITLES = [
     { label: "Account type", question: "Who are you?", sub: "This personalizes your entire BrandOps experience." },
     { label: "Goal", question: "What's your #1 goal?", sub: "Your primary outcome drives your AI campaign strategy." },
     { label: "Video Use", question: "Where will you run these videos?", sub: "Select all the channels where the brand will distribute the content." },
@@ -505,6 +588,15 @@ export default function Onboarding() {
     { label: "Niche", question: "What's your product niche?", sub: "AI matches you with creators who know your category." },
     { label: "Team", question: "How big is your team?", sub: "Configures collaboration tools and workspace permissions." },
   ];
+  const CREATOR_STEP_TITLES = [
+    { label: "Account type", question: "Who are you?", sub: "This personalizes your entire BrandOps experience." },
+    { label: "Content Style", question: "What type of videos do you make?", sub: "Brands filter campaigns by content format — pick your style." },
+    { label: "Your Niche", question: "What category do you create in?", sub: "Niche brands prefer niche creators — unlocks relevant campaigns." },
+    { label: "Your Rate", question: "What's your target payout per video?", sub: "Sets your minimum — AI only shows campaigns within your range." },
+    { label: "Turnaround", question: "How fast can you deliver?", sub: "Faster turnaround = more campaign invites from brands." },
+    { label: "Your Setup", question: "What's your filming setup?", sub: "Brands match to your production quality for the right brief type." },
+  ];
+  const STEP_TITLES = isCreator ? CREATOR_STEP_TITLES : BRAND_STEP_TITLES;
 
   const current = STEP_TITLES[step];
 
@@ -516,7 +608,7 @@ export default function Onboarding() {
     <div className="min-h-screen bg-[#0a0a0a] flex">
       {/* ── Left panel (desktop only) ─────────────────────────── */}
       <div className="w-[380px] shrink-0">
-        <LeftPanel step={step} data={data} />
+        <LeftPanel step={step} data={data} isCreator={isCreator} />
       </div>
 
       {/* ── Right panel ───────────────────────────────────────── */}
@@ -595,17 +687,24 @@ export default function Onboarding() {
                   </div>
                 )}
 
-                {/* ── Step 1: Goal ──────────────────────────────── */}
-                {step === 1 && (
+                {/* ── Step 1: Goal (brand) / Content Style (creator) ── */}
+                {step === 1 && !isCreator && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {GOALS.map(({ icon, label, desc }) => (
                       <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.goal === label} onClick={() => set("goal", label)} />
                     ))}
                   </div>
                 )}
+                {step === 1 && isCreator && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {CREATOR_CONTENT_STYLES.map(({ icon, label, desc }) => (
+                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.goal === label} onClick={() => set("goal", label)} />
+                    ))}
+                  </div>
+                )}
 
-                {/* ── Step 2: Video Use ─────────────────────────── */}
-                {step === 2 && (
+                {/* ── Step 2: Video Use (brand) / Niche (creator) ───── */}
+                {step === 2 && !isCreator && (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {VIDEO_USES.map(({ icon: Icon, label, stat }) => (
@@ -639,9 +738,28 @@ export default function Onboarding() {
                     )}
                   </div>
                 )}
+                {step === 2 && isCreator && (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      {NICHES.map((n) => (
+                        <PillToggle key={n} label={n} selected={data.niches.includes(n)} onClick={() => toggle("niches", n)} />
+                      ))}
+                    </div>
+                    {data.niches.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-2 bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl px-3 py-2.5 text-xs text-[#C6FF00]"
+                      >
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                        {data.niches.length} niche{data.niches.length > 1 ? "s" : ""} selected — unlocks matching brand campaigns
+                      </motion.div>
+                    )}
+                  </div>
+                )}
 
-                {/* ── Step 3: Budget ───────────────────────────── */}
-                {step === 3 && (
+                {/* ── Step 3: Budget (brand) / Rate (creator) ─────── */}
+                {step === 3 && !isCreator && (
                   <div className="space-y-4">
                     {BUDGETS.map(({ label, value, roi }) => (
                       <motion.button
@@ -675,9 +793,43 @@ export default function Onboarding() {
                     ))}
                   </div>
                 )}
+                {step === 3 && isCreator && (
+                  <div className="space-y-3">
+                    {CREATOR_RATES.map(({ label, value, note }) => (
+                      <motion.button
+                        key={value}
+                        onClick={() => set("budget", value)}
+                        whileHover={{ x: 4 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left group",
+                          data.budget === value
+                            ? "border-[#C6FF00]/60 bg-[#C6FF00]/8"
+                            : "border-white/8 bg-white/2 hover:border-white/15"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                            data.budget === value ? "border-[#C6FF00] bg-[#C6FF00]" : "border-white/20"
+                          )}>
+                            {data.budget === value && <div className="w-2 h-2 rounded-full bg-black" />}
+                          </div>
+                          <span className={cn("font-semibold text-sm", data.budget === value ? "text-white" : "text-white/70")}>{label}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={cn("text-xs font-medium", data.budget === value ? "text-[#C6FF00]" : "text-white/25 group-hover:text-white/40")}>
+                            {note}
+                          </span>
+                          <ChevronRight className={cn("h-3.5 w-3.5 transition-colors", data.budget === value ? "text-[#C6FF00]" : "text-white/20")} />
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
+                )}
 
-                {/* ── Step 4: Niche ────────────────────────────── */}
-                {step === 4 && (
+                {/* ── Step 4: Niche (brand) / Turnaround (creator) ─── */}
+                {step === 4 && !isCreator && (
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                       {NICHES.map((n) => (
@@ -696,11 +848,25 @@ export default function Onboarding() {
                     )}
                   </div>
                 )}
+                {step === 4 && isCreator && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {CREATOR_TURNAROUNDS.map(({ icon, label, desc }) => (
+                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.turnaround === label} onClick={() => set("turnaround", label)} />
+                    ))}
+                  </div>
+                )}
 
-                {/* ── Step 5: Team size ────────────────────────── */}
-                {step === 5 && (
+                {/* ── Step 5: Team size (brand) / Setup (creator) ──── */}
+                {step === 5 && !isCreator && (
                   <div className="grid grid-cols-2 gap-3">
                     {TEAM_SIZES.map(({ icon, label, desc }) => (
+                      <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.teamSize === label} onClick={() => set("teamSize", label)} />
+                    ))}
+                  </div>
+                )}
+                {step === 5 && isCreator && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {CREATOR_SETUPS.map(({ icon, label, desc }) => (
                       <SelectCard key={label} icon={icon} label={label} desc={desc} selected={data.teamSize === label} onClick={() => set("teamSize", label)} />
                     ))}
                   </div>
