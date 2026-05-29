@@ -15,7 +15,6 @@ import {
   Search, Plus, Sparkles, Star, CheckCircle2, Clock, BarChart3,
   Award, Zap, ThumbsUp, Users, Loader2, Info, DollarSign,
 } from "lucide-react";
-import { SiTiktok, SiInstagram, SiYoutube } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
@@ -27,13 +26,10 @@ const CONTENT_STYLE_OPTIONS = [
 ];
 
 const EMPTY_FORM = {
-  name: "", email: "", handle: "",
-  platform: "tiktok" as "tiktok" | "instagram" | "youtube",
-  suggestedPayout: "",
+  name: "", email: "", handle: "", suggestedPayout: "",
 };
 
 type SortBy = "match" | "approvalRate" | "onTimeDelivery" | "turnaround" | "brandRating" | "name";
-type Platform = "all" | "tiktok" | "instagram" | "youtube";
 
 // AI match based on UGC production quality metrics
 function computeAiMatch(creator: Creator): number {
@@ -74,15 +70,6 @@ function getAiMatchColor(score: number): string {
   if (score >= 75) return "text-emerald-400";
   if (score >= 55) return "text-yellow-400";
   return "text-muted-foreground";
-}
-
-function getPlatformIcon(platform: string, size = "h-3.5 w-3.5") {
-  switch (platform) {
-    case "tiktok": return <SiTiktok className={cn(size, "text-white/60")} />;
-    case "instagram": return <SiInstagram className={cn(size, "text-pink-400")} />;
-    case "youtube": return <SiYoutube className={cn(size, "text-red-400")} />;
-    default: return null;
-  }
 }
 
 const cardVariants: Variants = {
@@ -129,7 +116,6 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
                   {creator.name}
                 </h3>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                  {getPlatformIcon(creator.platform)}
                   <span className="truncate">{creator.handle}</span>
                 </div>
               </div>
@@ -245,20 +231,16 @@ function CreatorCard({ creator, index }: { creator: Creator; index: number }) {
               </div>
             )}
 
-            {/* Platform + brand rating footer */}
-            <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/50 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1">
-                {getPlatformIcon(creator.platform)}
-                <span className="capitalize">{creator.platform}</span>
-              </div>
-              {(creator.brandRating ?? 0) > 0 && (
+            {/* Brand rating footer */}
+            {(creator.brandRating ?? 0) > 0 && (
+              <div className="flex items-center justify-end mt-3 pt-2 border-t border-border/50 text-xs">
                 <div className="flex items-center gap-0.5 text-yellow-400">
                   <Star className="h-3 w-3 fill-current" />
                   <span className="font-semibold">{creator.brandRating}</span>
                   <span className="text-muted-foreground ml-0.5">/ 5</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </Link>
@@ -294,7 +276,6 @@ export default function Creators() {
   const { toast } = useToast();
 
   const [search, setSearch] = useState("");
-  const [platform, setPlatform] = useState<Platform>("all");
   const [sortBy, setSortBy] = useState<SortBy>("match");
   const [styleFilter, setStyleFilter] = useState<string>("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -305,7 +286,6 @@ export default function Creators() {
     if (!creators) return [];
     return creators
       .filter(c => {
-        if (platform !== "all" && c.platform !== platform) return false;
         if (styleFilter !== "all" && !(c.contentStyles ?? []).includes(styleFilter)) return false;
         if (search) {
           const q = search.toLowerCase();
@@ -327,15 +307,15 @@ export default function Creators() {
         if (sortBy === "name") return a.name.localeCompare(b.name);
         return 0;
       });
-  }, [creators, platform, sortBy, search, styleFilter]);
+  }, [creators, sortBy, search, styleFilter]);
 
   const suggestStylesMutation = useMutation({
-    mutationFn: async ({ handle, platform }: { handle: string; platform: string }) => {
+    mutationFn: async ({ handle }: { handle: string }) => {
       const r = await fetch(`${BASE}api/openai/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: `Given a UGC creator with handle "${handle}" on ${platform}, suggest 2-3 content styles from this list that best fit them: ${CONTENT_STYLE_OPTIONS.join(", ")}. Reply with ONLY the style names separated by commas, nothing else.`,
+          message: `Given a UGC creator with handle "${handle}", suggest 2-3 content styles from this list that best fit them: ${CONTENT_STYLE_OPTIONS.join(", ")}. Reply with ONLY the style names separated by commas, nothing else.`,
         }),
       });
       const text = await r.text();
@@ -373,7 +353,7 @@ export default function Creators() {
         name: form.name,
         email: form.email,
         handle: form.handle,
-        platform: form.platform,
+        platform: "tiktok",
         suggestedPayout: parseFloat(form.suggestedPayout) || 0,
         contentStyles: selectedStyles,
       },
@@ -417,18 +397,6 @@ export default function Creators() {
             className="pl-9 bg-background border-input"
           />
         </div>
-
-        <Select value={platform} onValueChange={v => setPlatform(v as Platform)}>
-          <SelectTrigger className="w-36 bg-background border-input">
-            <SelectValue placeholder="Platform" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All platforms</SelectItem>
-            <SelectItem value="tiktok">TikTok</SelectItem>
-            <SelectItem value="instagram">Instagram</SelectItem>
-            <SelectItem value="youtube">YouTube</SelectItem>
-          </SelectContent>
-        </Select>
 
         <Select value={styleFilter} onValueChange={setStyleFilter}>
           <SelectTrigger className="w-40 bg-background border-input">
@@ -556,26 +524,11 @@ export default function Creators() {
                   className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-white/60 text-xs">Primary Format</Label>
-                <Select value={form.platform} onValueChange={v => setForm(f => ({ ...f, platform: v as typeof f.platform }))}>
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tiktok">Vertical / TikTok</SelectItem>
-                    <SelectItem value="instagram">Short-form / Reels</SelectItem>
-                    <SelectItem value="youtube">Long-form / YouTube</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-white/60 text-xs">Payout ($/video)</Label>
+                <Input type="number" min="0" placeholder="e.g. 150" value={form.suggestedPayout}
+                  onChange={e => setForm(f => ({ ...f, suggestedPayout: e.target.value }))}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/20" />
               </div>
-            </div>
-
-            {/* Payout */}
-            <div className="space-y-1.5">
-              <Label className="text-white/60 text-xs">Agreed Payout ($/video)</Label>
-              <Input type="number" min="0" placeholder="e.g. 150" value={form.suggestedPayout}
-                onChange={e => setForm(f => ({ ...f, suggestedPayout: e.target.value }))}
-                className="bg-white/5 border-white/10 text-white placeholder:text-white/20 max-w-[180px]" />
             </div>
 
             {/* Content styles with AI suggest */}
@@ -586,7 +539,7 @@ export default function Creators() {
                   variant="ghost"
                   size="sm"
                   disabled={!form.handle || suggestStylesMutation.isPending}
-                  onClick={() => suggestStylesMutation.mutate({ handle: form.handle, platform: form.platform })}
+                  onClick={() => suggestStylesMutation.mutate({ handle: form.handle })}
                   className="h-6 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
                 >
                   {suggestStylesMutation.isPending
