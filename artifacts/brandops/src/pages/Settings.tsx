@@ -64,6 +64,7 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
   const queryClient = useQueryClient();
   const [starting, setStarting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [connectNotEnabled, setConnectNotEnabled] = useState(false);
 
   const { data: connectStatus, isLoading } = useQuery<ConnectStatus>({
     queryKey: ["creator-connect-status", uid],
@@ -78,15 +79,21 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
 
   const startOnboarding = async () => {
     setStarting(true);
+    setConnectNotEnabled(false);
     try {
       const res = await fetch(`${BASE}api/stripe/creator-connect/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid, email, name, returnUrl: window.location.origin }),
       });
-      if (!res.ok) throw new Error("Failed to start onboarding");
-      const { url } = await res.json() as { url: string };
-      window.location.href = url;
+      const data = await res.json() as { url?: string; error?: string; activationUrl?: string };
+      if (res.status === 402 && data.error === "connect_not_enabled") {
+        setConnectNotEnabled(true);
+        setStarting(false);
+        return;
+      }
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Failed to start onboarding");
+      window.location.href = data.url;
     } catch (err) {
       toast({ title: "Setup failed", description: String(err), variant: "destructive" });
       setStarting(false);
@@ -125,35 +132,66 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
           )}
         </div>
         <CardDescription>
-          Connect your bank account so brands can pay you for approved videos.
+          Connect your bank account via Stripe so you get paid for approved videos.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {isReady ? (
-          <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-green-400">
-              <CheckCircle2 className="h-4 w-4" /> Payouts enabled
+        {/* Stripe Connect not enabled — actionable step */}
+        {connectNotEnabled && (
+          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/30 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-yellow-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Stripe Connect needs to be enabled on your account
             </div>
-            <p className="text-xs text-muted-foreground">
-              Your bank account is connected and payouts are live. Brands can now send earnings directly to you.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Stripe Connect is the feature that lets platforms pay out to individual creators.
+              It's a one-time activation — takes about 2 minutes in your Stripe dashboard.
             </p>
+            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside leading-relaxed">
+              <li>Click the button below to open your Stripe dashboard</li>
+              <li>Click <span className="text-foreground font-medium">"Get started with Connect"</span></li>
+              <li>Complete the short activation form</li>
+              <li>Come back here and click <span className="text-foreground font-medium">"Set Up Payouts"</span> again</li>
+            </ol>
+            <a
+              href="https://dashboard.stripe.com/connect/accounts/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary font-medium underline underline-offset-2"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open Stripe Dashboard → Connect
+            </a>
           </div>
-        ) : inProgress ? (
-          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
-              <Clock className="h-4 w-4" /> Onboarding incomplete
+        )}
+
+        {!connectNotEnabled && (
+          isReady ? (
+            <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-400">
+                <CheckCircle2 className="h-4 w-4" /> Payouts enabled
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your bank account is connected and payouts are live. Brands send earnings directly to you.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Your Stripe account was created but needs more info. Click below to finish.
-            </p>
-          </div>
-        ) : (
-          <div className="p-4 rounded-lg bg-muted/40 border border-border space-y-2">
-            <p className="text-sm text-muted-foreground">
-              You need to connect a bank account or debit card before you can receive payments.
-              This takes about 2 minutes via Stripe's secure onboarding.
-            </p>
-          </div>
+          ) : inProgress ? (
+            <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
+                <Clock className="h-4 w-4" /> Onboarding incomplete
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Your Stripe account was created but still needs more info. Click below to finish.
+              </p>
+            </div>
+          ) : (
+            <div className="p-4 rounded-lg bg-muted/40 border border-border space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Connect a bank account or debit card to receive payments. Takes ~2 minutes via
+                Stripe's secure onboarding.
+              </p>
+            </div>
+          )
         )}
 
         <div className="flex items-center gap-2">

@@ -267,32 +267,47 @@ router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => 
 
   let accountId = profile?.stripeConnectAccountId;
 
-  if (!accountId) {
-    const account = await stripe.accounts.create({
-      type: 'express',
-      email,
-      capabilities: { transfers: { requested: true } },
-    });
-    accountId = account.id;
-
-    await db
-      .insert(userProfilesTable)
-      .values({ firebaseUid: uid, stripeConnectAccountId: accountId })
-      .onConflictDoUpdate({
-        target: userProfilesTable.firebaseUid,
-        set: { stripeConnectAccountId: accountId, updatedAt: new Date() },
+  try {
+    if (!accountId) {
+      const account = await stripe.accounts.create({
+        type: 'express',
+        email,
+        capabilities: { transfers: { requested: true } },
       });
+      accountId = account.id;
+
+      await db
+        .insert(userProfilesTable)
+        .values({ firebaseUid: uid, stripeConnectAccountId: accountId })
+        .onConflictDoUpdate({
+          target: userProfilesTable.firebaseUid,
+          set: { stripeConnectAccountId: accountId, updatedAt: new Date() },
+        });
+    }
+
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: `${base}/settings?stripe_connect=refresh`,
+      return_url: `${base}/settings?stripe_connect=complete`,
+      type: 'account_onboarding',
+    });
+
+    req.log.info({ uid, accountId }, 'Creator Connect onboarding link created');
+    res.json({ url: accountLink.url, accountId });
+  } catch (err: any) {
+    const msg: string = err?.message ?? '';
+    if (msg.includes('signed up for Connect')) {
+      req.log.warn({ uid }, 'Stripe Connect not enabled on this account');
+      res.status(402).json({
+        error: 'connect_not_enabled',
+        message: 'Stripe Connect is not enabled on this Stripe account.',
+        activationUrl: 'https://dashboard.stripe.com/connect/accounts/overview',
+      });
+      return;
+    }
+    req.log.error({ err, uid }, 'creator-connect/start failed');
+    res.status(500).json({ error: 'Internal server error', message: msg });
   }
-
-  const accountLink = await stripe.accountLinks.create({
-    account: accountId,
-    refresh_url: `${base}/settings?stripe_connect=refresh`,
-    return_url: `${base}/settings?stripe_connect=complete`,
-    type: 'account_onboarding',
-  });
-
-  req.log.info({ uid, accountId }, 'Creator Connect onboarding link created');
-  res.json({ url: accountLink.url, accountId });
 });
 
 // Check creator Connect Express account status
