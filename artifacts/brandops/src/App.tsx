@@ -22,6 +22,7 @@ import Analytics from "@/pages/Analytics";
 import AIAssistant from "@/pages/AIAssistant";
 import Team from "@/pages/Team";
 import Settings from "@/pages/Settings";
+import Subscribe from "@/pages/Subscribe";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -65,6 +66,11 @@ function AppRoutes() {
       <Route path="/onboarding">
         <ProtectedRoute>
           <Onboarding />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/subscribe">
+        <ProtectedRoute>
+          <Subscribe />
         </ProtectedRoute>
       </Route>
       <Route>
