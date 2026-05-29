@@ -271,7 +271,7 @@ router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => 
     const account = await stripe.accounts.create({
       type: 'express',
       email,
-      ...(name ? { display_name: name } : {}),
+      ...(name ? { settings: { dashboard: { display_name: name } } } : {}),
       capabilities: { transfers: { requested: true } },
     });
     accountId = account.id;
