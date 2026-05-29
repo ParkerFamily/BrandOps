@@ -24,8 +24,10 @@ const PRICING = [
     annualTotal: 294,
     desc: "For solo founders and small brands just getting started.",
     features: ["3 active campaigns", "50 creator slots", "AI campaign builder", "Basic analytics", "Stripe payouts", "Email support"],
-    cta: "Upgrade to Starter",
+    cta: "Start Free Trial",
     highlight: false,
+    stripeMonthly: "price_1TcK62BUl8zlcM3knvtdpFiN",
+    stripeAnnual: "price_1TcK6TBUl8zlcM3kxKUJu2Wt",
   },
   {
     name: "Growth",
@@ -34,8 +36,10 @@ const PRICING = [
     annualTotal: 894,
     desc: "For growing brands running multiple campaigns.",
     features: ["Unlimited campaigns", "500 creator slots", "AI campaign builder", "AI submission review", "Advanced analytics", "AI assistant", "Priority support", "Team members (5)"],
-    cta: "Upgrade to Growth",
+    cta: "Start Free Trial",
     highlight: true,
+    stripeMonthly: "price_1TcK62BUl8zlcM3k0XFy9OXv",
+    stripeAnnual: "price_1TcK6TBUl8zlcM3kmsgowctu",
   },
   {
     name: "Enterprise",
@@ -46,6 +50,8 @@ const PRICING = [
     features: ["Unlimited everything", "Custom creator network", "White-label option", "Custom AI training", "Dedicated account manager", "SLA guarantee", "Custom integrations"],
     cta: "Contact Sales",
     highlight: false,
+    stripeMonthly: null,
+    stripeAnnual: null,
   },
 ];
 
@@ -411,12 +417,14 @@ export default function Settings() {
   const [profile, setProfile] = useState<Profile>(loadProfile);
   const [saved, setSaved] = useState(false);
   const [annual, setAnnual] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
 
   // Handle Stripe return callbacks
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stripeConnect = params.get("stripe_connect");
     const stripeSetup = params.get("stripe_setup");
+    const stripeSub = params.get("stripe_sub");
 
     if (stripeConnect === "complete") {
       toast({ title: "Stripe connected!", description: "Your payout account is being verified. Refresh to see your status." });
@@ -431,9 +439,38 @@ export default function Settings() {
       navigate("/settings", { replace: true });
     } else if (stripeSetup === "cancelled") {
       navigate("/settings", { replace: true });
+    } else if (stripeSub === "complete") {
+      toast({ title: "Subscription activated!", description: "Your 14-day free trial has started." });
+      navigate("/settings", { replace: true });
+    } else if (stripeSub === "cancelled") {
+      navigate("/settings", { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const startSubscription = async (priceId: string, planName: string) => {
+    if (!user) return;
+    setCheckoutLoading(priceId);
+    try {
+      const res = await fetch(`${BASE}api/stripe/subscription/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: user.uid,
+          email: user.email ?? "",
+          name: user.displayName ?? user.email,
+          priceId,
+          returnUrl: window.location.origin,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to start checkout");
+      const { url } = await res.json() as { url: string };
+      window.location.href = url;
+    } catch (err) {
+      toast({ title: `${planName} checkout failed`, description: String(err), variant: "destructive" });
+      setCheckoutLoading(null);
+    }
+  };
 
   const handleSave = () => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
@@ -443,12 +480,13 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your workspace and account.</p>
       </div>
 
+      {/* Account / profile / stripe / workspace — narrow column */}
       <div className="max-w-2xl space-y-6">
 
         {/* Account Info */}
@@ -606,9 +644,13 @@ export default function Settings() {
           </Card>
         )}
 
-        {/* Billing & Plans — brand only */}
-        {!isCreator && (
-          <div className="space-y-5">
+
+      </div>
+
+      {/* Billing & Plans — full width, brand only */}
+      {!isCreator && (
+        <div className="space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <CreditCard className="h-4 w-4 text-primary" />
@@ -620,115 +662,126 @@ export default function Settings() {
             </div>
 
             {/* Toggle */}
-            <div className="flex items-center gap-3">
-              <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-full p-1">
-                <button
-                  onClick={() => setAnnual(false)}
-                  className={cn(
-                    "px-5 py-2 rounded-full text-sm font-semibold transition-all",
-                    !annual ? "bg-white text-black" : "text-white/50 hover:text-white"
-                  )}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setAnnual(true)}
-                  className={cn(
-                    "px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2",
-                    annual ? "bg-white text-black" : "text-white/50 hover:text-white"
-                  )}
-                >
-                  Yearly
-                  <span className={cn(
-                    "text-xs font-bold px-2 py-0.5 rounded-full transition-all",
-                    annual ? "bg-[#C6FF00] text-black" : "bg-[#C6FF00]/20 text-[#C6FF00]"
-                  )}>
-                    Save 50%
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            {/* Pricing cards */}
-            <div className="grid md:grid-cols-3 gap-4">
-              {PRICING.map(({ name, monthlyPrice, annualMonthly, annualTotal, desc, features, cta, highlight }, i) => {
-                const displayPrice = annual ? annualMonthly : monthlyPrice;
-                const originalPrice = annual ? monthlyPrice : null;
-                return (
-                  <motion.div
-                    key={name}
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06 }}
-                    className={cn(
-                      "rounded-2xl border p-6 flex flex-col relative",
-                      highlight
-                        ? "bg-[#C6FF00]/5 border-[#C6FF00]/30 shadow-[0_0_40px_rgba(198,255,0,0.06)]"
-                        : "bg-card border-card-border"
-                    )}
-                  >
-                    {highlight && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#C6FF00] text-black text-xs font-bold px-4 py-1 rounded-full">
-                        Most Popular
-                      </div>
-                    )}
-                    <div className="mb-5">
-                      <div className="text-white font-bold text-base mb-1">{name}</div>
-                      <p className="text-white/40 text-xs">{desc}</p>
-                    </div>
-                    <div className="mb-5">
-                      {displayPrice ? (
-                        <div>
-                          <div className="flex items-end gap-2">
-                            {originalPrice && annual && (
-                              <span className="text-white/30 line-through text-lg font-bold mb-0.5">${originalPrice}</span>
-                            )}
-                            <span className="text-3xl font-black">${displayPrice}</span>
-                            <span className="text-white/40 text-sm mb-1">/mo</span>
-                          </div>
-                          {annual && annualTotal && (
-                            <motion.p
-                              initial={{ opacity: 0, y: -4 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="text-[#C6FF00] text-xs mt-1 font-medium"
-                            >
-                              Billed ${annualTotal}/year · 50% off
-                            </motion.p>
-                          )}
-                          {!annual && (
-                            <p className="text-white/30 text-xs mt-1">or ${annualMonthly}/mo billed yearly</p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-2xl font-black">Custom</div>
-                      )}
-                    </div>
-                    <ul className="space-y-2.5 mb-6 flex-1">
-                      {features.map((f) => (
-                        <li key={f} className="flex items-center gap-2 text-sm text-white/70">
-                          <Check className={cn("h-4 w-4 shrink-0", highlight ? "text-[#C6FF00]" : "text-white/40")} />
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                    <button
-                      className={cn(
-                        "w-full py-2.5 rounded-xl font-semibold text-sm transition-all",
-                        highlight
-                          ? "bg-[#C6FF00] text-black hover:bg-[#d4ff33]"
-                          : "bg-white/5 text-white hover:bg-white/10 border border-white/10"
-                      )}
-                    >
-                      {cta}
-                    </button>
-                  </motion.div>
-                );
-              })}
+            <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-full p-1 shrink-0">
+              <button
+                onClick={() => setAnnual(false)}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-semibold transition-all",
+                  !annual ? "bg-white text-black" : "text-white/50 hover:text-white"
+                )}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setAnnual(true)}
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2",
+                  annual ? "bg-white text-black" : "text-white/50 hover:text-white"
+                )}
+              >
+                Yearly
+                <span className={cn(
+                  "text-xs font-bold px-2 py-0.5 rounded-full transition-all",
+                  annual ? "bg-[#C6FF00] text-black" : "bg-[#C6FF00]/20 text-[#C6FF00]"
+                )}>
+                  Save 50%
+                </span>
+              </button>
             </div>
           </div>
-        )}
 
-      </div>
+          {/* Pricing cards */}
+          <div className="grid md:grid-cols-3 gap-6">
+            {PRICING.map(({ name, monthlyPrice, annualMonthly, annualTotal, desc, features, cta, highlight, stripeMonthly, stripeAnnual }, i) => {
+              const displayPrice = annual ? annualMonthly : monthlyPrice;
+              const originalPrice = annual ? monthlyPrice : null;
+              const priceId = annual ? stripeAnnual : stripeMonthly;
+              const isLoading = checkoutLoading === priceId;
+
+              return (
+                <motion.div
+                  key={name}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.06 }}
+                  className={cn(
+                    "rounded-2xl border flex flex-col relative",
+                    highlight ? "pt-8 p-6" : "p-6",
+                    highlight
+                      ? "bg-[#C6FF00]/5 border-[#C6FF00]/30 shadow-[0_0_40px_rgba(198,255,0,0.06)]"
+                      : "bg-card border-card-border"
+                  )}
+                >
+                  {highlight && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#C6FF00] text-black text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap">
+                      Most Popular
+                    </div>
+                  )}
+                  <div className="mb-5">
+                    <div className="text-white font-bold text-base mb-1">{name}</div>
+                    <p className="text-white/40 text-xs">{desc}</p>
+                  </div>
+                  <div className="mb-5">
+                    {displayPrice ? (
+                      <div>
+                        <div className="flex items-end gap-2">
+                          {originalPrice && annual && (
+                            <span className="text-white/30 line-through text-lg font-bold mb-0.5">${originalPrice}</span>
+                          )}
+                          <span className="text-3xl font-black">${displayPrice}</span>
+                          <span className="text-white/40 text-sm mb-1">/mo</span>
+                        </div>
+                        {annual && annualTotal ? (
+                          <motion.p
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="text-[#C6FF00] text-xs mt-1 font-medium"
+                          >
+                            Billed ${annualTotal}/year · 50% off
+                          </motion.p>
+                        ) : (
+                          <p className="text-white/30 text-xs mt-1">or ${annualMonthly}/mo billed yearly</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-2xl font-black">Custom</div>
+                    )}
+                  </div>
+                  <ul className="space-y-2.5 mb-6 flex-1">
+                    {features.map((f) => (
+                      <li key={f} className="flex items-center gap-2 text-sm text-white/70">
+                        <Check className={cn("h-4 w-4 shrink-0", highlight ? "text-[#C6FF00]" : "text-white/40")} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    disabled={isLoading}
+                    onClick={() => {
+                      if (priceId) {
+                        startSubscription(priceId, name);
+                      } else {
+                        window.open("mailto:sales@brandops.io?subject=Enterprise inquiry", "_blank");
+                      }
+                    }}
+                    className={cn(
+                      "w-full py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed",
+                      highlight
+                        ? "bg-[#C6FF00] text-black hover:bg-[#d4ff33]"
+                        : "bg-white/5 text-white hover:bg-white/10 border border-white/10"
+                    )}
+                  >
+                    {isLoading ? (
+                      <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Redirecting…</>
+                    ) : cta}
+                  </button>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

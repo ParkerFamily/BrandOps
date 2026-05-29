@@ -412,4 +412,59 @@ router.post('/stripe/brand-setup/start', async (req, res): Promise<void> => {
   res.json({ url: session.url, customerId });
 });
 
+router.post('/stripe/subscription/start', async (req, res): Promise<void> => {
+  const { uid, email, name, priceId, returnUrl } = req.body as {
+    uid?: string; email?: string; name?: string; priceId?: string; returnUrl?: string;
+  };
+  if (!uid || !email || !priceId) {
+    res.status(400).json({ error: 'uid, email, and priceId are required' });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const base = returnUrl ?? 'http://localhost:80';
+
+  const [profile] = await db
+    .select()
+    .from(userProfilesTable)
+    .where(eq(userProfilesTable.firebaseUid, uid))
+    .limit(1);
+
+  let customerId = profile?.stripeCustomerId;
+
+  if (!customerId) {
+    const existing = await stripe.customers.list({ email, limit: 1 });
+    const customer = existing.data[0] ?? await stripe.customers.create({
+      email,
+      name: name ?? email,
+      metadata: { firebaseUid: uid, role: 'brand' },
+    });
+    customerId = customer.id;
+
+    await db
+      .insert(userProfilesTable)
+      .values({ firebaseUid: uid, stripeCustomerId: customerId })
+      .onConflictDoUpdate({
+        target: userProfilesTable.firebaseUid,
+        set: { stripeCustomerId: customerId, updatedAt: new Date() },
+      });
+  }
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    customer: customerId,
+    line_items: [{ price: priceId, quantity: 1 }],
+    subscription_data: {
+      trial_period_days: 14,
+      metadata: { firebaseUid: uid },
+    },
+    success_url: `${base}/settings?stripe_sub=complete`,
+    cancel_url: `${base}/settings?stripe_sub=cancelled`,
+    allow_promotion_codes: true,
+  });
+
+  req.log.info({ uid, customerId, priceId, sessionId: session.id }, 'Subscription checkout session created');
+  res.json({ url: session.url });
+});
+
 export default router;
