@@ -1,0 +1,144 @@
+Yeah, bro, if I'm being the brand owner, this is about 30-40% too much for V1.
+
+The AI output is actually good. The problem is information hierarchy.
+
+When I hit "Generate Campaign" I want:
+
+Immediate Summary (what matters)
+
+Campaign Title
+Discover Real Communities with Clubspace
+
+Budget
+$2,000
+
+Videos Needed
+12
+
+Payout
+$165/video
+
+Deadline
+14 Days
+
+Creator Type
+People comfortable speaking on camera
+
+Primary Goal
+Drive app installs
+
+That's all I need to decide:
+
+"Yep, launch it."
+
+Then collapsible sections
+
+▼ Creator Brief
+
+▼ Hook Ideas
+
+▼ Video Concepts
+
+▼ CTA Ideas
+
+▼ Approval Criteria
+
+▼ Deliverables
+
+▼ Usage Rights
+
+Most people won't read Usage Rights every campaign.
+
+Most people won't read Deliverables every campaign.
+
+Most people won't read Tone & Style every campaign.
+
+Biggest issue
+
+The AI generated:
+
+Hook Ideas
+Video Concepts
+CTA Ideas
+Do
+Don't
+Tone & Style
+Creator Type
+Deliverables
+Usage Rights
+Approval Criteria
+
+all at once.
+
+It's overwhelming.
+
+Feels like reading a legal document.
+
+I'd make it feel more like Notion AI
+
+After generation:
+
+Campaign Ready ✓
+
+Discover Real Communities with Clubspace
+
+Budget: $2,000
+Videos: 12
+Payout: $165/video
+Deadline: 14 days
+
+[Publish Campaign]
+
+[Edit]
+
+AI Recommendations
+
+🔥 Hook Ideas (4)
+
+🎬 Video Concepts (3)
+
+📣 CTA Ideas (3)
+
+📋 Creator Brief
+
+▼ View Full Campaign Details
+
+Now it feels like:
+
+AI did the work and summarized it for me.
+
+Instead of:
+
+AI generated a 4-page PDF I have to read.
+
+Another thing...
+
+The green payout box is the most important thing on the page and it's tiny.
+
+I'd make that the hero section.
+
+Something like:
+
+💰 Recommended Payout Strategy
+
+12 Videos
+
+$165 per approved video
+
+Estimated spend: $1,980
+
+Budget remaining: $20
+
+[Looks Good]
+
+[Adjust]
+
+That's the thing every brand owner is immediately looking for.
+
+The AI should feel like it's answering:
+
+"How should I spend my money?"
+
+before anything else.
+
+The actual content quality is good. I wouldn't reduce the information generated. I'd just hide 70% of it behind expandable sections and surface the 5 things a founder cares about in the first 3 seconds.
