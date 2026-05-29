@@ -404,8 +404,8 @@ const FAQS = [
     a: "Yes. Our Growth and Enterprise plans support team members and multiple workspace configurations, making BrandOps perfect for agencies managing multiple brand clients.",
   },
   {
-    q: "What platforms does BrandOps support?",
-    a: "BrandOps supports TikTok, Instagram, YouTube, and X (Twitter). Creators can connect all platforms and you can target campaigns to specific platforms or run cross-platform.",
+    q: "How does BrandOps handle video distribution?",
+    a: "BrandOps manages the production side — briefs, submissions, and approvals. Once you approve a video, you own it fully and run it on your own brand channels, paid ad accounts, product pages, or anywhere else you choose. Creators produce the content; you control where it goes.",
   },
   {
     q: "Is there a free trial?",

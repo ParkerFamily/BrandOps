@@ -9,8 +9,8 @@ import {
   User, Laptop, DollarSign, Target, TrendingUp, Megaphone,
   Smartphone, Globe, Loader2, Sparkles, Bot, BarChart3,
   Play, ArrowRight, UserCheck, Video, Star, ChevronRight,
+  Mail, MonitorPlay, LayoutGrid,
 } from "lucide-react";
-import { SiTiktok, SiInstagram, SiYoutube } from "react-icons/si";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +33,7 @@ interface OnboardingData {
 const AI_MESSAGES: Record<number, string[]> = {
   0: ["Let's build your creator operation.", "Personalized to your exact use case.", "Takes about 60 seconds."],
   1: ["Goal unlocks your AI campaign templates.", "Matching strategy to your outcome…", "Most agencies prioritize awareness first."],
-  2: ["Platform data syncs with your dashboard.", "Creator pools pre-filtered by platform.", "TikTok has the highest avg. engagement rate."],
+  2: ["Video use case shapes your brief templates.", "AI configures asset specs for each channel.", "Paid ad UGC converts 4x better than branded content."],
   3: ["Budget unlocks creator tier recommendations.", "AI payout strategies auto-configured.", "ROI modeling based on your budget range."],
   4: ["Niche sharpens your creator matching.", "AI finds top-performing niche creators.", "Category benchmarks loaded into your dashboard."],
   5: ["Team size configures collaboration tools.", "Roles and permissions auto-assigned.", "Your workspace is almost ready."],
@@ -51,9 +51,9 @@ const STEP_STATS: Record<number, { label: string; value: string; delta?: string 
     { label: "App install CPR", value: "$0.38" },
   ],
   2: [
-    { label: "TikTok creators", value: "940K" },
-    { label: "Instagram creators", value: "820K" },
-    { label: "YouTube creators", value: "410K" },
+    { label: "Paid ad conversion lift", value: "4.1x" },
+    { label: "Avg cost per video", value: "$220" },
+    { label: "Formats supported", value: "All" },
   ],
   3: [
     { label: "Avg. creator deal", value: "$340" },
@@ -73,10 +73,10 @@ const STEP_STATS: Record<number, { label: string; value: string; delta?: string 
 };
 
 const FLOATING_CREATORS = [
-  { name: "Maya Chen", handle: "@mayabeauty", eng: "7.2%", badge: "Top Pick", color: "from-purple-500/20 to-pink-500/20" },
-  { name: "Jake Rivers", handle: "@jakefit", eng: "9.1%", badge: "High ROI", color: "from-blue-500/20 to-cyan-500/20" },
-  { name: "Sofia Valle", handle: "@sofiastyle", eng: "6.4%", badge: "Trending", color: "from-orange-500/20 to-amber-500/20" },
-  { name: "Liam Park", handle: "@liamtech", eng: "11.3%", badge: "Best Match", color: "from-[#C6FF00]/20 to-lime-500/20" },
+  { name: "Maya Chen", handle: "@mayabeauty", stat: "96% approval", badge: "Top Pick", color: "from-purple-500/20 to-pink-500/20" },
+  { name: "Jake Rivers", handle: "@jakefit", stat: "3d avg", badge: "Fast Turnaround", color: "from-blue-500/20 to-cyan-500/20" },
+  { name: "Sofia Valle", handle: "@sofiastyle", stat: "98% on-time", badge: "Reliable", color: "from-orange-500/20 to-amber-500/20" },
+  { name: "Liam Park", handle: "@liamtech", stat: "94% approval", badge: "Best Match", color: "from-[#C6FF00]/20 to-lime-500/20" },
 ];
 
 /* ─── Sub-components ───────────────────────────────────────────────────── */
@@ -97,8 +97,7 @@ function FloatingCreatorCard({ creator, delay, y }: { creator: typeof FLOATING_C
         <div className="text-white/50 text-[10px]">{creator.handle}</div>
       </div>
       <div className="ml-1 flex flex-col items-end">
-        <div className="text-[#C6FF00] text-xs font-bold">{creator.eng}</div>
-        <div className="text-white/40 text-[9px]">eng</div>
+        <div className="text-[#C6FF00] text-xs font-bold">{creator.stat}</div>
       </div>
     </motion.div>
   );
@@ -300,11 +299,13 @@ const GOALS = [
   { icon: Video, label: "Product Launch", desc: "Create launch momentum fast" },
 ];
 
-const PLATFORMS = [
-  { icon: SiTiktok, label: "TikTok", stat: "940K creators" },
-  { icon: SiInstagram, label: "Instagram", stat: "820K creators" },
-  { icon: SiYoutube, label: "YouTube", stat: "410K creators" },
-  { icon: Globe, label: "All Platforms", stat: "2.4M total" },
+const VIDEO_USES = [
+  { icon: Megaphone, label: "Paid Ads", stat: "Highest ROI" },
+  { icon: ShoppingBag, label: "Product Pages", stat: "Boosts CVR" },
+  { icon: MonitorPlay, label: "Organic Social", stat: "Brand channels" },
+  { icon: Mail, label: "Email Campaigns", stat: "Embed in flows" },
+  { icon: Globe, label: "Brand Website", stat: "Hero & landing" },
+  { icon: LayoutGrid, label: "Everything", stat: "Multi-channel" },
 ];
 
 const BUDGETS = [
@@ -336,7 +337,7 @@ function AILoadingScreen({ data, onDone }: { data: OnboardingData; onDone: () =>
     "Analyzing your profile…",
     `Building ${data.accountType || "your"} creator recommendations…`,
     `Calibrating for ${data.goal || "your goals"}…`,
-    `Loading ${data.platforms.join(" & ") || "platform"} creator pools…`,
+    `Configuring templates for ${data.platforms.join(" & ") || "your channels"}…`,
     "Configuring AI campaign templates…",
     "Your workspace is ready ✓",
   ];
@@ -499,7 +500,7 @@ export default function Onboarding() {
   const STEP_TITLES = [
     { label: "Account type", question: "Who are you?", sub: "This personalizes your entire BrandOps experience." },
     { label: "Goal", question: "What's your #1 goal?", sub: "Your primary outcome drives your AI campaign strategy." },
-    { label: "Platforms", question: "Where does your audience live?", sub: "Select all platforms you want to activate creators on." },
+    { label: "Video Use", question: "Where will you run these videos?", sub: "Select all the channels where the brand will distribute the content." },
     { label: "Budget", question: "What's your monthly creator budget?", sub: "Used to configure creator tiers and ROI projections." },
     { label: "Niche", question: "What's your product niche?", sub: "AI matches you with creators who know your category." },
     { label: "Team", question: "How big is your team?", sub: "Configures collaboration tools and workspace permissions." },
@@ -603,11 +604,11 @@ export default function Onboarding() {
                   </div>
                 )}
 
-                {/* ── Step 2: Platforms ────────────────────────── */}
+                {/* ── Step 2: Video Use ─────────────────────────── */}
                 {step === 2 && (
                   <div className="space-y-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {PLATFORMS.map(({ icon: Icon, label, stat }) => (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {VIDEO_USES.map(({ icon: Icon, label, stat }) => (
                         <motion.button
                           key={label}
                           onClick={() => toggle("platforms", label)}
@@ -633,7 +634,7 @@ export default function Onboarding() {
                         className="flex items-center gap-2 bg-[#C6FF00]/5 border border-[#C6FF00]/15 rounded-xl px-3 py-2.5 text-xs text-[#C6FF00]"
                       >
                         <Check className="h-3.5 w-3.5 shrink-0" />
-                        {data.platforms.length} platform{data.platforms.length > 1 ? "s" : ""} selected — AI will filter creators accordingly
+                        {data.platforms.length} channel{data.platforms.length > 1 ? "s" : ""} selected — AI will tailor brief templates accordingly
                       </motion.div>
                     )}
                   </div>

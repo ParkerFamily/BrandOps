@@ -1,6 +1,6 @@
 # BrandOps
 
-AI-powered UGC campaign operations platform — manage creators, launch campaigns, review submissions, and automate payouts from one dark SaaS dashboard.
+AI-powered UGC campaign operations platform — manage creators, launch campaigns, review submissions, and automate payouts from one dark SaaS dashboard. Creators produce video content that the BRAND posts on their own channels/ads — this is NOT an influencer marketplace. Creator social followings are irrelevant; metrics focus on production quality (approval rate, turnaround time, on-time delivery).
 
 ## Run & Operate
 

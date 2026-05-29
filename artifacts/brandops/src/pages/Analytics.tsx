@@ -12,7 +12,6 @@ import {
   Sparkles, Bot, TrendingUp, Lightbulb, Star, Award, Zap,
   BarChart3, Video, Users, ThumbsDown, ArrowUpRight,
 } from "lucide-react";
-import { SiTiktok, SiInstagram, SiYoutube } from "react-icons/si";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 
@@ -31,15 +30,6 @@ function InsightIcon({ type }: { type: string }) {
     case "tip":         return <Lightbulb className="h-4 w-4 text-blue-400" />;
     case "star":        return <Star className="h-4 w-4 text-purple-400" />;
     default:            return <Sparkles className="h-4 w-4 text-primary" />;
-  }
-}
-
-function getPlatformIcon(platform: string) {
-  switch (platform) {
-    case "tiktok":    return <SiTiktok className="h-3.5 w-3.5 text-white/60" />;
-    case "instagram": return <SiInstagram className="h-3.5 w-3.5 text-pink-400" />;
-    case "youtube":   return <SiYoutube className="h-3.5 w-3.5 text-red-400" />;
-    default:          return null;
   }
 }
 
@@ -89,10 +79,7 @@ function CreatorRow({
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium truncate">{creator.name}</div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            {getPlatformIcon(creator.platform)}
-            <span className="truncate">{creator.handle}</span>
-          </div>
+          <div className="text-xs text-muted-foreground truncate">{creator.handle}</div>
         </div>
         <div className="text-right shrink-0">
           <div className="text-sm font-bold text-primary">{creator.metric}{creator.metricLabel === "approval rate" ? "%" : "d"}</div>
