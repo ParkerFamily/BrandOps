@@ -26,8 +26,8 @@ const PRICING = [
     features: ["3 active campaigns", "50 creator slots", "AI campaign builder", "Basic analytics", "Stripe payouts", "Email support"],
     cta: "Start Free Trial",
     highlight: false,
-    stripeMonthly: "price_1TcK62BUl8zlcM3knvtdpFiN",
-    stripeAnnual: "price_1TcK6TBUl8zlcM3kxKUJu2Wt",
+    stripeMonthly: "price_1TcYGnL8wN3kCgjXK1ffZG9F",
+    stripeAnnual: "price_1TcYGnL8wN3kCgjXLhff0cBU",
   },
   {
     name: "Growth",
@@ -38,8 +38,8 @@ const PRICING = [
     features: ["Unlimited campaigns", "500 creator slots", "AI campaign builder", "AI submission review", "Advanced analytics", "AI assistant", "Priority support", "Team members (5)"],
     cta: "Start Free Trial",
     highlight: true,
-    stripeMonthly: "price_1TcK62BUl8zlcM3k0XFy9OXv",
-    stripeAnnual: "price_1TcK6TBUl8zlcM3kmsgowctu",
+    stripeMonthly: "price_1TcYGoL8wN3kCgjXSrhDw5iB",
+    stripeAnnual: "price_1TcYGoL8wN3kCgjXo4rvaJq6",
   },
   {
     name: "Enterprise",
@@ -696,7 +696,7 @@ export default function Settings() {
               const displayPrice = annual ? annualMonthly : monthlyPrice;
               const originalPrice = annual ? monthlyPrice : null;
               const priceId = annual ? stripeAnnual : stripeMonthly;
-              const isLoading = checkoutLoading === priceId;
+              const isLoading = priceId !== null && checkoutLoading === priceId;
 
               return (
                 <motion.div
