@@ -15,7 +15,6 @@ import type { LucideIcon } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { cn } from "@/lib/utils";
 
-import { setOnboarded } from "@/lib/onboarding";
 const ACCOUNT_TYPE_KEY = "brandops_account_type";
 
 /* ─── Types ────────────────────────────────────────────────────────────── */
@@ -891,7 +890,7 @@ const slideVariants = {
 };
 
 export default function Onboarding() {
-  const { user } = useAuth();
+  const { user, markOnboarded } = useAuth();
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
@@ -946,8 +945,8 @@ export default function Onboarding() {
 
   const handleDone = async () => {
     const payload = { ...data, completedAt: new Date().toISOString() };
-    setOnboarded(payload);
     localStorage.removeItem(ACCOUNT_TYPE_KEY);
+    await markOnboarded(payload);
     if (auth.currentUser) {
       try { await updateProfile(auth.currentUser, { displayName: auth.currentUser.displayName ?? "" }); } catch {}
     }

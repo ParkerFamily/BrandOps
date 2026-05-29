@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
-import { getOnboarded } from "@/lib/onboarding";
 
 export function ProtectedRoute({
   children,
@@ -11,7 +10,7 @@ export function ProtectedRoute({
   children: React.ReactNode;
   requireOnboarding?: boolean;
 }) {
-  const { user, loading } = useAuth();
+  const { user, loading, onboarded } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
@@ -20,14 +19,12 @@ export function ProtectedRoute({
       setLocation("/login");
       return;
     }
-    if (requireOnboarding && location !== "/onboarding") {
-      if (!getOnboarded()) {
-        setLocation("/onboarding");
-      }
+    if (requireOnboarding && onboarded === false && location !== "/onboarding") {
+      setLocation("/onboarding");
     }
-  }, [loading, user, requireOnboarding, location, setLocation]);
+  }, [loading, user, onboarded, requireOnboarding, location, setLocation]);
 
-  if (loading) {
+  if (loading || (user && onboarded === null)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

@@ -6,3 +6,4 @@ export * from "./activity";
 export * from "./conversations";
 export * from "./messages";
 export * from "./instagram";
+export * from "./user_profiles";

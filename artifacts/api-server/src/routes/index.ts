@@ -9,6 +9,7 @@ import analyticsRouter from "./analytics";
 import stripeRouter from "./stripe";
 import openaiRouter from "./openai";
 import emailRouter from "./email";
+import usersRouter from "./users";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(analyticsRouter);
 router.use(stripeRouter);
 router.use(openaiRouter);
 router.use(emailRouter);
+router.use(usersRouter);
 
 export default router;
