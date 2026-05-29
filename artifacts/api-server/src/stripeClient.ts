@@ -2,6 +2,13 @@ import Stripe from 'stripe';
 import { StripeSync } from 'stripe-replit-sync';
 
 async function getCredentials(): Promise<{ publishableKey: string; secretKey: string }> {
+  // If custom keys are set (user's own Stripe account), prefer them
+  const envSecret = process.env.STRIPE_SECRET_KEY;
+  const envPublishable = process.env.STRIPE_PUBLISHABLE_KEY;
+  if (envSecret && envPublishable) {
+    return { secretKey: envSecret, publishableKey: envPublishable };
+  }
+
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? 'repl ' + process.env.REPL_IDENTITY
