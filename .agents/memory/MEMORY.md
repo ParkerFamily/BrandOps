@@ -1,0 +1,1 @@
+- [Firestore rules deployment](firestore-rules-deploy.md) — use `scripts/deploy-firestore-rules.mjs` with `FIREBASE_SERVICE_ACCOUNT` (JSON) env var; firebase CLI --token flag is deprecated and broken.
