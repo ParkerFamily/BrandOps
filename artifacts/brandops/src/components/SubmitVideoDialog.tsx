@@ -34,11 +34,12 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    if (!user?.uid) return;
     const unsub = fsSubscribeCampaigns((data) => {
       setCampaigns(data.filter(c => c.status === "active"));
     });
     return unsub;
-  }, []);
+  }, [user?.uid]);
 
   // Reset form when dialog opens
   useEffect(() => {

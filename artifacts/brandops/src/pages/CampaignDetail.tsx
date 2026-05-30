@@ -49,13 +49,13 @@ export default function CampaignDetail() {
   }, [id, user?.uid, isCreator]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !user?.uid) return;
     const unsub = fsSubscribeSubmissions(
       data => { setSubmissions(data); setSubmissionsLoading(false); },
       [where("campaignId", "==", id)]
     );
     return unsub;
-  }, [id]);
+  }, [id, user?.uid]);
 
   const stats = {
     totalSubmissions: submissions.length,

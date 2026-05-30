@@ -33,18 +33,20 @@ const BASE = import.meta.env.BASE_URL;
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function CreatorCampaignsPage() {
+  const { user } = useAuth();
   const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
 
   useEffect(() => {
+    if (!user?.uid) return;
     const unsub = fsSubscribeCampaigns((data) => {
       setCampaigns(data);
       setIsLoading(false);
     });
     return unsub;
-  }, []);
+  }, [user?.uid]);
 
   const available = useMemo(() =>
     campaigns
@@ -351,12 +353,13 @@ function BrandCampaignsPage() {
   const { user } = useAuth();
 
   useEffect(() => {
+    if (!user?.uid) return;
     const unsub = fsSubscribeCampaigns((data) => {
       setCampaigns(data);
       setIsLoading(false);
     });
     return unsub;
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) return;
