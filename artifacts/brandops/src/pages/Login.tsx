@@ -7,7 +7,6 @@ import { SiGoogle } from "react-icons/si";
 import { Loader2, ArrowLeft, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import { getOnboarded } from "@/lib/onboarding";
 
 function InputField({
   label, type = "text", value, onChange, placeholder, error, rightEl,
@@ -37,13 +36,13 @@ function InputField({
 }
 
 export default function Login() {
-  const { signInWithGoogle, signInWithEmail, resetPassword, user } = useAuth();
+  const { signInWithGoogle, signInWithEmail, resetPassword, user, onboarded, loading } = useAuth();
   const [, setLocation] = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -52,11 +51,21 @@ export default function Login() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState("");
 
+  // Wait until auth + server onboarding check are both settled before redirecting
   useEffect(() => {
-    if (user) {
-      setLocation(getOnboarded() ? "/dashboard" : "/onboarding");
+    if (!loading && user && onboarded !== null) {
+      setLocation(onboarded ? "/dashboard" : "/onboarding");
     }
-  }, [user, setLocation]);
+  }, [user, onboarded, loading, setLocation]);
+
+  if (user && onboarded === null) {
+    // Auth resolved but server check still in flight — show spinner
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#C6FF00]" />
+      </div>
+    );
+  }
 
   if (user) return null;
 
@@ -67,15 +76,15 @@ export default function Login() {
     setErrors(e);
     if (Object.keys(e).length > 0) return;
 
-    setLoading(true);
+    setSubmitting(true);
     setGlobalError("");
     try {
       await signInWithEmail(email, password);
-      setLocation(getOnboarded() ? "/dashboard" : "/onboarding");
+      // redirect handled by useEffect once onboarded resolves from server
     } catch {
       setGlobalError("Incorrect email or password. Please try again.");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -84,7 +93,7 @@ export default function Login() {
     setGlobalError("");
     try {
       await signInWithGoogle();
-      setLocation(getOnboarded() ? "/dashboard" : "/onboarding");
+      // redirect handled by useEffect once onboarded resolves from server
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google sign-in failed.";
       setGlobalError(msg.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/, "").trim());
@@ -190,7 +199,7 @@ export default function Login() {
               {/* Google */}
               <button
                 onClick={handleGoogle}
-                disabled={googleLoading || loading}
+                disabled={googleLoading || submitting}
                 className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 font-semibold py-3 px-4 rounded-xl hover:bg-gray-100 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 text-sm"
               >
                 {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SiGoogle className="h-4 w-4" />}
@@ -238,11 +247,11 @@ export default function Login() {
 
               <button
                 onClick={handleLogin}
-                disabled={loading || googleLoading}
+                disabled={submitting || googleLoading}
                 className="w-full py-3.5 rounded-xl bg-[#C6FF00] text-black font-bold text-sm hover:bg-[#d4ff33] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
               >
-                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {loading ? "Signing in..." : "Sign in"}
+                {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {submitting ? "Signing in..." : "Sign in"}
               </button>
 
               <p className="text-center text-xs text-white/25">
