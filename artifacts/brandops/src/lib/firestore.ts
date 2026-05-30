@@ -11,6 +11,7 @@ import {
   where,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
   Timestamp,
   type Unsubscribe,
   type QueryConstraint,
@@ -141,6 +142,18 @@ export async function fsUpdateCampaign(id: string, data: Partial<FsCampaign>): P
 
 export async function fsDeleteCampaign(id: string): Promise<void> {
   await deleteDoc(doc(db, "campaigns", id));
+}
+
+export async function fsBackfillCampaignOwner(uid: string): Promise<number> {
+  const snap = await getDocs(collection(db, "campaigns"));
+  const toUpdate = snap.docs.filter(d => !d.data().brandUid);
+  if (toUpdate.length === 0) return 0;
+  const batch = writeBatch(db);
+  for (const d of toUpdate) {
+    batch.update(doc(db, "campaigns", d.id), { brandUid: uid, updatedAt: serverTimestamp() });
+  }
+  await batch.commit();
+  return toUpdate.length;
 }
 
 export async function fsGetCampaigns(): Promise<FsCampaign[]> {

@@ -1,8 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
-  fsSubscribeCampaigns, fsCreateCampaign,
+  fsSubscribeCampaigns, fsCreateCampaign, fsBackfillCampaignOwner,
   type FsCampaign,
 } from "@/lib/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -347,6 +348,7 @@ function BrandCampaignsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
     const unsub = fsSubscribeCampaigns((data) => {
@@ -355,6 +357,11 @@ function BrandCampaignsPage() {
     });
     return unsub;
   }, []);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    fsBackfillCampaignOwner(user.uid).catch(() => {});
+  }, [user?.uid]);
 
   const [search, setSearch] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
@@ -455,6 +462,7 @@ function BrandCampaignsPage() {
         creatorType: generated.creatorType || "",
         tone: generated.toneAndStyle || "",
         deadline: deadlineISO,
+        brandUid: user?.uid ?? "",
         aiData: {
           hookIdeas: generated.hookIdeas,
           videoConceptIdeas: generated.videoConceptIdeas,

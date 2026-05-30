@@ -1,6 +1,4 @@
 import { useLocation } from "wouter";
-import { useCreateCampaign, getListCampaignsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -12,6 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { DollarSign, Video, Users, Target } from "lucide-react";
+import { useState } from "react";
+import { fsCreateCampaign } from "@/lib/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 
 const formSchema = z.object({
   title: z.string().min(2, { message: "Title must be at least 2 characters." }),
@@ -42,8 +43,8 @@ const CREATOR_TYPES = [
 export default function NewCampaign() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const createCampaign = useCreateCampaign();
+  const { user } = useAuth();
+  const [isPending, setIsPending] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -67,23 +68,32 @@ export default function NewCampaign() {
   const videosNeeded = form.watch("videosNeeded");
   const estimatedVideos = payoutPerVideo > 0 ? Math.floor(totalBudget / payoutPerVideo) : 0;
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    createCampaign.mutate({
-      data: {
-        ...values,
-        deadline: new Date(values.deadline).toISOString(),
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsPending(true);
+    try {
+      const id = await fsCreateCampaign({
+        title: values.title,
+        description: values.description,
+        platform: values.platform,
+        niche: "",
+        status: "draft",
+        totalBudget: values.totalBudget,
+        payoutPerVideo: values.payoutPerVideo,
+        videosNeeded: values.videosNeeded,
         creatorType: values.creatorType ?? "",
-      }
-    }, {
-      onSuccess: (data) => {
-        toast({ title: "Campaign created", description: "Your campaign has been created as a draft." });
-        queryClient.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
-        setLocation(`/campaigns/${data.id}`);
-      },
-      onError: () => {
-        toast({ title: "Error", description: "Failed to create campaign. Please try again.", variant: "destructive" });
-      }
-    });
+        tone: values.tone,
+        videoStyle: values.videoStyle,
+        deadline: new Date(values.deadline).toISOString(),
+        inspirationUrls: values.inspirationUrls,
+        brandUid: user?.uid ?? "",
+      });
+      toast({ title: "Campaign created", description: "Your campaign has been created as a draft." });
+      setLocation(`/campaigns/${id}`);
+    } catch {
+      toast({ title: "Error", description: "Failed to create campaign. Please try again.", variant: "destructive" });
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -316,10 +326,10 @@ export default function NewCampaign() {
               data-testid="button-cancel-campaign">
               Cancel
             </Button>
-            <Button type="submit" disabled={createCampaign.isPending}
+            <Button type="submit" disabled={isPending}
               className="bg-primary text-black hover:bg-primary/90 font-bold"
               data-testid="button-submit-campaign">
-              {createCampaign.isPending ? "Creating…" : "Create Campaign"}
+              {isPending ? "Creating…" : "Create Campaign"}
             </Button>
           </div>
         </form>
