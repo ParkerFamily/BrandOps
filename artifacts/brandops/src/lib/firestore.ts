@@ -175,7 +175,8 @@ export function fsSubscribeCampaigns(
 ): Unsubscribe {
   return onSnapshot(
     query(collection(db, "campaigns"), orderBy("createdAt", "desc")),
-    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsCampaign)))
+    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsCampaign))),
+    (err) => { console.warn("[Firestore] campaigns:", err.code); cb([]); }
   );
 }
 
@@ -220,7 +221,8 @@ export function fsSubscribeCreators(
 ): Unsubscribe {
   return onSnapshot(
     query(collection(db, "creators"), orderBy("createdAt", "desc")),
-    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsCreator)))
+    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsCreator))),
+    (err) => { console.warn("[Firestore] creators:", err.code); cb([]); }
   );
 }
 
@@ -261,7 +263,8 @@ export function fsSubscribeSubmissions(
 ): Unsubscribe {
   return onSnapshot(
     query(collection(db, "submissions"), orderBy("createdAt", "desc"), ...constraints),
-    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsSubmission)))
+    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsSubmission))),
+    (err) => { console.warn("[Firestore] submissions:", err.code); cb([]); }
   );
 }
 
@@ -296,7 +299,8 @@ export function fsSubscribePayments(
 ): Unsubscribe {
   return onSnapshot(
     query(collection(db, "payments"), orderBy("createdAt", "desc"), ...constraints),
-    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsPayment)))
+    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsPayment))),
+    (err) => { console.warn("[Firestore] payments:", err.code); cb([]); }
   );
 }
 
