@@ -67,6 +67,7 @@ export interface FsCreator {
   email: string;
   platform: string;
   niche?: string;
+  status?: "active" | "suspended" | "pending";
   contentStyles: string[];
   avatarUrl?: string;
   payoutRate: number;
@@ -78,6 +79,8 @@ export interface FsCreator {
   avgTurnaroundDays?: number;
   brandRating?: number;
   completedCampaigns?: number;
+  approvedVideos?: number;
+  totalEarnings?: number;
   followerCount?: number;
   engagementRate?: number;
   paymentMethod?: string;

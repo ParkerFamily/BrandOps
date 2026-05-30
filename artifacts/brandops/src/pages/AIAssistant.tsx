@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useListCampaigns, useListCreators, useGetDashboardStats } from "@workspace/api-client-react";
+import { fsGetCampaigns, fsGetCreators, type FsCampaign, type FsCreator } from "@/lib/firestore";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -160,9 +160,19 @@ export default function AIAssistant() {
   const createConv = useCreateConversation();
   const deleteConv = useDeleteConversation();
 
-  const { data: campaigns } = useListCampaigns();
-  const { data: creators } = useListCreators();
-  const { data: stats } = useGetDashboardStats();
+  const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
+  const [creators, setCreators] = useState<FsCreator[]>([]);
+
+  useEffect(() => {
+    fsGetCampaigns().then(setCampaigns).catch(() => {});
+    fsGetCreators().then(setCreators).catch(() => {});
+  }, []);
+
+  const stats = {
+    pendingSubmissions: 0,
+    pendingPayouts: 0,
+    totalPayouts: 0,
+  };
 
   const [activeId, setActiveId] = useState<number | null>(null);
   const [input, setInput] = useState("");

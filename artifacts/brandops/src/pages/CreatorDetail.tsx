@@ -1,8 +1,8 @@
 import { useRoute } from "wouter";
+import { useState, useEffect } from "react";
 import {
-  useGetCreator, getGetCreatorQueryKey, useUpdateCreator,
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+  fsGetCreator, fsUpdateCreator, type FsCreator,
+} from "@/lib/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +15,6 @@ import {
   UserCircle2, Mail, PlayCircle, Sparkles, Loader2, Target,
   TrendingUp, DollarSign, Star, CreditCard, CheckCircle2, AlertCircle,
 } from "lucide-react";
-import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
@@ -64,55 +63,56 @@ function PaymentSetupCard({
   creatorId,
   currentMethod,
   currentDetails,
+  onUpdated,
 }: {
-  creatorId: number;
+  creatorId: string;
   currentMethod: string | null | undefined;
   currentDetails: string | null | undefined;
+  onUpdated: () => void;
 }) {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const updateCreator = useUpdateCreator();
-
   const [editing, setEditing] = useState(!currentMethod);
   const [method, setMethod] = useState<PaymentMethodType | "">(
     (currentMethod as PaymentMethodType) ?? ""
   );
   const [details, setDetails] = useState(currentDetails ?? "");
+  const [isPending, setIsPending] = useState(false);
 
   const methodMeta = PAYMENT_METHODS.find(m => m.value === method);
   const isSetup = !!currentMethod && !!currentDetails;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!method || !details.trim()) {
       toast({ title: "Fill in all payment fields", variant: "destructive" });
       return;
     }
-    updateCreator.mutate(
-      { id: creatorId, data: { paymentMethod: method, paymentDetails: details.trim() } },
-      {
-        onSuccess: () => {
-          toast({ title: "Payment info saved" });
-          queryClient.invalidateQueries({ queryKey: getGetCreatorQueryKey(creatorId) });
-          setEditing(false);
-        },
-        onError: () => toast({ title: "Failed to save payment info", variant: "destructive" }),
-      }
-    );
+    setIsPending(true);
+    try {
+      await fsUpdateCreator(creatorId, { paymentMethod: method, paymentDetails: details.trim() });
+      toast({ title: "Payment info saved" });
+      setEditing(false);
+      onUpdated();
+    } catch {
+      toast({ title: "Failed to save payment info", variant: "destructive" });
+    } finally {
+      setIsPending(false);
+    }
   };
 
-  const handleClear = () => {
-    updateCreator.mutate(
-      { id: creatorId, data: { paymentMethod: null, paymentDetails: null } },
-      {
-        onSuccess: () => {
-          toast({ title: "Payment info removed" });
-          queryClient.invalidateQueries({ queryKey: getGetCreatorQueryKey(creatorId) });
-          setMethod("");
-          setDetails("");
-          setEditing(true);
-        },
-      }
-    );
+  const handleClear = async () => {
+    setIsPending(true);
+    try {
+      await fsUpdateCreator(creatorId, { paymentMethod: undefined, paymentDetails: undefined });
+      toast({ title: "Payment info removed" });
+      setMethod("");
+      setDetails("");
+      setEditing(true);
+      onUpdated();
+    } catch {
+      toast({ title: "Failed to remove payment info", variant: "destructive" });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   return (
@@ -154,7 +154,7 @@ function PaymentSetupCard({
               <Button variant="outline" size="sm" className="flex-1" onClick={() => { setMethod((currentMethod as PaymentMethodType) ?? ""); setDetails(currentDetails ?? ""); setEditing(true); }}>
                 Edit
               </Button>
-              <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={handleClear} disabled={updateCreator.isPending}>
+              <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={handleClear} disabled={isPending}>
                 Remove
               </Button>
             </div>
@@ -206,9 +206,9 @@ function PaymentSetupCard({
                 size="sm"
                 className={cn("bg-primary text-primary-foreground hover:bg-primary/90", isSetup ? "flex-1" : "w-full")}
                 onClick={handleSave}
-                disabled={updateCreator.isPending || !method || !details.trim()}
+                disabled={isPending || !method || !details.trim()}
               >
-                {updateCreator.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Payment Info"}
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Payment Info"}
               </Button>
             </div>
           </div>
@@ -220,16 +220,19 @@ function PaymentSetupCard({
 
 export default function CreatorDetail() {
   const [, params] = useRoute("/creators/:id");
-  const id = params?.id ? parseInt(params.id) : 0;
-  const queryClient = useQueryClient();
+  const id = params?.id ?? "";
   const { toast } = useToast();
 
-  const { data: creator, isLoading } = useGetCreator(id, {
-    query: { enabled: !!id, queryKey: getGetCreatorQueryKey(id) }
-  });
-  const updateCreator = useUpdateCreator();
-
+  const [creator, setCreator] = useState<FsCreator | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [matchResult, setMatchResult] = useState<CreatorMatchResult | null>(null);
+
+  const loadCreator = () => {
+    if (!id) return;
+    fsGetCreator(id).then(c => { setCreator(c); setIsLoading(false); });
+  };
+
+  useEffect(() => { loadCreator(); }, [id]);
 
   const matchMutation = useMutation({
     mutationFn: async () => {
@@ -251,15 +254,16 @@ export default function CreatorDetail() {
     onError: () => toast({ title: "AI analysis failed", variant: "destructive" }),
   });
 
-  const handleToggleStatus = () => {
+  const handleToggleStatus = async () => {
     if (!creator) return;
     const newStatus = creator.status === "active" ? "suspended" : "active";
-    updateCreator.mutate({ id, data: { status: newStatus } }, {
-      onSuccess: () => {
-        toast({ title: `Creator ${newStatus === "active" ? "activated" : "suspended"}` });
-        queryClient.invalidateQueries({ queryKey: getGetCreatorQueryKey(id) });
-      }
-    });
+    try {
+      await fsUpdateCreator(id, { status: newStatus } as Partial<FsCreator>);
+      setCreator(prev => prev ? { ...prev, status: newStatus } : prev);
+      toast({ title: `Creator ${newStatus === "active" ? "activated" : "suspended"}` });
+    } catch {
+      toast({ title: "Failed to update creator", variant: "destructive" });
+    }
   };
 
   const tierColor = (tier?: string) => {
@@ -280,7 +284,6 @@ export default function CreatorDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Profile Card */}
       <Card className="bg-card border-card-border overflow-hidden">
         <div className="h-28 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent relative">
           <div className="absolute inset-0 bg-gradient-to-t from-card/60 to-transparent" />
@@ -300,10 +303,10 @@ export default function CreatorDetail() {
                   <div className="flex items-center gap-3">
                     <h1 className="text-2xl font-bold">{creator.name}</h1>
                     <Badge
-                      variant={creator.status === "active" ? "default" : "outline"}
-                      className={creator.status === "active" ? "bg-primary/20 text-primary border-primary/30" : ""}
+                      variant={(creator as any).status === "active" ? "default" : "outline"}
+                      className={(creator as any).status === "active" ? "bg-primary/20 text-primary border-primary/30" : ""}
                     >
-                      {creator.status}
+                      {(creator as any).status ?? "active"}
                     </Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 mt-1.5 text-muted-foreground text-sm">
@@ -317,7 +320,7 @@ export default function CreatorDetail() {
                   </div>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleToggleStatus}>
-                  {creator.status === "active" ? "Suspend" : "Activate"}
+                  {(creator as any).status === "active" ? "Suspend" : "Activate"}
                 </Button>
               </div>
             </div>
@@ -349,7 +352,6 @@ export default function CreatorDetail() {
       </Card>
 
       <div className="grid md:grid-cols-3 gap-6">
-        {/* Left: submissions + performance */}
         <div className="md:col-span-2 space-y-6">
           <Card className="bg-card border-card-border">
             <CardHeader>
@@ -369,40 +371,19 @@ export default function CreatorDetail() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
-                  <div className="text-sm font-medium">Approved Videos</div>
-                  <div className="font-bold">{creator.approvedVideos ?? 0}</div>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
-                  <div className="text-sm font-medium">Approval Rate</div>
-                  <div className="font-bold text-primary">
-                    {(creator.approvalRate ?? 0) > 0 ? `${creator.approvalRate}%` : "—"}
+                {[
+                  { label: "Approved Videos", value: creator.approvedVideos ?? 0 },
+                  { label: "Approval Rate", value: (creator.approvalRate ?? 0) > 0 ? `${creator.approvalRate}%` : "—", accent: true },
+                  { label: "On-Time Delivery", value: (creator.onTimeDeliveryRate ?? 0) > 0 ? `${creator.onTimeDeliveryRate}%` : "—" },
+                  { label: "Avg Turnaround", value: (creator.avgTurnaroundDays ?? 0) > 0 ? `${creator.avgTurnaroundDays} days` : "—" },
+                  { label: "Brand Rating", value: (creator.brandRating ?? 0) > 0 ? `${creator.brandRating} / 5` : "—", yellow: true },
+                  { label: "Suggested Payout", value: (creator.suggestedPayout ?? 0) > 0 ? `$${creator.suggestedPayout}/video` : "—" },
+                ].map(({ label, value, accent, yellow }) => (
+                  <div key={label} className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
+                    <div className="text-sm font-medium">{label}</div>
+                    <div className={cn("font-bold", accent ? "text-primary" : yellow ? "text-yellow-400" : "")}>{value}</div>
                   </div>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
-                  <div className="text-sm font-medium">On-Time Delivery</div>
-                  <div className="font-bold">
-                    {(creator.onTimeDeliveryRate ?? 0) > 0 ? `${creator.onTimeDeliveryRate}%` : "—"}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
-                  <div className="text-sm font-medium">Avg Turnaround</div>
-                  <div className="font-bold">
-                    {(creator.avgTurnaroundDays ?? 0) > 0 ? `${creator.avgTurnaroundDays} days` : "—"}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
-                  <div className="text-sm font-medium">Brand Rating</div>
-                  <div className="font-bold text-yellow-400">
-                    {(creator.brandRating ?? 0) > 0 ? `${creator.brandRating} / 5` : "—"}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg bg-muted/30 border border-border">
-                  <div className="text-sm font-medium">Suggested Payout</div>
-                  <div className="font-bold">
-                    {(creator.suggestedPayout ?? 0) > 0 ? `$${creator.suggestedPayout}/video` : "—"}
-                  </div>
-                </div>
+                ))}
                 {(creator.contentStyles ?? []).length > 0 && (
                   <div className="p-3 rounded-lg bg-muted/30 border border-border">
                     <div className="text-sm font-medium mb-2">Content Styles</div>
@@ -420,12 +401,12 @@ export default function CreatorDetail() {
           </Card>
         </div>
 
-        {/* Right: payment setup + AI match */}
         <div className="space-y-6">
           <PaymentSetupCard
             creatorId={id}
             currentMethod={creator.paymentMethod}
             currentDetails={creator.paymentDetails}
+            onUpdated={loadCreator}
           />
 
           <Card className="bg-card border-card-border">
@@ -520,7 +501,6 @@ export default function CreatorDetail() {
                     size="sm"
                     className="w-full"
                     onClick={() => { setMatchResult(null); matchMutation.mutate(); }}
-                    disabled={matchMutation.isPending}
                   >
                     Re-analyze
                   </Button>

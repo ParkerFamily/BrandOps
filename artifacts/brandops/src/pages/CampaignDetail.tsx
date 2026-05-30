@@ -1,16 +1,11 @@
-import { useRoute } from "wouter";
-import { 
-  useGetCampaign, getGetCampaignQueryKey,
-  useGetCampaignStats, getGetCampaignStatsQueryKey,
-  usePublishCampaign,
-  useDeleteCampaign,
-  useListSubmissions,
-  useUpdateSubmission,
-  useUpdateCampaign,
-  useCreateSubmission,
-  getListSubmissionsQueryKey
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useRoute, useLocation } from "wouter";
+import { useEffect, useState } from "react";
+import {
+  fsGetCampaign, fsUpdateCampaign, fsDeleteCampaign,
+  fsSubscribeSubmissions, fsUpdateSubmission,
+  type FsCampaign, type FsSubmission,
+} from "@/lib/firestore";
+import { where } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,93 +15,82 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, PlayCircle, ExternalLink, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
-import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState as useLocalState } from "react";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
-
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 
 export default function CampaignDetail() {
   const [, params] = useRoute("/campaigns/:id");
-  const id = params?.id ? parseInt(params.id) : 0;
+  const id = params?.id ?? "";
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const onboarding = getOnboarding();
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
-  const { data: campaign, isLoading: campaignLoading } = useGetCampaign(id, { 
-    query: { enabled: !!id, queryKey: getGetCampaignQueryKey(id) } 
-  });
-  
-  const { data: stats, isLoading: statsLoading } = useGetCampaignStats(id, {
-    query: { enabled: !!id, queryKey: getGetCampaignStatsQueryKey(id) }
-  });
+  const [campaign, setCampaign] = useState<FsCampaign | null>(null);
+  const [campaignLoading, setCampaignLoading] = useState(true);
+  const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(true);
+  const [actionPending, setActionPending] = useState(false);
 
-  const { data: submissions, isLoading: submissionsLoading } = useListSubmissions({ campaignId: id }, {
-    query: { enabled: !!id, queryKey: getListSubmissionsQueryKey({ campaignId: id }) }
-  });
+  useEffect(() => {
+    if (!id) return;
+    fsGetCampaign(id).then(c => { setCampaign(c); setCampaignLoading(false); });
+  }, [id]);
 
-  const publishCampaign = usePublishCampaign();
-  const deleteCampaign = useDeleteCampaign();
-  const updateSubmission = useUpdateSubmission();
-  const updateCampaign = useUpdateCampaign();
-  const createSubmission = useCreateSubmission();
+  useEffect(() => {
+    if (!id) return;
+    const unsub = fsSubscribeSubmissions(
+      data => { setSubmissions(data); setSubmissionsLoading(false); },
+      [where("campaignId", "==", id)]
+    );
+    return unsub;
+  }, [id]);
 
-  const handlePublish = () => {
-    publishCampaign.mutate({ id }, {
-      onSuccess: () => {
-        toast({ title: "Campaign published successfully" });
-        queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
-      }
-    });
+  const stats = {
+    totalSubmissions: submissions.length,
+    approvedSubmissions: submissions.filter(s => s.status === "approved").length,
+    pendingSubmissions: submissions.filter(s => s.status === "pending" || s.status === "reviewing").length,
+    rejectedSubmissions: submissions.filter(s => s.status === "rejected").length,
+    totalSpent: submissions.filter(s => s.status === "approved").reduce((sum, s) => sum + (s.payoutAmount ?? campaign?.payoutPerVideo ?? 0), 0),
   };
 
-  const handlePause = () => {
-    updateCampaign.mutate({ id, data: { status: "paused" } }, {
-      onSuccess: () => {
-        toast({ title: "Campaign paused" });
-        queryClient.invalidateQueries({ queryKey: getGetCampaignQueryKey(id) });
-      }
-    });
+  const handlePublish = async () => {
+    setActionPending(true);
+    try {
+      await fsUpdateCampaign(id, { status: "active" });
+      setCampaign(prev => prev ? { ...prev, status: "active" } : prev);
+      toast({ title: "Campaign published successfully" });
+    } catch { toast({ title: "Failed to publish", variant: "destructive" }); }
+    finally { setActionPending(false); }
   };
 
-  const handleDelete = () => {
-    deleteCampaign.mutate({ id }, {
-      onSuccess: () => {
-        toast({ title: "Campaign deleted" });
-        setLocation("/campaigns");
-      }
-    });
+  const handlePause = async () => {
+    setActionPending(true);
+    try {
+      await fsUpdateCampaign(id, { status: "paused" });
+      setCampaign(prev => prev ? { ...prev, status: "paused" } : prev);
+      toast({ title: "Campaign paused" });
+    } catch { toast({ title: "Failed to pause", variant: "destructive" }); }
+    finally { setActionPending(false); }
   };
 
-  const handleCreateMockSubmission = () => {
-    createSubmission.mutate({
-      data: {
-        campaignId: id,
-        creatorId: 1,
-        videoUrl: "https://example.com/video",
-      }
-    }, {
-      onSuccess: () => {
-        toast({ title: "Mock submission created" });
-        queryClient.invalidateQueries({ queryKey: getListSubmissionsQueryKey({ campaignId: id }) });
-      }
-    });
+  const handleDelete = async () => {
+    setActionPending(true);
+    try {
+      await fsDeleteCampaign(id);
+      toast({ title: "Campaign deleted" });
+      setLocation("/campaigns");
+    } catch { toast({ title: "Failed to delete", variant: "destructive" }); setActionPending(false); }
   };
 
-  const handleReview = (submissionId: number, status: "approved" | "rejected" | "revision_requested") => {
-    updateSubmission.mutate({ 
-      id: submissionId, 
-      data: { status } 
-    }, {
-      onSuccess: () => {
-        toast({ title: `Submission ${status}` });
-        queryClient.invalidateQueries({ queryKey: getListSubmissionsQueryKey({ campaignId: id }) });
-      }
-    });
+  const handleReview = async (submissionId: string, status: "approved" | "rejected" | "revision_requested") => {
+    try {
+      await fsUpdateSubmission(submissionId, { status });
+      toast({ title: `Submission ${status.replace("_", " ")}` });
+    } catch { toast({ title: "Failed to update submission", variant: "destructive" }); }
   };
 
   if (campaignLoading) {
@@ -117,7 +101,7 @@ export default function CampaignDetail() {
     return <div>Campaign not found</div>;
   }
 
-  const budgetUsedPercent = stats ? (stats.totalSpent / campaign.totalBudget) * 100 : 0;
+  const budgetUsedPercent = campaign.totalBudget > 0 ? (stats.totalSpent / campaign.totalBudget) * 100 : 0;
 
   return (
     <div className="space-y-6">
@@ -143,16 +127,16 @@ export default function CampaignDetail() {
           ) : (
             <>
               {campaign.status === "draft" && (
-                <Button onClick={handlePublish} disabled={publishCampaign.isPending} data-testid="button-publish-campaign">
-                  {publishCampaign.isPending ? "Publishing..." : "Publish"}
+                <Button onClick={handlePublish} disabled={actionPending} data-testid="button-publish-campaign">
+                  {actionPending ? "Publishing..." : "Publish"}
                 </Button>
               )}
               {campaign.status === "active" && (
-                <Button variant="secondary" onClick={handlePause} disabled={updateCampaign.isPending} data-testid="button-pause-campaign">
+                <Button variant="secondary" onClick={handlePause} disabled={actionPending} data-testid="button-pause-campaign">
                   Pause
                 </Button>
               )}
-              <Button variant="destructive" size="icon" onClick={handleDelete} disabled={deleteCampaign.isPending} data-testid="button-delete-campaign">
+              <Button variant="destructive" size="icon" onClick={handleDelete} disabled={actionPending} data-testid="button-delete-campaign">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </>
@@ -168,7 +152,7 @@ export default function CampaignDetail() {
             </CardHeader>
             <CardContent>
               <p className="text-sm whitespace-pre-wrap">{campaign.description}</p>
-              
+
               <div className="mt-6 grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Platform</div>
@@ -176,7 +160,7 @@ export default function CampaignDetail() {
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Niche</div>
-                  <div className="font-medium">{campaign.niche}</div>
+                  <div className="font-medium">{campaign.niche || "—"}</div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Payout per Video</div>
@@ -187,6 +171,13 @@ export default function CampaignDetail() {
                   <div className="font-medium text-primary break-all">{campaign.inspirationUrls || "None provided"}</div>
                 </div>
               </div>
+
+              {campaign.aiData?.creatorBrief && (
+                <div className="mt-6 pt-4 border-t border-border">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2">Creator Brief</div>
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{campaign.aiData.creatorBrief}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -196,19 +187,17 @@ export default function CampaignDetail() {
                 <TabsTrigger value="submissions">{isCreator ? "My Submissions" : "Submissions"}</TabsTrigger>
                 {!isCreator && <TabsTrigger value="creators">Creators</TabsTrigger>}
               </TabsList>
-              {isCreator ? (
+              {isCreator && (
                 <Button size="sm" onClick={() => setUploadOpen(true)} className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90">
                   <Upload className="h-3.5 w-3.5" /> Submit Video
                 </Button>
-              ) : (
-                <Button variant="outline" size="sm" onClick={handleCreateMockSubmission}>Add Mock Submission</Button>
               )}
             </div>
-            
+
             <TabsContent value="submissions" className="mt-4 space-y-4">
               {submissionsLoading ? (
                 <Skeleton className="h-32 w-full" />
-              ) : submissions && submissions.length > 0 ? (
+              ) : submissions.length > 0 ? (
                 submissions.map(sub => (
                   <Card key={sub.id} className="bg-card border-card-border overflow-hidden">
                     <div className="flex flex-col sm:flex-row">
@@ -226,23 +215,27 @@ export default function CampaignDetail() {
                         <div>
                           <div className="flex justify-between items-start">
                             <div>
-                              <div className="font-medium">{sub.creator?.name || `Creator #${sub.creatorId}`}</div>
-                              <div className="text-sm text-muted-foreground">{sub.creator?.handle}</div>
+                              <div className="font-medium">{sub.creatorName || sub.creatorId}</div>
+                              <div className="text-sm text-muted-foreground">{sub.creatorEmail}</div>
                             </div>
                             <Badge variant="outline">{sub.status}</Badge>
                           </div>
-                          <div className="text-sm mt-2 text-muted-foreground">Submitted {format(new Date(sub.createdAt), "MMM d, yyyy")}</div>
+                          {sub.createdAt && (
+                            <div className="text-sm mt-2 text-muted-foreground">
+                              Submitted {format(sub.createdAt.toDate(), "MMM d, yyyy")}
+                            </div>
+                          )}
                         </div>
-                        
+
                         {!isCreator && (sub.status === "reviewing" || sub.status === "pending") && (
                           <div className="flex gap-2 mt-4 pt-4 border-t border-border">
-                            <Button size="sm" onClick={() => handleReview(sub.id, "approved")} className="bg-primary text-primary-foreground hover:bg-primary/90" data-testid={`btn-approve-${sub.id}`}>
+                            <Button size="sm" onClick={() => handleReview(sub.id!, "approved")} className="bg-primary text-primary-foreground hover:bg-primary/90" data-testid={`btn-approve-${sub.id}`}>
                               <Check className="h-4 w-4 mr-1" /> Approve
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleReview(sub.id, "revision_requested")} data-testid={`btn-revision-${sub.id}`}>
+                            <Button size="sm" variant="outline" onClick={() => handleReview(sub.id!, "revision_requested")} data-testid={`btn-revision-${sub.id}`}>
                               Request Revision
                             </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleReview(sub.id, "rejected")} data-testid={`btn-reject-${sub.id}`}>
+                            <Button size="sm" variant="destructive" onClick={() => handleReview(sub.id!, "rejected")} data-testid={`btn-reject-${sub.id}`}>
                               <X className="h-4 w-4 mr-1" /> Reject
                             </Button>
                           </div>
@@ -270,7 +263,7 @@ export default function CampaignDetail() {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-muted-foreground">Budget Used</span>
-                  <span className="font-medium">${stats?.totalSpent || 0} / ${campaign.totalBudget}</span>
+                  <span className="font-medium">${stats.totalSpent} / ${campaign.totalBudget}</span>
                 </div>
                 <Progress value={budgetUsedPercent} className="h-2 bg-muted">
                   <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(budgetUsedPercent, 100)}%` }} />
@@ -279,19 +272,19 @@ export default function CampaignDetail() {
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
                 <div>
-                  <div className="text-2xl font-bold">{stats?.totalSubmissions || 0}</div>
+                  <div className="text-2xl font-bold">{stats.totalSubmissions}</div>
                   <div className="text-xs text-muted-foreground">Total Videos</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-primary">{stats?.approvedSubmissions || 0}</div>
+                  <div className="text-2xl font-bold text-primary">{stats.approvedSubmissions}</div>
                   <div className="text-xs text-muted-foreground">Approved</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-yellow-500">{stats?.pendingSubmissions || 0}</div>
+                  <div className="text-2xl font-bold text-yellow-500">{stats.pendingSubmissions}</div>
                   <div className="text-xs text-muted-foreground">In Review</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-destructive">{stats?.rejectedSubmissions || 0}</div>
+                  <div className="text-2xl font-bold text-destructive">{stats.rejectedSubmissions}</div>
                   <div className="text-xs text-muted-foreground">Rejected</div>
                 </div>
               </div>
@@ -300,12 +293,11 @@ export default function CampaignDetail() {
         </div>
       </div>
 
-      {/* Creator video upload dialog */}
       {campaign && (
         <SubmitVideoDialog
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          preselectedCampaignId={params?.id ?? String(id)}
+          preselectedCampaignId={id}
           preselectedCampaignTitle={campaign.title}
         />
       )}

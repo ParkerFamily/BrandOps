@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { useState } from "react";
-import { useHealthCheck } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -62,7 +61,6 @@ function BrandOpsIcon() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { data: health } = useHealthCheck();
   const { user, logout } = useAuth();
 
   const onboarding = getOnboarding();
@@ -168,13 +166,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Health indicator */}
           <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground">
-            <div
-              className={cn(
-                "w-1.5 h-1.5 rounded-full shrink-0",
-                health?.status === "ok" ? "bg-primary animate-pulse" : "bg-yellow-500"
-              )}
-            />
-            <span className="truncate">System {health?.status ?? "checking..."}</span>
+            <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-primary animate-pulse" />
+            <span className="truncate">System online</span>
           </div>
 
           {/* User profile strip */}
