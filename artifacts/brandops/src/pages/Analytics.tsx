@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   fsSubscribeCampaigns, fsSubscribeSubmissions, fsSubscribePayments, fsSubscribeCreators,
   type FsCampaign, type FsSubmission, type FsPayment, type FsCreator,
@@ -196,6 +197,7 @@ function computeAnalytics(
 }
 
 export default function Analytics() {
+  const { user } = useAuth();
   const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
   const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
   const [payments, setPayments] = useState<FsPayment[]>([]);
@@ -203,6 +205,7 @@ export default function Analytics() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!user?.uid) return;
     let loaded = 0;
     const checkDone = () => { loaded++; if (loaded >= 4) setIsLoading(false); };
     const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); });
@@ -210,7 +213,7 @@ export default function Analytics() {
     const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); });
     const u4 = fsSubscribeCreators(d => { setCreators(d); checkDone(); });
     return () => { u1(); u2(); u3(); u4(); };
-  }, []);
+  }, [user?.uid]);
 
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);

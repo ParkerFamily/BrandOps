@@ -127,10 +127,11 @@ function CreatorDashboard() {
   const [uploadOpen, setUploadOpen] = useState(false);
 
   useEffect(() => {
+    if (!user?.uid) return;
     const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); setCampaignsLoading(false); });
     const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); setSubmissionsLoading(false); });
     return () => { u1(); u2(); };
-  }, []);
+  }, [user?.uid]);
 
   const { data: earningsData, isLoading: earningsLoading } = useQuery<CreatorEarnings>({
     queryKey: ["creator-earnings", user?.email],
@@ -395,6 +396,7 @@ function CreatorDashboard() {
 /* ─────────────────────────── BRAND DASHBOARD ───────────────────────────── */
 
 function BrandDashboard() {
+  const { user } = useAuth();
   const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
   const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
   const [payments, setPayments] = useState<FsPayment[]>([]);
@@ -402,13 +404,14 @@ function BrandDashboard() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
+    if (!user?.uid) return;
     let loaded = 0;
     const checkDone = () => { loaded++; if (loaded >= 3) setDataLoading(false); };
     const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); });
     const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); checkDone(); });
     const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); });
     return () => { u1(); u2(); u3(); };
-  }, []);
+  }, [user?.uid]);
 
   const [insights, setInsights] = useState<DashboardInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);

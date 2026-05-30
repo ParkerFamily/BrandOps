@@ -42,6 +42,7 @@ export interface FsCampaign {
   inspirationUrls?: string;
   videoStyle?: string;
   brandUid?: string;
+  ownerFirebaseUid?: string;
   // Full AI-generated brief content
   aiData?: {
     hookIdeas?: string[];
@@ -159,6 +160,52 @@ export async function fsBackfillCampaignOwner(uid: string): Promise<number> {
   return toUpdate.length;
 }
 
+/**
+ * Normalize a campaign doc so the mobile app can find it:
+ * - Writes ownerFirebaseUid + brandUid if missing
+ * - Extracts top-level fields from aiData for legacy docs created with only aiData
+ */
+export async function fsNormalizeCampaignOwnership(
+  id: string,
+  uid: string,
+  campaign: FsCampaign
+): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  if (!campaign.ownerFirebaseUid) updates.ownerFirebaseUid = uid;
+  if (!campaign.brandUid) updates.brandUid = uid;
+  // Pull top-level fields from aiData for legacy docs that only have aiData
+  if (!campaign.title && campaign.aiData?.creatorBrief) {
+    const brief = campaign.aiData.creatorBrief;
+    const firstLine = brief.split("\n")[0].replace(/^#\s*/, "").trim();
+    if (firstLine) updates.title = firstLine.slice(0, 100);
+  }
+  if (Object.keys(updates).length === 0) return;
+  updates.updatedAt = serverTimestamp();
+  await updateDoc(doc(db, "campaigns", id), updates);
+}
+
+/**
+ * Claim all unowned campaign docs in Firestore for this user.
+ * Runs once on Brand Campaigns page mount.
+ */
+export async function fsBootstrapUserCampaigns(uid: string): Promise<void> {
+  const snap = await getDocs(collection(db, "campaigns"));
+  const orphans = snap.docs.filter(d => {
+    const data = d.data();
+    return !data.ownerFirebaseUid || !data.brandUid;
+  });
+  if (orphans.length === 0) return;
+  const batch = writeBatch(db);
+  for (const d of orphans) {
+    batch.update(doc(db, "campaigns", d.id), {
+      ownerFirebaseUid: uid,
+      brandUid: uid,
+      updatedAt: serverTimestamp(),
+    });
+  }
+  await batch.commit();
+}
+
 export async function fsGetCampaigns(): Promise<FsCampaign[]> {
   const snap = await getDocs(query(collection(db, "campaigns"), orderBy("createdAt", "desc")));
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as FsCampaign));
@@ -261,9 +308,24 @@ export function fsSubscribeSubmissions(
   cb: (submissions: FsSubmission[]) => void,
   constraints: QueryConstraint[] = []
 ): Unsubscribe {
+  // When extra where-constraints are present, omit orderBy to avoid requiring
+  // a composite index. Sort client-side instead.
+  const q = constraints.length > 0
+    ? query(collection(db, "submissions"), ...constraints)
+    : query(collection(db, "submissions"), orderBy("createdAt", "desc"));
   return onSnapshot(
-    query(collection(db, "submissions"), orderBy("createdAt", "desc"), ...constraints),
-    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsSubmission))),
+    q,
+    snap => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as FsSubmission));
+      if (constraints.length > 0) {
+        docs.sort((a, b) => {
+          const at = a.createdAt as { seconds?: number } | undefined;
+          const bt = b.createdAt as { seconds?: number } | undefined;
+          return (bt?.seconds ?? 0) - (at?.seconds ?? 0);
+        });
+      }
+      cb(docs);
+    },
     (err) => { console.warn("[Firestore] submissions:", err.code); cb([]); }
   );
 }
@@ -297,9 +359,22 @@ export function fsSubscribePayments(
   cb: (payments: FsPayment[]) => void,
   constraints: QueryConstraint[] = []
 ): Unsubscribe {
+  const q = constraints.length > 0
+    ? query(collection(db, "payments"), ...constraints)
+    : query(collection(db, "payments"), orderBy("createdAt", "desc"));
   return onSnapshot(
-    query(collection(db, "payments"), orderBy("createdAt", "desc"), ...constraints),
-    snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsPayment))),
+    q,
+    snap => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as FsPayment));
+      if (constraints.length > 0) {
+        docs.sort((a, b) => {
+          const at = a.createdAt as { seconds?: number } | undefined;
+          const bt = b.createdAt as { seconds?: number } | undefined;
+          return (bt?.seconds ?? 0) - (at?.seconds ?? 0);
+        });
+      }
+      cb(docs);
+    },
     (err) => { console.warn("[Firestore] payments:", err.code); cb([]); }
   );
 }

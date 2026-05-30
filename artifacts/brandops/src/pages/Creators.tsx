@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { fsSubscribeCreators, fsCreateCreator, type FsCreator } from "@/lib/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -255,18 +256,20 @@ function SkeletonCard() {
 }
 
 export default function Creators() {
+  const { user } = useAuth();
   const [creators, setCreators] = useState<FsCreator[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!user?.uid) return;
     const unsub = fsSubscribeCreators((data) => {
       setCreators(data);
       setIsLoading(false);
     });
     return unsub;
-  }, []);
+  }, [user?.uid]);
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("match");

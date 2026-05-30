@@ -309,17 +309,19 @@ function CreatorEarningsPage() {
 /* ─────────────────────────── BRAND PAYMENTS ─────────────────────────────── */
 
 function BrandPaymentsPage() {
+  const { user } = useAuth();
   const [payments, setPayments] = useState<FsPayment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!user?.uid) return;
     const unsub = fsSubscribePayments((data) => {
       setPayments(data);
       setIsLoading(false);
     });
     return unsub;
-  }, []);
+  }, [user?.uid]);
 
   const { data: stripePayouts, isLoading: stripeLoading, error: stripeError } = useStripePayouts();
   const createPayoutIntent = useCreateStripePayoutIntent();

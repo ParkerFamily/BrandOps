@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
-  fsSubscribeCampaigns, fsCreateCampaign, fsBackfillCampaignOwner,
+  fsSubscribeCampaigns, fsCreateCampaign, fsBootstrapUserCampaigns,
   type FsCampaign,
 } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
@@ -360,7 +360,7 @@ function BrandCampaignsPage() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    fsBackfillCampaignOwner(user.uid).catch(() => {});
+    fsBootstrapUserCampaigns(user.uid).catch(() => {});
   }, [user?.uid]);
 
   const [search, setSearch] = useState("");
@@ -463,6 +463,7 @@ function BrandCampaignsPage() {
         tone: generated.toneAndStyle || "",
         deadline: deadlineISO,
         brandUid: user?.uid ?? "",
+        ownerFirebaseUid: user?.uid ?? "",
         aiData: {
           hookIdeas: generated.hookIdeas,
           videoConceptIdeas: generated.videoConceptIdeas,

@@ -86,6 +86,7 @@ export default function NewCampaign() {
         deadline: new Date(values.deadline).toISOString(),
         inspirationUrls: values.inspirationUrls,
         brandUid: user?.uid ?? "",
+        ownerFirebaseUid: user?.uid ?? "",
       });
       toast({ title: "Campaign created", description: "Your campaign has been created as a draft." });
       setLocation(`/campaigns/${id}`);

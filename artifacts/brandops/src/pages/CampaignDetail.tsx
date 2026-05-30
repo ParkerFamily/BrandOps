@@ -2,7 +2,7 @@ import { useRoute, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import {
   fsGetCampaign, fsUpdateCampaign, fsDeleteCampaign,
-  fsSubscribeSubmissions, fsUpdateSubmission,
+  fsSubscribeSubmissions, fsUpdateSubmission, fsNormalizeCampaignOwnership,
   type FsCampaign, type FsSubmission,
 } from "@/lib/firestore";
 import { where } from "firebase/firestore";
@@ -15,9 +15,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, PlayCircle, ExternalLink, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
-import { useState as useLocalState } from "react";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function CampaignDetail() {
   const [, params] = useRoute("/campaigns/:id");
@@ -25,6 +25,7 @@ export default function CampaignDetail() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [uploadOpen, setUploadOpen] = useState(false);
+  const { user } = useAuth();
 
   const onboarding = getOnboarding();
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
@@ -37,8 +38,15 @@ export default function CampaignDetail() {
 
   useEffect(() => {
     if (!id) return;
-    fsGetCampaign(id).then(c => { setCampaign(c); setCampaignLoading(false); });
-  }, [id]);
+    fsGetCampaign(id).then(c => {
+      setCampaign(c);
+      setCampaignLoading(false);
+      // Normalize ownership so mobile app can find this campaign
+      if (c && user?.uid && !isCreator) {
+        fsNormalizeCampaignOwnership(id, user.uid, c).catch(() => {});
+      }
+    });
+  }, [id, user?.uid, isCreator]);
 
   useEffect(() => {
     if (!id) return;

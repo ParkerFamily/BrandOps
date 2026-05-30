@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   fsSubscribeSubmissions, fsUpdateSubmission, fsGetSubmission,
   type FsSubmission,
@@ -189,14 +190,16 @@ export default function Submissions() {
   const onboarding = getOnboarding();
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    const constraints: import("firebase/firestore").QueryConstraint[] = [];
+    if (!user?.uid) return;
     const unsub = fsSubscribeSubmissions((data) => {
       setSubmissions(data);
       setIsLoading(false);
-    }, constraints);
+    });
     return unsub;
-  }, []);
+  }, [user?.uid]);
 
   const filtered = statusFilter === "all"
     ? submissions
