@@ -1,5 +1,5 @@
 import { useRoute, useLocation } from "wouter";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   fsGetCampaign, fsUpdateCampaign, fsDeleteCampaign,
   fsSubscribeSubmissions, fsUpdateSubmission, fsNormalizeCampaignOwnership,
@@ -13,11 +13,85 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, PlayCircle, ExternalLink, Trash2, Upload } from "lucide-react";
-import { format } from "date-fns";
+import {
+  Check, X, PlayCircle, ExternalLink, Trash2, Upload,
+  Zap, DollarSign, Clock, TrendingUp, AlertTriangle,
+  Lightbulb, ChevronRight, Copy, CheckCheck,
+  ArrowRight, Sparkles, RotateCcw,
+} from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 import { useAuth } from "@/contexts/AuthContext";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+
+const BASE = import.meta.env.BASE_URL;
+
+// ─── AI Coach ─────────────────────────────────────────────────────────────────
+
+interface CoachRec {
+  type: "warning" | "tip" | "insight" | "action";
+  title: string;
+  body: string;
+}
+
+const coachIcon = (type: CoachRec["type"]) => {
+  switch (type) {
+    case "warning": return <AlertTriangle className="h-4 w-4 text-yellow-400" />;
+    case "tip":     return <Lightbulb className="h-4 w-4 text-primary" />;
+    case "action":  return <Zap className="h-4 w-4 text-blue-400" />;
+    default:        return <TrendingUp className="h-4 w-4 text-green-400" />;
+  }
+};
+
+const coachBg = (type: CoachRec["type"]) => {
+  switch (type) {
+    case "warning": return "border-yellow-500/20 bg-yellow-500/5";
+    case "tip":     return "border-primary/20 bg-primary/5";
+    case "action":  return "border-blue-500/20 bg-blue-500/5";
+    default:        return "border-green-500/20 bg-green-500/5";
+  }
+};
+
+// ─── Hook Card ────────────────────────────────────────────────────────────────
+
+function HookCard({ hook }: { hook: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(hook);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="group relative flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 hover:border-primary/30 hover:bg-primary/5 transition-all">
+      <div className="mt-0.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+      <p className="text-sm text-foreground leading-snug flex-1">"{hook}"</p>
+      <button
+        onClick={copy}
+        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-primary"
+      >
+        {copied ? <CheckCheck className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  );
+}
+
+// ─── Funnel Step ──────────────────────────────────────────────────────────────
+
+function FunnelStep({ label, value, color, last }: { label: string; value: number | string; color: string; last?: boolean }) {
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <div className="flex-1 text-center">
+        <div className={cn("text-2xl font-bold", color)}>{value}</div>
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">{label}</div>
+      </div>
+      {!last && <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function CampaignDetail() {
   const [, params] = useRoute("/campaigns/:id");
@@ -36,12 +110,15 @@ export default function CampaignDetail() {
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
 
+  const [coachRecs, setCoachRecs] = useState<CoachRec[]>([]);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const coachFetched = useRef(false);
+
   useEffect(() => {
     if (!id) return;
     fsGetCampaign(id).then(c => {
       setCampaign(c);
       setCampaignLoading(false);
-      // Normalize ownership so mobile app can find this campaign
       if (c && user?.uid && !isCreator) {
         fsNormalizeCampaignOwnership(id, user.uid, c).catch(() => {});
       }
@@ -59,18 +136,60 @@ export default function CampaignDetail() {
 
   const stats = {
     totalSubmissions: submissions.length,
-    approvedSubmissions: submissions.filter(s => s.status === "approved").length,
-    pendingSubmissions: submissions.filter(s => s.status === "pending" || s.status === "reviewing").length,
+    approvedSubmissions: submissions.filter(s => s.status === "approved" || s.status === "paid").length,
+    pendingSubmissions: submissions.filter(s => s.status === "pending").length,
+    reviewingSubmissions: submissions.filter(s => s.status === "reviewing").length,
     rejectedSubmissions: submissions.filter(s => s.status === "rejected").length,
-    totalSpent: submissions.filter(s => s.status === "approved").reduce((sum, s) => sum + (s.payoutAmount ?? campaign?.payoutPerVideo ?? 0), 0),
+    paidSubmissions: submissions.filter(s => s.status === "paid").length,
+    totalSpent: submissions
+      .filter(s => s.status === "approved" || s.status === "paid")
+      .reduce((sum, s) => sum + (s.payoutAmount ?? campaign?.payoutPerVideo ?? 0), 0),
   };
+
+  const fetchCoach = useCallback(async (c: FsCampaign, s: typeof stats) => {
+    if (coachFetched.current || isCreator) return;
+    coachFetched.current = true;
+    setCoachLoading(true);
+    try {
+      const res = await fetch(`${BASE}api/openai/campaign-coach`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: c.title,
+          description: c.description,
+          platform: c.platform,
+          totalBudget: c.totalBudget,
+          payoutPerVideo: c.payoutPerVideo,
+          videosNeeded: c.videosNeeded,
+          deadline: c.deadline,
+          niche: c.niche,
+          totalSubmissions: s.totalSubmissions,
+          approvedSubmissions: s.approvedSubmissions,
+          pendingSubmissions: s.pendingSubmissions,
+          rejectedSubmissions: s.rejectedSubmissions,
+          totalSpent: s.totalSpent,
+          hookIdeas: c.aiData?.hookIdeas,
+        }),
+      });
+      const data = await res.json() as { recommendations?: CoachRec[] };
+      setCoachRecs(data.recommendations ?? []);
+    } catch { /* silent */ }
+    finally { setCoachLoading(false); }
+  }, [isCreator]);
+
+  useEffect(() => {
+    if (campaign && !submissionsLoading && !coachFetched.current) {
+      fetchCoach(campaign, stats);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id, submissionsLoading]);
 
   const handlePublish = async () => {
     setActionPending(true);
     try {
       await fsUpdateCampaign(id, { status: "active" });
       setCampaign(prev => prev ? { ...prev, status: "active" } : prev);
-      toast({ title: "Campaign published successfully" });
+      toast({ title: "Campaign published" });
     } catch { toast({ title: "Failed to publish", variant: "destructive" }); }
     finally { setActionPending(false); }
   };
@@ -101,47 +220,108 @@ export default function CampaignDetail() {
     } catch { toast({ title: "Failed to update submission", variant: "destructive" }); }
   };
 
+  const refetchCoach = () => {
+    if (!campaign) return;
+    coachFetched.current = false;
+    setCoachRecs([]);
+    fetchCoach(campaign, stats);
+  };
+
   if (campaignLoading) {
-    return <div className="space-y-6"><Skeleton className="h-40 w-full" /></div>;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-4">
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-48 w-full rounded-xl" />
+          </div>
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      </div>
+    );
   }
 
-  if (!campaign) {
-    return <div>Campaign not found</div>;
-  }
+  if (!campaign) return <div className="text-muted-foreground py-16 text-center">Campaign not found</div>;
 
-  const budgetUsedPercent = campaign.totalBudget > 0 ? (stats.totalSpent / campaign.totalBudget) * 100 : 0;
+  const daysLeft = Math.max(0, Math.ceil((new Date(campaign.deadline).getTime() - Date.now()) / 86400000));
+  const budgetUsedPct = campaign.totalBudget > 0 ? Math.min((stats.totalSpent / campaign.totalBudget) * 100, 100) : 0;
+  const budgetRemaining = Math.max(0, campaign.totalBudget - stats.totalSpent);
+  const videosRemaining = Math.max(0, campaign.videosNeeded - stats.approvedSubmissions);
+
+  // Pace: compare % videos done vs % time elapsed
+  const totalDurationDays = 30; // estimate if no start stored
+  const timeElapsedPct = Math.min(100, ((totalDurationDays - daysLeft) / totalDurationDays) * 100);
+  const videoPct = campaign.videosNeeded > 0 ? (stats.approvedSubmissions / campaign.videosNeeded) * 100 : 0;
+  const isAhead = videoPct >= timeElapsedPct;
+
+  const statusColor = {
+    active: "bg-primary/15 text-primary border-primary/30",
+    draft:  "bg-muted text-muted-foreground border-border",
+    paused: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+    completed: "bg-green-500/15 text-green-400 border-green-500/30",
+    archived: "bg-muted text-muted-foreground border-border",
+  }[campaign.status] ?? "bg-muted text-muted-foreground border-border";
+
+  const hookIdeas = campaign.aiData?.hookIdeas ?? [];
+  const videoConceptIdeas = campaign.aiData?.videoConceptIdeas ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+
+      {/* ── Hero ────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">{campaign.title}</h1>
-            <Badge variant={campaign.status === "active" ? "default" : "outline"} className={campaign.status === "active" ? "bg-primary/20 text-primary" : ""}>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold tracking-tight">{campaign.title}</h1>
+            <Badge className={cn("border text-xs font-medium capitalize px-2.5 py-0.5", statusColor)}>
               {campaign.status}
             </Badge>
           </div>
-          <p className="text-muted-foreground mt-1">Due {format(new Date(campaign.deadline), "MMM d, yyyy")}</p>
+          {/* Quick stat pills — management-focused only */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <DollarSign className="h-3.5 w-3.5" />
+              ${campaign.totalBudget.toLocaleString()} budget
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />
+              {daysLeft === 0 ? "Due today" : `${daysLeft}d left`}
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <DollarSign className="h-3.5 w-3.5" />
+              ${campaign.payoutPerVideo}/video
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <TrendingUp className="h-3.5 w-3.5" />
+              {campaign.videosNeeded} videos needed
+            </span>
+          </div>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex items-center gap-2 shrink-0">
           {isCreator ? (
-            <Button
-              onClick={() => setUploadOpen(true)}
-              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.15)]"
-            >
-              <Upload className="h-4 w-4" />
-              Submit Your Video
+            <Button onClick={() => setUploadOpen(true)} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.15)]">
+              <Upload className="h-4 w-4" /> Submit Your Video
             </Button>
           ) : (
             <>
               {campaign.status === "draft" && (
                 <Button onClick={handlePublish} disabled={actionPending} data-testid="button-publish-campaign">
-                  {actionPending ? "Publishing..." : "Publish"}
+                  {actionPending ? "Publishing…" : "Publish"}
                 </Button>
               )}
               {campaign.status === "active" && (
                 <Button variant="secondary" onClick={handlePause} disabled={actionPending} data-testid="button-pause-campaign">
                   Pause
+                </Button>
+              )}
+              {campaign.status === "paused" && (
+                <Button onClick={handlePublish} disabled={actionPending}>
+                  Resume
                 </Button>
               )}
               <Button variant="destructive" size="icon" onClick={handleDelete} disabled={actionPending} data-testid="button-delete-campaign">
@@ -152,47 +332,104 @@ export default function CampaignDetail() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
+      {/* ── Main Grid ───────────────────────────────────────── */}
+      <div className="grid md:grid-cols-3 gap-5">
+
+        {/* Left col (2/3) */}
+        <div className="md:col-span-2 space-y-5">
+
+          {/* Creator Funnel */}
           <Card className="bg-card border-card-border">
-            <CardHeader>
-              <CardTitle>Campaign Brief</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Creator Funnel</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm whitespace-pre-wrap">{campaign.description}</p>
-
-              <div className="mt-6 grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm text-muted-foreground">Platform</div>
-                  <div className="font-medium capitalize">{campaign.platform}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Niche</div>
-                  <div className="font-medium">{campaign.niche || "—"}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Payout per Video</div>
-                  <div className="font-medium">${campaign.payoutPerVideo}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Inspiration</div>
-                  <div className="font-medium text-primary break-all">{campaign.inspirationUrls || "None provided"}</div>
-                </div>
+              <div className="flex items-center gap-1">
+                <FunnelStep label="Invited" value="—" color="text-muted-foreground" />
+                <FunnelStep label="Applied" value={stats.pendingSubmissions + stats.reviewingSubmissions} color="text-blue-400" />
+                <FunnelStep label="Approved" value={stats.approvedSubmissions} color="text-primary" />
+                <FunnelStep label="Submitted" value={stats.totalSubmissions} color="text-yellow-400" />
+                <FunnelStep label="Paid" value={stats.paidSubmissions} color="text-green-400" last />
               </div>
-
-              {campaign.aiData?.creatorBrief && (
-                <div className="mt-6 pt-4 border-t border-border">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2">Creator Brief</div>
-                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{campaign.aiData.creatorBrief}</p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
+          {/* AI Campaign Coach */}
+          {!isCreator && (
+            <Card className="bg-card border-card-border">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    AI Campaign Coach
+                  </CardTitle>
+                  {!coachLoading && (
+                    <button onClick={refetchCoach} className="text-muted-foreground hover:text-foreground transition-colors">
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {coachLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-16 w-full rounded-lg" />
+                    <Skeleton className="h-16 w-full rounded-lg" />
+                    <Skeleton className="h-16 w-full rounded-lg" />
+                  </div>
+                ) : coachRecs.length > 0 ? (
+                  <AnimatePresence>
+                    {coachRecs.map((rec, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.08 }}
+                        className={cn("rounded-lg border p-3 flex gap-3", coachBg(rec.type))}
+                      >
+                        <div className="mt-0.5 shrink-0">{coachIcon(rec.type)}</div>
+                        <div>
+                          <div className="text-sm font-semibold">{rec.title}</div>
+                          <div className="text-sm text-muted-foreground mt-0.5 leading-relaxed">{rec.body}</div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                ) : (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    No recommendations yet — check back as submissions come in.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Hook Ideas */}
+          {hookIdeas.length > 0 && (
+            <Card className="bg-card border-card-border">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                  <Zap className="h-4 w-4 text-primary" />
+                  Hook Ideas
+                  <Badge variant="outline" className="text-xs font-normal text-muted-foreground border-border ml-1">
+                    {hookIdeas.length} hooks
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {hookIdeas.map((hook, i) => (
+                  <HookCard key={i} hook={hook} />
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tabs: Submissions | Brief */}
           <Tabs defaultValue="submissions">
             <div className="flex items-center justify-between">
               <TabsList className="bg-muted">
                 <TabsTrigger value="submissions">{isCreator ? "My Submissions" : "Submissions"}</TabsTrigger>
+                <TabsTrigger value="brief">Brief</TabsTrigger>
                 {!isCreator && <TabsTrigger value="creators">Creators</TabsTrigger>}
               </TabsList>
               {isCreator && (
@@ -209,32 +446,30 @@ export default function CampaignDetail() {
                 submissions.map(sub => (
                   <Card key={sub.id} className="bg-card border-card-border overflow-hidden">
                     <div className="flex flex-col sm:flex-row">
-                      <div className="sm:w-48 bg-muted relative aspect-video sm:aspect-auto flex items-center justify-center group">
+                      <div className="sm:w-44 bg-muted relative aspect-video sm:aspect-auto flex items-center justify-center group shrink-0">
                         {sub.thumbnailUrl ? (
                           <img src={sub.thumbnailUrl} alt="Thumbnail" className="object-cover w-full h-full" />
                         ) : (
                           <PlayCircle className="h-8 w-8 text-muted-foreground" />
                         )}
-                        <a href={sub.videoUrl} target="_blank" rel="noopener noreferrer" className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <a href={sub.videoUrl} target="_blank" rel="noopener noreferrer"
+                          className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <ExternalLink className="h-6 w-6 text-white" />
                         </a>
                       </div>
                       <div className="p-4 flex-1 flex flex-col justify-between">
-                        <div>
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="font-medium">{sub.creatorName || sub.creatorId}</div>
-                              <div className="text-sm text-muted-foreground">{sub.creatorEmail}</div>
-                            </div>
-                            <Badge variant="outline">{sub.status}</Badge>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-medium">{sub.creatorName || sub.creatorId}</div>
+                            <div className="text-sm text-muted-foreground">{sub.creatorEmail}</div>
+                            {sub.createdAt && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {formatDistanceToNow((sub.createdAt as { toDate: () => Date }).toDate(), { addSuffix: true })}
+                              </div>
+                            )}
                           </div>
-                          {sub.createdAt && (
-                            <div className="text-sm mt-2 text-muted-foreground">
-                              Submitted {format(sub.createdAt.toDate(), "MMM d, yyyy")}
-                            </div>
-                          )}
+                          <Badge variant="outline" className="capitalize">{sub.status.replace("_", " ")}</Badge>
                         </div>
-
                         {!isCreator && (sub.status === "reviewing" || sub.status === "pending") && (
                           <div className="flex gap-2 mt-4 pt-4 border-t border-border">
                             <Button size="sm" onClick={() => handleReview(sub.id!, "approved")} className="bg-primary text-primary-foreground hover:bg-primary/90" data-testid={`btn-approve-${sub.id}`}>
@@ -253,51 +488,152 @@ export default function CampaignDetail() {
                   </Card>
                 ))
               ) : (
-                <div className="text-center py-8 text-muted-foreground">No submissions yet</div>
+                <div className="text-center py-10 text-muted-foreground">No submissions yet</div>
               )}
             </TabsContent>
+
+            <TabsContent value="brief" className="mt-4">
+              <Card className="bg-card border-card-border">
+                <CardContent className="pt-6 space-y-5">
+                  <p className="text-sm text-muted-foreground leading-relaxed">{campaign.description}</p>
+
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border text-sm">
+                    <div><div className="text-muted-foreground text-xs mb-0.5">Platform</div><div className="font-medium capitalize">{campaign.platform}</div></div>
+                    <div><div className="text-muted-foreground text-xs mb-0.5">Niche</div><div className="font-medium">{campaign.niche || "—"}</div></div>
+                    <div><div className="text-muted-foreground text-xs mb-0.5">Creator Type</div><div className="font-medium">{campaign.creatorType || "—"}</div></div>
+                    <div><div className="text-muted-foreground text-xs mb-0.5">Tone</div><div className="font-medium">{campaign.tone || "—"}</div></div>
+                    <div><div className="text-muted-foreground text-xs mb-0.5">Deadline</div><div className="font-medium">{format(new Date(campaign.deadline), "MMM d, yyyy")}</div></div>
+                    {campaign.inspirationUrls && (
+                      <div><div className="text-muted-foreground text-xs mb-0.5">Inspiration</div>
+                        <a href={campaign.inspirationUrls} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline break-all">{campaign.inspirationUrls}</a>
+                      </div>
+                    )}
+                  </div>
+
+                  {campaign.aiData?.creatorBrief && (
+                    <div className="pt-4 border-t border-border">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-3">Creator Brief</div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{campaign.aiData.creatorBrief}</p>
+                    </div>
+                  )}
+
+                  {campaign.aiData?.approvalCriteria && campaign.aiData.approvalCriteria.length > 0 && (
+                    <div className="pt-4 border-t border-border">
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-3">Approval Criteria</div>
+                      <ul className="space-y-1.5">
+                        {campaign.aiData.approvalCriteria.map((c, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                            <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                            {c}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="creators">
-              <div className="text-center py-8 text-muted-foreground">Creators list coming soon</div>
+              <div className="text-center py-10 text-muted-foreground">Creator management coming soon</div>
             </TabsContent>
           </Tabs>
         </div>
 
-        <div className="space-y-6">
+        {/* Right col (1/3) */}
+        <div className="space-y-5">
+
+          {/* Budget & Pace */}
           <Card className="bg-card border-card-border">
-            <CardHeader>
-              <CardTitle>Budget & Progress</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Budget & Pace</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Budget Used</span>
-                  <span className="font-medium">${stats.totalSpent} / ${campaign.totalBudget}</span>
+                  <span className="font-semibold">${stats.totalSpent.toLocaleString()} <span className="text-muted-foreground font-normal">/ ${campaign.totalBudget.toLocaleString()}</span></span>
                 </div>
-                <Progress value={budgetUsedPercent} className="h-2 bg-muted">
-                  <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(budgetUsedPercent, 100)}%` }} />
-                </Progress>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <motion.div
+                    className="h-full bg-primary rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${budgetUsedPct}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-muted/40 border border-border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Remaining</div>
+                  <div className="text-lg font-bold">${budgetRemaining.toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg bg-muted/40 border border-border p-3">
+                  <div className="text-xs text-muted-foreground mb-1">Videos Left</div>
+                  <div className="text-lg font-bold">{videosRemaining}</div>
+                </div>
+              </div>
+
+              <div className={cn(
+                "rounded-lg border p-3 flex items-center gap-2.5",
+                isAhead ? "border-primary/20 bg-primary/5" : "border-yellow-500/20 bg-yellow-500/5"
+              )}>
+                {isAhead
+                  ? <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+                  : <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0" />
+                }
                 <div>
-                  <div className="text-2xl font-bold">{stats.totalSubmissions}</div>
-                  <div className="text-xs text-muted-foreground">Total Videos</div>
+                  <div className={cn("text-sm font-semibold", isAhead ? "text-primary" : "text-yellow-400")}>
+                    {isAhead ? "On Track" : "Behind Schedule"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {stats.approvedSubmissions}/{campaign.videosNeeded} videos · {daysLeft}d left
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-1 border-t border-border grid grid-cols-2 gap-y-3 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Approved</div>
+                  <div className="font-bold text-primary">{stats.approvedSubmissions}</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-primary">{stats.approvedSubmissions}</div>
-                  <div className="text-xs text-muted-foreground">Approved</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">In Review</div>
+                  <div className="font-bold text-yellow-400">{stats.reviewingSubmissions + stats.pendingSubmissions}</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-yellow-500">{stats.pendingSubmissions}</div>
-                  <div className="text-xs text-muted-foreground">In Review</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Rejected</div>
+                  <div className="font-bold text-destructive">{stats.rejectedSubmissions}</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-destructive">{stats.rejectedSubmissions}</div>
-                  <div className="text-xs text-muted-foreground">Rejected</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Paid Out</div>
+                  <div className="font-bold text-green-400">{stats.paidSubmissions}</div>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Video Concepts */}
+          {videoConceptIdeas.length > 0 && (
+            <Card className="bg-card border-card-border">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                  <PlayCircle className="h-4 w-4 text-primary" />
+                  Video Concepts
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {videoConceptIdeas.map((concept, i) => (
+                  <div key={i} className="flex items-start gap-2.5 text-sm">
+                    <ArrowRight className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                    <span className="text-muted-foreground leading-snug">{concept}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
         </div>
       </div>
 

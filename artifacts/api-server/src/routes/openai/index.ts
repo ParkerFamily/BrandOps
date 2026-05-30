@@ -220,6 +220,63 @@ Return ONLY this JSON:
   res.json(result);
 });
 
+// ─── AI Campaign Coach ────────────────────────────────────────────────────────
+
+router.post("/openai/campaign-coach", async (req, res): Promise<void> => {
+  const { title, description, platform, totalBudget, payoutPerVideo, videosNeeded, deadline, niche,
+          totalSubmissions, approvedSubmissions, pendingSubmissions, rejectedSubmissions, totalSpent,
+          hookIdeas, creatorBrief } = req.body;
+
+  const daysLeft = deadline ? Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000)) : null;
+  const paceRatio = videosNeeded > 0 ? approvedSubmissions / videosNeeded : 0;
+  const totalDays = deadline ? Math.ceil((new Date(deadline).getTime() - new Date(Date.now() - 30 * 86400000).getTime()) / 86400000) : 30;
+  const timeRatio = totalDays > 0 ? (totalDays - (daysLeft ?? 0)) / totalDays : 0;
+
+  const systemPrompt = `You are an expert UGC campaign manager. You give sharp, specific, data-driven coaching — not generic advice. Respond ONLY with valid JSON.`;
+  const userPrompt = `Analyze this live UGC campaign and generate 3 coaching recommendations:
+
+Campaign: "${title}"
+Budget: $${totalBudget} | Payout: $${payoutPerVideo}/video | Videos Needed: ${videosNeeded}
+${daysLeft !== null ? `Days Left: ${daysLeft}` : ""}
+${niche ? `Niche: ${niche}` : ""}
+
+Live stats:
+- Total Submissions: ${totalSubmissions}
+- Approved: ${approvedSubmissions}
+- Pending Review: ${pendingSubmissions}
+- Rejected: ${rejectedSubmissions}
+- Budget Spent: $${totalSpent} of $${totalBudget}
+- Progress vs deadline: ${Math.round(paceRatio * 100)}% of videos approved, ${Math.round(timeRatio * 100)}% of time elapsed
+
+${hookIdeas?.length ? `Hook ideas on brief: ${hookIdeas.slice(0, 2).join("; ")}` : ""}
+
+Give 3 coaching insights. Be SPECIFIC to this campaign's numbers. If behind pace, say so. If payout seems low for the niche, say so. If budget is about to run out, flag it.
+
+Return ONLY this JSON:
+{
+  "recommendations": [
+    { "type": "warning" | "tip" | "insight" | "action", "title": "short title (max 8 words)", "body": "1-2 sentences, specific to this campaign's data" },
+    { "type": "warning" | "tip" | "insight" | "action", "title": "short title", "body": "1-2 sentences, specific data" },
+    { "type": "warning" | "tip" | "insight" | "action", "title": "short title", "body": "1-2 sentences, specific data" }
+  ]
+}`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.4",
+    max_completion_tokens: 600,
+    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+  });
+
+  const raw = response.choices[0]?.message?.content ?? "{}";
+  let result: Record<string, unknown>;
+  try {
+    result = JSON.parse(raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim());
+  } catch {
+    result = { recommendations: [] };
+  }
+  res.json(result);
+});
+
 // ─── AI Dashboard Insights ────────────────────────────────────────────────────
 
 router.post("/openai/dashboard-insights", async (req, res): Promise<void> => {
