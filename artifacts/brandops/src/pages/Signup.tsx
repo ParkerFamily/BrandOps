@@ -299,8 +299,8 @@ export default function Signup() {
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
                 className="text-white/20 text-xs mt-8">
                 By continuing, you agree to our{" "}
-                <span className="underline cursor-pointer hover:text-white/40">Terms</span> and{" "}
-                <span className="underline cursor-pointer hover:text-white/40">Privacy Policy</span>.
+                <a href="/terms" className="underline hover:text-white/40">Terms</a> and{" "}
+                <a href="/privacy" className="underline hover:text-white/40">Privacy Policy</a>.
               </motion.p>
             </motion.div>
           )}

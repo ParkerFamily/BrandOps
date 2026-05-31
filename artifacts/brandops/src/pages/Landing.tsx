@@ -822,8 +822,8 @@ export default function Landing() {
             <span className="font-bold text-sm text-white/60">BrandOps</span>
           </div>
           <div className="flex gap-8 text-sm text-white/30">
-            <span className="hover:text-white/60 cursor-pointer transition-colors">Privacy</span>
-            <span className="hover:text-white/60 cursor-pointer transition-colors">Terms</span>
+            <a href="/privacy" className="hover:text-white/60 transition-colors">Privacy</a>
+            <a href="/terms" className="hover:text-white/60 transition-colors">Terms</a>
             <span className="hover:text-white/60 cursor-pointer transition-colors">Security</span>
             <span className="hover:text-white/60 cursor-pointer transition-colors">Status</span>
           </div>

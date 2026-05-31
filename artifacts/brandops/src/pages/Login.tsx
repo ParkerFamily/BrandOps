@@ -266,8 +266,8 @@ export default function Login() {
 
         <p className="text-center text-xs text-white/20 mt-5">
           By signing in, you agree to BrandOps{" "}
-          <span className="underline cursor-pointer hover:text-white/40 transition-colors">Terms of Service</span> and{" "}
-          <span className="underline cursor-pointer hover:text-white/40 transition-colors">Privacy Policy</span>.
+          <a href="/terms" className="underline hover:text-white/40 transition-colors">Terms of Service</a> and{" "}
+          <a href="/privacy" className="underline hover:text-white/40 transition-colors">Privacy Policy</a>.
         </p>
       </div>
 

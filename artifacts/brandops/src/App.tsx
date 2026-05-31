@@ -24,6 +24,8 @@ import Team from "@/pages/Team";
 import Settings from "@/pages/Settings";
 import Billing from "@/pages/Billing";
 import Subscribe from "@/pages/Subscribe";
+import Terms from "@/pages/Terms";
+import Privacy from "@/pages/Privacy";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -64,6 +66,8 @@ function AppRoutes() {
       <Route path="/" component={SmartRoot} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
       <Route path="/onboarding">
         <ProtectedRoute>
           <Onboarding />
