@@ -328,6 +328,8 @@ export default function Settings() {
   const [aiSaved, setAiSaved] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const TABS = isCreator ? CREATOR_TABS : BRAND_TABS;
 
@@ -503,20 +505,44 @@ export default function Settings() {
                     {deletingAccount && (
                       <div className="pt-2 space-y-3">
                         <p className="text-xs text-white/50">
-                          This permanently deletes your account, all campaigns, and removes you from the platform.
+                          This permanently deletes your account and removes you from the platform.
                           This cannot be undone.
                         </p>
+                        {deleteError && (
+                          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{deleteError}</p>
+                        )}
                         <div className="flex gap-2">
                           <button
-                            onClick={() => {
-                              toast({ title: "Contact support", description: "Email legal@brandops.io to request account deletion." });
-                              setDeletingAccount(false);
+                            disabled={deleteInProgress}
+                            onClick={async () => {
+                              if (!user) return;
+                              setDeleteInProgress(true);
+                              setDeleteError(null);
+                              try {
+                                await user.delete();
+                                // Wipe all local state
+                                ["brandops_onboarded", "brandops_profile", "brandops_notifications", "brandops_ai_prefs"].forEach(k => localStorage.removeItem(k));
+                                clearOnboarded();
+                                navigate("/");
+                              } catch (err: unknown) {
+                                const code = (err as { code?: string })?.code ?? "";
+                                if (code === "auth/requires-recent-login") {
+                                  setDeleteError("For security, please sign out and sign back in before deleting your account.");
+                                } else {
+                                  setDeleteError("Deletion failed. Please try again or contact support@brandops.io.");
+                                }
+                                setDeleteInProgress(false);
+                              }
                             }}
-                            className="text-xs font-semibold bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 py-1.5 transition-colors"
+                            className="flex items-center gap-1.5 text-xs font-semibold bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-3 py-1.5 transition-colors"
                           >
+                            {deleteInProgress && <RefreshCw className="h-3 w-3 animate-spin" />}
                             Yes, delete my account
                           </button>
-                          <button onClick={() => setDeletingAccount(false)} className="text-xs text-white/40 hover:text-white transition-colors px-2">
+                          <button
+                            onClick={() => { setDeletingAccount(false); setDeleteError(null); }}
+                            className="text-xs text-white/40 hover:text-white transition-colors px-2"
+                          >
                             Cancel
                           </button>
                         </div>
