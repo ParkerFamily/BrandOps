@@ -19,7 +19,7 @@ const PRICING = [
     highlight: false,
     stripeMonthly: "price_1TcYGnL8wN3kCgjXK1ffZG9F",
     stripeAnnual: "price_1TcYGnL8wN3kCgjXLhff0cBU",
-    features: ["3 active campaigns", "50 creator slots", "AI campaign builder", "Basic analytics", "Stripe payouts", "Email support"],
+    features: ["3 active campaigns", "50 creator slots", "AI campaign builder", "Basic analytics", "Stripe payouts", "Email support", "1 user (owner only)"],
   },
   {
     id: "growth",
@@ -31,7 +31,7 @@ const PRICING = [
     highlight: true,
     stripeMonthly: "price_1TcYGoL8wN3kCgjXSrhDw5iB",
     stripeAnnual: "price_1TcYGoL8wN3kCgjXo4rvaJq6",
-    features: ["Unlimited campaigns", "500 creator slots", "AI campaign builder", "AI submission review", "Advanced analytics", "AI assistant", "Priority support", "Team members (5)"],
+    features: ["Unlimited campaigns", "500 creator slots", "AI campaign builder", "AI submission review", "Advanced analytics", "AI assistant", "Priority support", "Up to 5 team members"],
   },
   {
     id: "enterprise",
@@ -43,7 +43,7 @@ const PRICING = [
     highlight: false,
     stripeMonthly: null,
     stripeAnnual: null,
-    features: ["Unlimited everything", "Custom creator network", "White-label option", "Custom AI training", "Dedicated account manager", "SLA guarantee", "Custom integrations"],
+    features: ["Unlimited campaigns & creators", "Unlimited team members", "Custom creator network", "White-label option", "Custom AI training", "Dedicated account manager", "SLA guarantee"],
   },
 ];
 

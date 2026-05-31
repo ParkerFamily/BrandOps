@@ -438,6 +438,50 @@ router.post('/stripe/brand-setup/start', async (req, res): Promise<void> => {
   res.json({ url: session.url, customerId });
 });
 
+// Check active subscription plan for a brand user
+router.get('/stripe/subscription/status', async (req, res): Promise<void> => {
+  const uid = typeof req.query.uid === 'string' ? req.query.uid : '';
+  if (!uid) { res.status(400).json({ error: 'uid is required' }); return; }
+
+  const [profile] = await db
+    .select()
+    .from(userProfilesTable)
+    .where(eq(userProfilesTable.firebaseUid, uid))
+    .limit(1);
+
+  if (!profile?.stripeCustomerId) {
+    res.json({ plan: 'free', memberLimit: 0, status: 'none' });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+
+  const [activeSubs, trialingSubs] = await Promise.all([
+    stripe.subscriptions.list({ customer: profile.stripeCustomerId, status: 'active', limit: 1 }),
+    stripe.subscriptions.list({ customer: profile.stripeCustomerId, status: 'trialing', limit: 1 }),
+  ]);
+
+  const sub = activeSubs.data[0] ?? trialingSubs.data[0];
+
+  if (!sub) {
+    res.json({ plan: 'free', memberLimit: 0, status: 'none' });
+    return;
+  }
+
+  const PRICE_PLAN: Record<string, { plan: string; memberLimit: number | null }> = {
+    'price_1TcYGnL8wN3kCgjXK1ffZG9F': { plan: 'starter',    memberLimit: 0    },
+    'price_1TcYGnL8wN3kCgjXLhff0cBU': { plan: 'starter',    memberLimit: 0    },
+    'price_1TcYGoL8wN3kCgjXSrhDw5iB': { plan: 'growth',     memberLimit: 5    },
+    'price_1TcYGoL8wN3kCgjXo4rvaJq6': { plan: 'growth',     memberLimit: 5    },
+  };
+
+  const priceId = sub.items.data[0]?.price.id ?? '';
+  const info = PRICE_PLAN[priceId] ?? { plan: 'enterprise', memberLimit: null };
+
+  req.log.info({ uid, plan: info.plan, priceId, status: sub.status }, 'Subscription status checked');
+  res.json({ plan: info.plan, memberLimit: info.memberLimit, status: sub.status, currentPeriodEnd: (sub as unknown as Record<string, unknown>)['current_period_end'] ?? null });
+});
+
 router.post('/stripe/subscription/start', async (req, res): Promise<void> => {
   const { uid, email, name, priceId, returnUrl } = req.body as {
     uid?: string; email?: string; name?: string; priceId?: string; returnUrl?: string;

@@ -11,7 +11,7 @@ import {
   Check, User, Briefcase, Globe, CreditCard, Shield, LogOut,
   Zap, ExternalLink, CheckCircle2, AlertTriangle, Clock, RefreshCw,
   UsersRound, Bell, Sparkles, ChevronRight, Trash2, Mail,
-  BrainCircuit, Target, Receipt,
+  BrainCircuit, Target, Receipt, Lock, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getOnboarded, clearOnboarded } from "@/lib/onboarding";
@@ -31,6 +31,7 @@ interface UserStripeStatus { stripeConnectAccountId: string | null; stripeConnec
 interface ConnectStatus { connected: boolean; accountId?: string; payoutsEnabled?: boolean; chargesEnabled?: boolean; detailsSubmitted?: boolean; requiresAction?: boolean }
 interface Notifications { submissions: boolean; campaigns: boolean; payments: boolean; digest: boolean }
 interface AiPrefs { defaultNiches: string; defaultGoal: string; contentStyle: string }
+interface SubscriptionStatus { plan: "free" | "starter" | "growth" | "enterprise"; memberLimit: number | null; status: string }
 
 function loadProfile(): Profile {
   try { const r = localStorage.getItem(PROFILE_KEY); if (r) return JSON.parse(r); } catch {}
@@ -330,6 +331,18 @@ export default function Settings() {
 
   const TABS = isCreator ? CREATOR_TABS : BRAND_TABS;
 
+  const { data: subStatus } = useQuery<SubscriptionStatus>({
+    queryKey: ["subscription-status", user?.uid],
+    queryFn: async () => {
+      if (!user?.uid || isCreator) return { plan: "free", memberLimit: 0, status: "none" } as SubscriptionStatus;
+      const res = await fetch(`${BASE}api/stripe/subscription/status?uid=${user.uid}`);
+      if (!res.ok) return { plan: "free", memberLimit: 0, status: "none" } as SubscriptionStatus;
+      return res.json();
+    },
+    enabled: !!user?.uid && !isCreator,
+    staleTime: 1000 * 60 * 5,
+  });
+
   // Handle Stripe return callbacks
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -576,73 +589,149 @@ export default function Settings() {
               )}
 
               {/* ── TEAM ──────────────────────────────────────────────── */}
-              {tab === "team" && (
-                <div className="space-y-6">
-                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-5">
-                    <SectionHead title="Team Members" desc="People who have access to your BrandOps workspace." />
+              {tab === "team" && (() => {
+                const plan = subStatus?.plan ?? "free";
+                const memberLimit = subStatus?.memberLimit ?? 0;
+                const canInvite = plan === "growth" || plan === "enterprise";
+                const isUnlimited = plan === "enterprise" || memberLimit === null;
+                const slotsUsed = 1; // owner counts as 1
+                const slotsRemaining = isUnlimited ? null : Math.max(0, (memberLimit ?? 0) - (slotsUsed - 1));
 
-                    {/* Members list */}
-                    <div className="space-y-2">
-                      {[
-                        { name: user?.displayName ?? "You", email: user?.email ?? "", role: "Owner", self: true },
-                      ].map(({ name, email, role, self }) => (
-                        <div key={email} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/8">
+                return (
+                  <div className="space-y-6">
+                    {/* Paywall banner for free / starter */}
+                    {!canInvite && (
+                      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+                        {/* blurred bg glow */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-[#C6FF00]/5 via-transparent to-transparent pointer-events-none" />
+                        <div className="relative p-6 flex flex-col items-center text-center gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-[#C6FF00]/10 border border-[#C6FF00]/20 flex items-center justify-center">
+                            <Lock className="h-5 w-5 text-[#C6FF00]" />
+                          </div>
+                          <div>
+                            <p className="text-base font-semibold text-white">Team members are a paid feature</p>
+                            <p className="text-sm text-white/40 mt-1 max-w-xs mx-auto">
+                              {plan === "starter"
+                                ? "Your Starter plan includes 1 user (owner only). Upgrade to Growth to add up to 5 teammates."
+                                : "The free plan includes 1 user (owner only). Upgrade to Growth to add up to 5 teammates, or Enterprise for unlimited."}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => navigate("/billing")}
+                              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C6FF00] text-black text-sm font-semibold hover:bg-[#d4ff33] transition-colors"
+                            >
+                              Upgrade to Growth <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => navigate("/billing")}
+                              className="text-sm text-white/40 hover:text-white/70 transition-colors"
+                            >
+                              View plans
+                            </button>
+                          </div>
+                          {/* Plan comparison hint */}
+                          <div className="grid grid-cols-3 gap-2 w-full pt-2 border-t border-white/6">
+                            {[
+                              { name: "Starter", seats: "1 seat", locked: true },
+                              { name: "Growth", seats: "5 seats", locked: false },
+                              { name: "Enterprise", seats: "Unlimited", locked: false },
+                            ].map(({ name, seats, locked }) => (
+                              <div key={name} className={cn("p-2.5 rounded-xl border text-center", locked ? "border-white/8 bg-white/[0.02]" : "border-[#C6FF00]/20 bg-[#C6FF00]/5")}>
+                                <p className={cn("text-xs font-semibold", locked ? "text-white/30" : "text-[#C6FF00]")}>{name}</p>
+                                <p className={cn("text-xs mt-0.5", locked ? "text-white/20" : "text-white/50")}>{seats}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Members list — always visible */}
+                    <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-5">
+                      <div className="flex items-center justify-between">
+                        <SectionHead title="Team Members" desc="People who have access to your BrandOps workspace." />
+                        {canInvite && (
+                          <span className="text-xs text-white/40 shrink-0">
+                            {isUnlimited ? "Unlimited seats" : `${slotsRemaining} seat${slotsRemaining === 1 ? "" : "s"} remaining`}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Owner row — always visible */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/8">
                           <div className="w-8 h-8 rounded-full bg-[#C6FF00]/10 border border-[#C6FF00]/20 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-bold text-[#C6FF00]">{(name ?? "U")[0].toUpperCase()}</span>
+                            <span className="text-xs font-bold text-[#C6FF00]">{(user?.displayName ?? user?.email ?? "U")[0].toUpperCase()}</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{name} {self && <span className="text-white/30 text-xs">(you)</span>}</p>
-                            <p className="text-xs text-white/35 truncate">{email}</p>
+                            <p className="text-sm font-medium text-white truncate">
+                              {user?.displayName ?? user?.email ?? "You"} <span className="text-white/30 text-xs">(you)</span>
+                            </p>
+                            <p className="text-xs text-white/35 truncate">{user?.email ?? ""}</p>
                           </div>
-                          <span className="text-xs text-[#C6FF00] bg-[#C6FF00]/10 border border-[#C6FF00]/20 rounded px-2 py-0.5 font-medium shrink-0">{role}</span>
+                          <span className="text-xs text-[#C6FF00] bg-[#C6FF00]/10 border border-[#C6FF00]/20 rounded px-2 py-0.5 font-medium shrink-0">Owner</span>
                         </div>
-                      ))}
+
+                        {/* Empty seat slots shown for Growth */}
+                        {canInvite && !isUnlimited && Array.from({ length: memberLimit ?? 0 }).map((_, i) => (
+                          <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-white/8 text-white/20">
+                            <div className="w-8 h-8 rounded-full border border-dashed border-white/10 flex items-center justify-center shrink-0">
+                              <UsersRound className="h-3.5 w-3.5" />
+                            </div>
+                            <p className="text-xs">Empty seat — invite a teammate</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Invite form — Growth and Enterprise only */}
+                      {canInvite && (
+                        <div className="pt-2 space-y-3 border-t border-white/6">
+                          <p className="text-sm font-semibold text-white">Invite member</p>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="teammate@company.com"
+                              value={inviteEmail}
+                              onChange={e => setInviteEmail(e.target.value)}
+                              className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
+                            />
+                            <Button
+                              onClick={() => {
+                                if (!inviteEmail.trim()) return;
+                                toast({ title: "Invite sent", description: `An invite was sent to ${inviteEmail}.` });
+                                setInviteEmail("");
+                              }}
+                              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shrink-0"
+                            >
+                              <Mail className="h-3.5 w-3.5" />
+                              Invite
+                            </Button>
+                          </div>
+                          <p className="text-xs text-white/30">Teammates will receive an email to join your workspace.</p>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Invite */}
-                    <div className="pt-2 space-y-3 border-t border-white/6">
-                      <p className="text-sm font-semibold text-white">Invite member</p>
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="teammate@company.com"
-                          value={inviteEmail}
-                          onChange={e => setInviteEmail(e.target.value)}
-                          className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
-                        />
-                        <Button
-                          onClick={() => {
-                            if (!inviteEmail.trim()) return;
-                            toast({ title: "Invite sent", description: `An invite was sent to ${inviteEmail}.` });
-                            setInviteEmail("");
-                          }}
-                          className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shrink-0"
-                        >
-                          <Mail className="h-3.5 w-3.5" />
-                          Invite
-                        </Button>
+                    {/* Role guide */}
+                    <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-4">
+                      <SectionHead title="Roles" desc="What each role can do." />
+                      <div className="space-y-3">
+                        {[
+                          { role: "Owner", desc: "Full access — billing, settings, team management, all campaigns." },
+                          { role: "Admin", desc: "Create and manage campaigns, approve submissions, manage creators." },
+                          { role: "Manager", desc: "Manage assigned campaigns, review submissions. No billing access." },
+                          { role: "Viewer", desc: "Read-only access to campaigns and analytics." },
+                        ].map(({ role, desc }) => (
+                          <div key={role} className="flex items-start gap-3">
+                            <span className="text-xs text-white/60 bg-white/5 border border-white/10 rounded px-2 py-0.5 font-semibold shrink-0 mt-0.5 w-16 text-center">{role}</span>
+                            <p className="text-xs text-white/40">{desc}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
-
-                  {/* Role guide */}
-                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-4">
-                    <SectionHead title="Roles" desc="What each role can do." />
-                    <div className="space-y-3">
-                      {[
-                        { role: "Owner", desc: "Full access — billing, settings, team management, all campaigns." },
-                        { role: "Admin", desc: "Create and manage campaigns, approve submissions, manage creators." },
-                        { role: "Manager", desc: "Manage assigned campaigns, review submissions. No billing access." },
-                        { role: "Viewer", desc: "Read-only access to campaigns and analytics." },
-                      ].map(({ role, desc }) => (
-                        <div key={role} className="flex items-start gap-3">
-                          <span className="text-xs text-white/60 bg-white/5 border border-white/10 rounded px-2 py-0.5 font-semibold shrink-0 mt-0.5 w-16 text-center">{role}</span>
-                          <p className="text-xs text-white/40">{desc}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ── BILLING ───────────────────────────────────────────── */}
               {tab === "billing" && (
