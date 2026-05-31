@@ -75,41 +75,178 @@ router.post("/openai/conversations/:id/messages", async (req, res): Promise<void
   res.end();
 });
 
+// ─── AI Campaign Hooks & Scripts ──────────────────────────────────────────────
+
+router.post("/openai/campaign-hooks", async (req, res): Promise<void> => {
+  const { goal, productDescription, deliverables, tone, platform } = req.body as {
+    goal?: string; productDescription?: string; deliverables?: string[]; tone?: string; platform?: string;
+  };
+  if (!productDescription?.trim()) { res.status(400).json({ error: "productDescription is required" }); return; }
+
+  const goalMap: Record<string, string> = {
+    downloads: "Drive App Downloads", sales: "Generate Sales", awareness: "Brand Awareness",
+    traffic: "Website Traffic", signups: "Email Signups", other: "General",
+  };
+
+  const systemPrompt = `You are a world-class UGC content strategist. You write scroll-stopping hooks and authentic creator scripts for brands. Respond ONLY with a valid JSON object — no markdown, no code fences.`;
+
+  const userPrompt = `Generate hooks and sample scripts for this UGC campaign:
+
+Goal: ${goal ? goalMap[goal] ?? goal : "Brand awareness"}
+Product/Brand: ${productDescription}
+Deliverable types: ${deliverables?.join(", ") || "Talking Head, Product Demo"}
+Tone: ${tone || "Authentic"}
+Platform: ${platform || "TikTok"}
+
+Return ONLY this JSON:
+{
+  "hooks": [
+    "hook line 1 — scroll-stopping, conversational, fits the platform",
+    "hook line 2",
+    "hook line 3",
+    "hook line 4",
+    "hook line 5"
+  ],
+  "scripts": [
+    {
+      "label": "Version A",
+      "content": "HOOK: [hook line]\\n\\nBODY: [2-3 natural sentences about the product — benefit-first angle]\\n\\nCTA: [call to action]"
+    },
+    {
+      "label": "Version B",
+      "content": "HOOK: [hook line]\\n\\nBODY: [problem-solution angle, 2-3 sentences]\\n\\nCTA: [call to action]"
+    },
+    {
+      "label": "Version C",
+      "content": "HOOK: [hook line]\\n\\nBODY: [storytelling/personal angle, 2-3 sentences]\\n\\nCTA: [call to action]"
+    }
+  ]
+}`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.4",
+    max_completion_tokens: 1500,
+    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+  });
+
+  const raw = response.choices[0]?.message?.content ?? "{}";
+  let result: Record<string, unknown>;
+  try {
+    result = JSON.parse(raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim());
+  } catch {
+    result = { hooks: [], scripts: [] };
+  }
+  res.json(result);
+});
+
 // ─── AI Campaign Builder ──────────────────────────────────────────────────────
 
 router.post("/openai/campaign-builder", async (req, res): Promise<void> => {
-  const { prompt, budget, deadline } = req.body as { prompt?: string; budget?: number; deadline?: string };
-  if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
+  const {
+    // Legacy free-form format
+    prompt, budget: legacyBudget, deadline: legacyDeadline,
+    // New structured format
+    goal, productDescription, deliverables, deliverableLength, platform, tone,
+    totalBudget, avgPayout, creatorRequirements, niches, usageRights,
+    deadline, inspirationLinks, styleNotes, hooks, scripts,
+  } = req.body as {
+    prompt?: string; budget?: number; deadline?: string;
+    goal?: string; productDescription?: string; deliverables?: string[];
+    deliverableLength?: string; platform?: string; tone?: string;
+    totalBudget?: number; avgPayout?: number;
+    creatorRequirements?: { ageRange?: string; gender?: string; location?: string; followerRange?: string };
+    niches?: string[]; usageRights?: string;
+    deadline?: string; inspirationLinks?: string; styleNotes?: string;
+    hooks?: string[]; scripts?: { label: string; content: string }[];
+  };
+
+  const goalMap: Record<string, string> = {
+    downloads: "Drive App Downloads", sales: "Generate Sales", awareness: "Brand Awareness",
+    traffic: "Website Traffic", signups: "Email Signups", other: "General",
+  };
+  const usageMap: Record<string, string> = {
+    organic: "Organic Only", organic_paid: "Organic + Paid Ads",
+    whitelisting: "Whitelisting", full_buyout: "Full Buyout",
+  };
+
+  const isStructured = !!(productDescription?.trim() || goal);
+  if (!isStructured && !prompt?.trim()) {
+    res.status(400).json({ error: "prompt or productDescription is required" });
+    return;
+  }
+
+  const resolvedBudget = totalBudget ?? legacyBudget;
+  const resolvedDeadline = deadline ?? legacyDeadline;
+  const resolvedPayout = avgPayout;
 
   const systemPrompt = `You are a world-class UGC campaign strategist for brands (NOT influencer marketing). Brands hire creators to produce video content that the BRAND posts as ads or organic content. Respond ONLY with a valid JSON object — no markdown, no explanation, no code fences.`;
 
-  const userPrompt = `A brand described their UGC campaign need in plain English. Extract all details and write a complete campaign brief.
+  const userPrompt = isStructured
+    ? `Build a complete UGC campaign brief from this structured brief:
+
+Goal: ${goal ? goalMap[goal] ?? goal : "Brand awareness"}
+Product / Brand: ${productDescription}
+Deliverable types: ${deliverables?.join(", ") || "Talking Head"}
+Video length: ${deliverableLength || "30s"}
+Platform: ${platform || "TikTok"}
+Tone: ${tone || "Authentic"}
+Total Budget: $${resolvedBudget || 5000}
+Avg Creator Payout: $${resolvedPayout || 200}
+Estimated Creators: ${resolvedBudget && resolvedPayout ? Math.floor(resolvedBudget / resolvedPayout) : 25}
+Creator Requirements: Age ${creatorRequirements?.ageRange || "18-35"}, Gender: ${creatorRequirements?.gender || "Any"}, Location: ${creatorRequirements?.location || "Any"}, Followers: ${creatorRequirements?.followerRange || "Any"}
+Niches: ${niches?.join(", ") || "General"}
+Usage Rights: ${usageRights ? (usageMap[usageRights] ?? usageRights) : "Organic Only"}
+Deadline: ${resolvedDeadline || "30 days"}
+Inspiration links: ${inspirationLinks || "None provided"}
+Style notes: ${styleNotes || "None provided"}
+${hooks?.length ? `Pre-generated hooks (incorporate these):\n${hooks.slice(0, 3).map(h => `- "${h}"`).join("\n")}` : ""}
+
+Write a complete campaign brief a creator could execute immediately. Be specific to this product and goal.
+
+Return ONLY this JSON:
+{
+  "title": "compelling, specific campaign title",
+  "summary": "2-3 sentences capturing the goal and energy",
+  "creatorBrief": "full creator brief with clear paragraphs — what to film, how to film it, what makes a winning video, what to avoid",
+  "deliverables": "specific format including aspect ratio, length, caption/caption-free, submission method",
+  "videoConceptIdeas": ["concept 1", "concept 2", "concept 3"],
+  "hookIdeas": ["hook 1", "hook 2", "hook 3", "hook 4", "hook 5"],
+  "ctaIdeas": ["cta 1", "cta 2", "cta 3"],
+  "payoutStrategy": "payout structure recommendation based on the budget",
+  "suggestedVideoCount": 25,
+  "suggestedPayoutPerVideo": 200,
+  "estimatedTotalCost": 5000,
+  "usageRights": "usage rights clause — specific to the selected tier",
+  "approvalCriteria": ["criterion 1", "criterion 2", "criterion 3", "criterion 4"],
+  "creatorType": "description of ideal creator for this campaign",
+  "toneAndStyle": "2-3 sentences on tone, visual feel, and energy",
+  "doList": ["do 1", "do 2", "do 3", "do 4"],
+  "dontList": ["don't 1", "don't 2", "don't 3", "don't 4"]
+}`
+    : `A brand described their UGC campaign need in plain English. Extract all details and write a complete campaign brief.
 
 Brand's description:
 "${prompt}"
-${budget ? `Total Budget: $${budget}` : ""}
-${deadline ? `Deadline: ${deadline}` : ""}
-
-Infer any missing details (video count from budget, payout per video, creator type, format, etc.).
+${resolvedBudget ? `Total Budget: $${resolvedBudget}` : ""}
+${resolvedDeadline ? `Deadline: ${resolvedDeadline}` : ""}
 
 Return ONLY this exact JSON:
 {
   "title": "compelling campaign title",
-  "summary": "2-3 sentences that capture the goal and energy of this campaign",
-  "creatorBrief": "full creator brief — what to film, how to deliver it, what makes a winning video. Use clear paragraphs.",
-  "deliverables": "specific format (e.g. vertical 9:16, 15-30s), resolution, caption requirements, submission method",
+  "summary": "2-3 sentences",
+  "creatorBrief": "full creator brief with clear paragraphs",
+  "deliverables": "specific format details",
   "videoConceptIdeas": ["concept 1", "concept 2", "concept 3"],
-  "hookIdeas": ["hook line 1", "hook line 2", "hook line 3", "hook line 4"],
+  "hookIdeas": ["hook 1", "hook 2", "hook 3", "hook 4"],
   "ctaIdeas": ["cta 1", "cta 2", "cta 3"],
-  "payoutStrategy": "e.g. $150 per approved video, bonus $50 for top performers",
+  "payoutStrategy": "payout recommendation",
   "suggestedVideoCount": 20,
   "suggestedPayoutPerVideo": 150,
   "estimatedTotalCost": 3000,
-  "usageRights": "full usage rights language — e.g. 12-month non-exclusive license for paid ads and organic across all channels",
-  "suggestedDeadline": "e.g. 14 days from campaign acceptance",
+  "usageRights": "usage rights language",
   "approvalCriteria": ["criterion 1", "criterion 2", "criterion 3"],
-  "creatorType": "description of the ideal creator for this campaign",
-  "toneAndStyle": "2-3 sentences on tone, energy, and visual feel",
+  "creatorType": "ideal creator description",
+  "toneAndStyle": "tone and visual feel",
   "doList": ["do 1", "do 2", "do 3"],
   "dontList": ["don't 1", "don't 2", "don't 3"]
 }`;
