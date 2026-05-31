@@ -230,6 +230,12 @@ Brand's description:
 ${resolvedBudget ? `Total Budget: $${resolvedBudget}` : ""}
 ${resolvedDeadline ? `Deadline: ${resolvedDeadline}` : ""}
 
+IMPORTANT budget rules (apply strictly):
+- If a budget is given, set "estimatedTotalCost" to EXACTLY that number.
+- Decide a reasonable "suggestedVideoCount" for the niche/goal (typically 10–30 videos).
+- Set "suggestedPayoutPerVideo" = estimatedTotalCost / suggestedVideoCount (round to nearest $5).
+- If no budget is given, estimate reasonable values based on the campaign scope.
+
 Return ONLY this exact JSON:
 {
   "title": "compelling campaign title",

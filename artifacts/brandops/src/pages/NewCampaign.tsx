@@ -282,8 +282,8 @@ export default function NewCampaign() {
               </p>
             </div>
 
-            {/* Main prompt */}
-            <div className="relative">
+            {/* Main prompt card — textarea + inline budget/deadline footer */}
+            <div className="bg-white/[0.04] border border-white/[0.10] rounded-2xl overflow-hidden focus-within:border-[#C6FF00]/35 transition-colors">
               <textarea
                 ref={textareaRef}
                 value={prompt}
@@ -291,9 +291,32 @@ export default function NewCampaign() {
                 onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && prompt.trim()) generate(); }}
                 placeholder={"Example: I'm launching a skincare serum and need 15 UGC videos for TikTok. Budget around $3,000. I want authentic product demos and strong hooks for paid ads."}
                 rows={5}
-                className="w-full bg-white/[0.04] border border-white/[0.10] rounded-2xl px-5 py-4 text-sm text-white placeholder-white/25 outline-none transition-all focus:border-[#C6FF00]/40 focus:bg-white/[0.06] resize-none leading-relaxed"
+                className="w-full bg-transparent px-5 pt-4 pb-3 text-sm text-white placeholder-white/25 outline-none resize-none leading-relaxed"
               />
-              <span className="absolute bottom-3.5 right-4 text-[10px] text-white/15 select-none">⌘↵</span>
+              {/* Inline meta row */}
+              <div className="flex items-center gap-0 border-t border-white/[0.07] divide-x divide-white/[0.07]">
+                <div className="flex items-center gap-1.5 px-4 py-2.5 flex-1">
+                  <span className="text-white/30 text-sm font-medium select-none">$</span>
+                  <input
+                    type="number"
+                    value={budget}
+                    onChange={e => setBudget(e.target.value)}
+                    placeholder="Budget"
+                    className="w-full bg-transparent text-sm text-white placeholder-white/25 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 px-4 py-2.5 flex-1">
+                  <input
+                    value={deadline}
+                    onChange={e => setDeadline(e.target.value)}
+                    placeholder="Deadline (e.g. 2 weeks)"
+                    className="w-full bg-transparent text-sm text-white placeholder-white/25 outline-none"
+                  />
+                </div>
+                <div className="px-4 py-2.5 shrink-0">
+                  <span className="text-[10px] text-white/15 select-none">⌘↵</span>
+                </div>
+              </div>
             </div>
 
             {/* Quick chips */}
@@ -309,32 +332,6 @@ export default function NewCampaign() {
                     {chip}
                   </button>
                 ))}
-              </div>
-            </div>
-
-            {/* Optional fields */}
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest mb-2">Budget <span className="text-white/15 font-normal normal-case tracking-normal">optional</span></p>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-sm pointer-events-none">$</span>
-                  <input
-                    type="number"
-                    value={budget}
-                    onChange={e => setBudget(e.target.value)}
-                    placeholder="5000"
-                    className="w-full bg-white/4 border border-white/10 rounded-xl pl-7 pr-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-[#C6FF00]/40 transition-all"
-                  />
-                </div>
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest mb-2">Deadline <span className="text-white/15 font-normal normal-case tracking-normal">optional</span></p>
-                <input
-                  value={deadline}
-                  onChange={e => setDeadline(e.target.value)}
-                  placeholder="e.g. 2 weeks"
-                  className="w-full bg-white/4 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-[#C6FF00]/40 transition-all"
-                />
               </div>
             </div>
 
