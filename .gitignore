@@ -47,3 +47,10 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Credentials — never commit service account keys or secrets
+*firebase-adminsdk*.json
+*service-account*.json
+google-services.json
+google-services_*.json
+attached_assets/*.json
