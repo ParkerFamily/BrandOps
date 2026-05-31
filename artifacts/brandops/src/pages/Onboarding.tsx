@@ -950,7 +950,7 @@ export default function Onboarding() {
     if (auth.currentUser) {
       try { await updateProfile(auth.currentUser, { displayName: auth.currentUser.displayName ?? "" }); } catch {}
     }
-    setLocation(isCreator ? "/settings" : "/subscribe");
+    setLocation("/subscribe");
   };
 
   const STEP_TITLES = [
