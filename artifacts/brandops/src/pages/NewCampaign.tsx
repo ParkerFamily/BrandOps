@@ -1,716 +1,496 @@
-import { useState, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
-  Sparkles, Copy, Check, RefreshCw, Loader2,
-  Link2, FileText, ArrowLeft, ChevronRight,
+  Sparkles, ArrowLeft, Loader2, CheckCircle2, RotateCcw,
+  Save, Send, ChevronDown, Plus, Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fsCreateCampaign } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL;
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+// ─── Quick-tap chips ────────────────────────────────────────────────────────
 
-const GOALS = [
-  { id: "downloads", label: "Drive App Downloads" },
-  { id: "sales", label: "Generate Sales" },
-  { id: "awareness", label: "Brand Awareness" },
-  { id: "traffic", label: "Website Traffic" },
-  { id: "signups", label: "Email Signups" },
-  { id: "other", label: "Other" },
+const CHIPS = [
+  "TikTok ads", "Instagram Reels", "YouTube Shorts",
+  "Product demo", "Testimonial", "Talking head", "Lifestyle b-roll",
+  "App installs", "Drive sales", "Brand awareness",
+  "Fast turnaround", "Paid ads", "Authentic feel",
 ];
 
-const DELIVERABLE_TYPES = [
-  "Talking Head", "Product Demo", "Testimonial",
-  "Lifestyle", "Skit", "Voiceover", "B-Roll",
+const GEN_STEPS = [
+  "Understanding your campaign goal…",
+  "Writing creator brief…",
+  "Crafting hook ideas…",
+  "Building video concepts…",
+  "Estimating budget & payout…",
 ];
 
-const LENGTHS = ["15s", "30s", "60s", "Custom"];
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-const PLATFORMS = [
-  { id: "tiktok", label: "TikTok" },
-  { id: "instagram", label: "Instagram" },
-  { id: "youtube", label: "YouTube" },
-];
+interface Generated {
+  title: string;
+  summary: string;
+  creatorBrief: string;
+  deliverables: string;
+  videoConceptIdeas: string[];
+  hookIdeas: string[];
+  ctaIdeas: string[];
+  payoutStrategy: string;
+  suggestedVideoCount: number;
+  suggestedPayoutPerVideo: number;
+  estimatedTotalCost: number;
+  usageRights: string;
+  suggestedDeadline: string;
+  approvalCriteria: string[];
+  creatorType: string;
+  toneAndStyle: string;
+  doList: string[];
+  dontList: string[];
+}
 
-const TONES = ["Authentic", "Energetic", "Educational", "Funny", "Casual", "Professional"];
+type Step = "prompt" | "generating" | "result";
 
-const NICHES_LIST = [
-  "Beauty", "Fitness", "Business", "Tech", "Lifestyle",
-  "Gaming", "Entertainment", "Food", "Fashion", "Travel", "Finance", "Health",
-];
+// ─── Sub-components ─────────────────────────────────────────────────────────
 
-const GENDERS = ["Any", "Male", "Female", "Non-binary"];
-const FOLLOWER_RANGES = ["Any", "Under 10K", "10K–50K", "50K–200K", "200K+"];
-
-const USAGE_OPTIONS = [
-  { id: "organic", label: "Organic Only" },
-  { id: "organic_paid", label: "Organic + Paid Ads" },
-  { id: "whitelisting", label: "Whitelisting" },
-  { id: "full_buyout", label: "Full Buyout" },
-];
-
-// ─── UI Primitives ──────────────────────────────────────────────────────────────
-
-function SectionCard({ title, subtitle, children, error }: {
-  title: string; subtitle?: string; children: React.ReactNode; error?: string;
+function Accordion({
+  label, children, defaultOpen = false,
+}: {
+  label: string; children: React.ReactNode; defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const variants: Variants = {
+    open: { height: "auto", opacity: 1 },
+    closed: { height: 0, opacity: 0 },
+  };
   return (
-    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6 space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold text-white tracking-wide">{title}</h2>
-        {subtitle && <p className="text-xs text-white/40 mt-0.5">{subtitle}</p>}
-      </div>
-      {children}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+    <div className="border border-white/8 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/3 transition-colors text-left"
+      >
+        <span className="text-sm font-medium text-white">{label}</span>
+        <ChevronDown className={cn("h-4 w-4 text-white/30 transition-transform duration-200", open && "rotate-180")} />
+      </button>
+      <motion.div
+        variants={variants}
+        initial="closed"
+        animate={open ? "open" : "closed"}
+        transition={{ duration: 0.2, ease: "easeInOut" }}
+        className="overflow-hidden"
+      >
+        <div className="px-4 pb-4 border-t border-white/6">
+          {children}
+        </div>
+      </motion.div>
     </div>
   );
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-bold text-white/35 uppercase tracking-widest mb-2">{children}</p>;
-}
-
-function Pill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-        active
-          ? "bg-[#C6FF00] text-black"
-          : "bg-white/5 border border-white/10 text-white/55 hover:text-white hover:border-white/20"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function CheckboxChip({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
-        checked
-          ? "bg-[#C6FF00]/10 border-[#C6FF00]/30 text-[#C6FF00]"
-          : "bg-white/3 border-white/8 text-white/50 hover:text-white/80 hover:border-white/15"
-      }`}
-    >
-      <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border flex-shrink-0 transition-all ${
-        checked ? "bg-[#C6FF00] border-[#C6FF00]" : "border-white/20"
-      }`}>
-        {checked && (
-          <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-            <path d="M1 3L3 5L7 1" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </span>
-      {label}
-    </button>
-  );
-}
-
-function StyledInput({ value, onChange, placeholder, prefix, type = "text" }: {
-  value: string; onChange: (v: string) => void; placeholder?: string; prefix?: string; type?: string;
+function EditableBlock({ value, onChange, rows = 4 }: {
+  value: string; onChange: (v: string) => void; rows?: number;
 }) {
   return (
-    <div className="relative">
-      {prefix && <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/35 text-sm pointer-events-none">{prefix}</span>}
-      <input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={`w-full bg-white/4 border border-white/10 rounded-xl py-2.5 text-sm text-white placeholder-white/25 outline-none transition-all focus:border-[#C6FF00]/40 focus:bg-white/[0.06] ${prefix ? "pl-8 pr-4" : "px-4"}`}
-      />
+    <textarea
+      rows={rows}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full mt-3 resize-none rounded-lg bg-white/4 border border-white/10 text-sm text-white/85 leading-relaxed px-3 py-2.5 focus:outline-none focus:border-[#C6FF00]/40 transition-all"
+    />
+  );
+}
+
+function EditableList({ items, onChange, accent = "text-[#C6FF00]" }: {
+  items: string[]; onChange: (items: string[]) => void; accent?: string;
+}) {
+  return (
+    <div className="space-y-1.5 pt-3">
+      {items.map((item, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <span className={cn("shrink-0 text-xs font-bold mt-2.5 w-4", accent)}>•</span>
+          <input
+            value={item}
+            onChange={e => { const n = [...items]; n[i] = e.target.value; onChange(n); }}
+            className="flex-1 bg-white/4 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white/85 focus:outline-none focus:border-[#C6FF00]/40 transition-colors"
+          />
+          <button
+            onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+            className="shrink-0 mt-1.5 p-1 text-white/20 hover:text-red-400 transition-colors rounded"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={() => onChange([...items, ""])}
+        className="text-xs text-white/25 hover:text-white/50 transition-colors px-1 pt-1 flex items-center gap-1"
+      >
+        <Plus className="h-3 w-3" /> Add
+      </button>
     </div>
   );
 }
 
-// ─── Types ──────────────────────────────────────────────────────────────────────
-
-interface AiCampaign {
-  title?: string;
-  creatorBrief?: string;
-  hookIdeas?: string[];
-  videoConceptIdeas?: string[];
-  ctaIdeas?: string[];
-  approvalCriteria?: string[];
-  deliverables?: string;
-  usageRights?: string;
-  payoutStrategy?: string;
-  doList?: string[];
-  dontList?: string[];
-  toneAndStyle?: string;
-  suggestedVideoCount?: number;
-  suggestedPayoutPerVideo?: number;
-}
-
-interface GeneratedScript { label: string; content: string; }
-
-// ─── Component ──────────────────────────────────────────────────────────────────
+// ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function NewCampaign() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Form state
-  const [goal, setGoal] = useState("");
-  const [productDescription, setProductDescription] = useState("");
-  const [deliverables, setDeliverables] = useState<string[]>([]);
-  const [deliverableLength, setDeliverableLength] = useState("30s");
-  const [platform, setPlatform] = useState("tiktok");
-  const [tone, setTone] = useState("Authentic");
-  const [totalBudget, setTotalBudget] = useState("5000");
-  const [avgPayout, setAvgPayout] = useState("200");
-  const [ageMin, setAgeMin] = useState("18");
-  const [ageMax, setAgeMax] = useState("35");
-  const [gender, setGender] = useState("Any");
-  const [creatorLocation, setCreatorLocation] = useState("");
-  const [followerRange, setFollowerRange] = useState("Any");
-  const [niches, setNiches] = useState<string[]>([]);
-  const [usageRights, setUsageRights] = useState("organic");
+  const [step, setStep] = useState<Step>("prompt");
+  const [prompt, setPrompt] = useState("");
+  const [budget, setBudget] = useState("");
   const [deadline, setDeadline] = useState("");
-  const [inspirationLinks, setInspirationLinks] = useState("");
-  const [styleNotes, setStyleNotes] = useState("");
+  const [genStep, setGenStep] = useState(0);
+  const [generated, setGenerated] = useState<Generated | null>(null);
+  const [saving, setSaving] = useState(false);
+  const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // AI state
-  const [hooks, setHooks] = useState<string[]>([]);
-  const [scripts, setScripts] = useState<GeneratedScript[]>([]);
-  const [activeScript, setActiveScript] = useState(0);
-  const [generatingHooks, setGeneratingHooks] = useState(false);
-  const [copiedHook, setCopiedHook] = useState<number | null>(null);
-  const [building, setBuilding] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Computed
-  const budget = parseInt(totalBudget) || 0;
-  const payout = parseInt(avgPayout) || 200;
-  const estimatedCreators = payout > 0 ? Math.floor(budget / payout) : 0;
-
-  const toggleDeliverable = (d: string) =>
-    setDeliverables(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
-
-  const toggleNiche = (n: string) =>
-    setNiches(prev => prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n]);
-
-  const copyHook = useCallback(async (hook: string, idx: number) => {
-    await navigator.clipboard.writeText(hook);
-    setCopiedHook(idx);
-    setTimeout(() => setCopiedHook(null), 1500);
+  useEffect(() => {
+    textareaRef.current?.focus();
+    return () => { if (stepTimer.current) clearInterval(stepTimer.current); };
   }, []);
 
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!goal) e.goal = "Select a campaign goal";
-    if (!productDescription.trim()) e.product = "Describe what you're promoting";
-    if (deliverables.length === 0) e.deliverables = "Select at least one deliverable type";
-    if (!totalBudget || budget < 100) e.budget = "Minimum budget is $100";
-    if (!deadline) e.deadline = "Set a submission deadline";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
+  function patch<K extends keyof Generated>(key: K, value: Generated[K]) {
+    setGenerated(prev => prev ? { ...prev, [key]: value } : prev);
+  }
 
-  const generateHooks = async () => {
-    if (!productDescription.trim()) {
-      toast({ title: "Add a product description first", variant: "destructive" });
-      return;
-    }
-    setGeneratingHooks(true);
-    try {
-      const res = await fetch(`${BASE}api/openai/campaign-hooks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal, productDescription, deliverables, tone, platform }),
-      });
-      const data = await res.json();
-      setHooks(data.hooks ?? []);
-      setScripts(data.scripts ?? []);
-      setActiveScript(0);
-    } catch {
-      toast({ title: "Failed to generate hooks", variant: "destructive" });
-    } finally {
-      setGeneratingHooks(false);
-    }
-  };
+  function appendChip(chip: string) {
+    setPrompt(p => p ? `${p.trimEnd()}, ${chip.toLowerCase()}` : chip.toLowerCase());
+    textareaRef.current?.focus();
+  }
 
-  const buildCampaign = async () => {
-    if (!validate()) return;
-    setBuilding(true);
+  async function generate() {
+    if (!prompt.trim()) return;
+    setStep("generating");
+    setGenStep(0);
+    stepTimer.current = setInterval(() => {
+      setGenStep(s => Math.min(s + 1, GEN_STEPS.length - 1));
+    }, 950);
     try {
-      const res = await fetch(`${BASE}api/openai/campaign-builder`, {
+      const r = await fetch(`${BASE}api/openai/campaign-builder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          goal,
-          productDescription,
-          deliverables,
-          deliverableLength,
-          platform,
-          tone,
-          totalBudget: budget,
-          avgPayout: payout,
-          creatorRequirements: {
-            ageRange: `${ageMin}–${ageMax}`,
-            gender,
-            location: creatorLocation,
-            followerRange,
-          },
-          niches,
-          usageRights,
-          deadline,
-          inspirationLinks,
-          styleNotes,
-          hooks,
-          scripts,
+          prompt: prompt.trim(),
+          budget: budget ? Number(budget) : undefined,
+          deadline: deadline || undefined,
         }),
       });
-      const ai: AiCampaign = await res.json();
+      if (!r.ok) throw new Error();
+      const data: Generated = await r.json();
+      if (stepTimer.current) clearInterval(stepTimer.current);
+      setGenStep(GEN_STEPS.length - 1);
+      setTimeout(() => { setGenerated(data); setStep("result"); }, 300);
+    } catch {
+      if (stepTimer.current) clearInterval(stepTimer.current);
+      setStep("prompt");
+      toast({ title: "Generation failed", description: "Please try again.", variant: "destructive" });
+    }
+  }
 
-      const usageLabel = USAGE_OPTIONS.find(u => u.id === usageRights)?.label ?? usageRights;
-      const goalLabel = GOALS.find(g => g.id === goal)?.label ?? goal;
+  function parseDeadline(raw: string): string {
+    if (!raw) return new Date(Date.now() + 30 * 86400000).toISOString();
+    const direct = new Date(raw);
+    if (!isNaN(direct.getTime())) return direct.toISOString();
+    const m = raw.match(/(\d+)\s*(day|week|month)/i);
+    if (m) {
+      const n = parseInt(m[1]);
+      const unit = m[2].toLowerCase();
+      const ms = unit === "week" ? n * 7 * 86400000 : unit === "month" ? n * 30 * 86400000 : n * 86400000;
+      return new Date(Date.now() + ms).toISOString();
+    }
+    return new Date(Date.now() + 30 * 86400000).toISOString();
+  }
 
+  async function save(status: "draft" | "active") {
+    if (!generated) return;
+    setSaving(true);
+    try {
       const id = await fsCreateCampaign({
-        // ── Core fields ─────────────────────────────────────────────────────
-        title: ai.title ?? `${goalLabel} Campaign`,
-        description: ai.creatorBrief ?? productDescription,
-        platform,
-        niche: niches.join(", ") || "General",
-        status: "draft",
-        totalBudget: budget,
-        payoutPerVideo: ai.suggestedPayoutPerVideo ?? payout,
-        videosNeeded: ai.suggestedVideoCount ?? estimatedCreators,
-        creatorType: `${gender !== "Any" ? gender + ", " : ""}${ageMin}–${ageMax}${creatorLocation ? ", " + creatorLocation : ""}`,
-        tone,
-        videoStyle: deliverables[0] ?? "",
-        deadline: new Date(deadline).toISOString(),
-        inspirationUrls: inspirationLinks,
+        title: generated.title,
+        description: generated.creatorBrief,
+        platform: "tiktok",
+        niche: generated.creatorType?.slice(0, 50) || "UGC",
+        status: status === "active" ? "active" : "draft",
+        totalBudget: generated.estimatedTotalCost || Number(budget) || 1000,
+        payoutPerVideo: generated.suggestedPayoutPerVideo || 100,
+        videosNeeded: generated.suggestedVideoCount || 1,
+        creatorType: generated.creatorType || "",
+        tone: generated.toneAndStyle || "",
+        deadline: parseDeadline(generated.suggestedDeadline || deadline),
         brandUid: user?.uid ?? "",
         ownerFirebaseUid: user?.uid ?? "",
-        // ── Structured fields (raw — mobile reads these directly) ───────────
-        goal,
-        deliverableTypes: deliverables,
-        deliverableLength,
-        usageRightsType: usageRights,
-        creatorRequirements: {
-          ageRange: `${ageMin}–${ageMax}`,
-          gender,
-          location: creatorLocation || undefined,
-          followerRange,
-        },
-        niches: niches.length ? niches : undefined,
-        styleNotes: styleNotes.trim() || undefined,
-        generatedScripts: scripts.length ? scripts : undefined,
-        // ── AI-generated brief content ───────────────────────────────────────
         aiData: {
-          hookIdeas: hooks.length ? hooks : (ai.hookIdeas ?? []),
-          videoConceptIdeas: ai.videoConceptIdeas ?? [],
-          ctaIdeas: ai.ctaIdeas ?? [],
-          creatorBrief: ai.creatorBrief ?? "",
-          approvalCriteria: ai.approvalCriteria ?? [],
-          deliverables: `${deliverables.join(", ")} · ${deliverableLength}`,
-          usageRights: usageLabel,
-          payoutStrategy: ai.payoutStrategy ?? "",
-          doList: ai.doList ?? [],
-          dontList: ai.dontList ?? [],
-          toneAndStyle: ai.toneAndStyle ?? "",
+          hookIdeas: generated.hookIdeas,
+          videoConceptIdeas: generated.videoConceptIdeas,
+          ctaIdeas: generated.ctaIdeas,
+          creatorBrief: generated.creatorBrief,
+          approvalCriteria: generated.approvalCriteria,
+          deliverables: generated.deliverables,
+          usageRights: generated.usageRights,
+          payoutStrategy: generated.payoutStrategy,
+          doList: generated.doList,
+          dontList: generated.dontList,
+          toneAndStyle: generated.toneAndStyle,
         },
       });
-
-      toast({ title: "Campaign created!", description: "Your AI-powered brief is ready for creators." });
+      toast({
+        title: status === "active" ? "Campaign published!" : "Draft saved",
+        description: generated.title,
+      });
       setLocation(`/campaigns/${id}`);
     } catch {
-      toast({ title: "Failed to build campaign", description: "Please try again.", variant: "destructive" });
+      toast({ title: "Failed to save campaign", variant: "destructive" });
     } finally {
-      setBuilding(false);
+      setSaving(false);
     }
-  };
+  }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-2xl mx-auto pb-16 space-y-4"
-    >
-      {/* Header */}
-      <div className="mb-2">
-        <button
-          onClick={() => setLocation("/campaigns")}
-          className="flex items-center gap-1.5 text-white/30 hover:text-white/60 text-xs mb-5 transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Campaigns
-        </button>
-        <h1 className="text-2xl font-black tracking-tight text-white">New Campaign</h1>
-        <p className="text-white/40 text-sm mt-1">
-          Fill in the details — BrandOps AI turns them into a complete creator brief.
-        </p>
-      </div>
-
-      {/* ── Goal ─────────────────────────────────────────────────────────────── */}
-      <SectionCard
-        title="Campaign Goal"
-        subtitle="What do you want creators to help you achieve?"
-        error={errors.goal}
-      >
-        <div className="grid grid-cols-3 gap-2">
-          {GOALS.map(g => (
-            <button
-              key={g.id}
-              type="button"
-              onClick={() => { setGoal(g.id); setErrors(e => ({ ...e, goal: "" })); }}
-              className={`py-3 px-3 rounded-xl text-xs font-semibold text-left transition-all border ${
-                goal === g.id
-                  ? "bg-[#C6FF00]/10 border-[#C6FF00]/40 text-[#C6FF00]"
-                  : "bg-white/3 border-white/8 text-white/50 hover:text-white/80 hover:border-white/15"
-              }`}
-            >
-              {g.label}
-            </button>
-          ))}
-        </div>
-      </SectionCard>
-
-      {/* ── Product ──────────────────────────────────────────────────────────── */}
-      <SectionCard
-        title="What Are You Promoting?"
-        subtitle="Give creators context about your product, brand, or service."
-        error={errors.product}
-      >
-        <textarea
-          value={productDescription}
-          onChange={e => { setProductDescription(e.target.value); setErrors(prev => ({ ...prev, product: "" })); }}
-          placeholder={`Example:\n"BrandOps helps brands hire UGC creators and pay for approved videos — no influencer fees, just content that converts."`}
-          rows={3}
-          className="w-full bg-white/4 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all focus:border-[#C6FF00]/40 focus:bg-white/[0.06] resize-none"
-        />
-      </SectionCard>
-
-      {/* ── Deliverables ─────────────────────────────────────────────────────── */}
-      <SectionCard
-        title="Creator Deliverables"
-        subtitle="What type of content do you need creators to produce?"
-        error={errors.deliverables}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {DELIVERABLE_TYPES.map(d => (
-            <CheckboxChip
-              key={d}
-              label={d}
-              checked={deliverables.includes(d)}
-              onChange={() => { toggleDeliverable(d); setErrors(prev => ({ ...prev, deliverables: "" })); }}
-            />
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 gap-5 pt-1">
-          <div>
-            <FieldLabel>Video Length</FieldLabel>
-            <div className="flex gap-2 flex-wrap">
-              {LENGTHS.map(l => (
-                <Pill key={l} label={l} active={deliverableLength === l} onClick={() => setDeliverableLength(l)} />
-              ))}
-            </div>
-          </div>
-          <div>
-            <FieldLabel>Platform</FieldLabel>
-            <div className="flex gap-2 flex-wrap">
-              {PLATFORMS.map(p => (
-                <Pill key={p.id} label={p.label} active={platform === p.id} onClick={() => setPlatform(p.id)} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel>Tone / Vibe</FieldLabel>
-          <div className="flex gap-2 flex-wrap">
-            {TONES.map(t => (
-              <Pill key={t} label={t} active={tone === t} onClick={() => setTone(t)} />
-            ))}
-          </div>
-        </div>
-      </SectionCard>
-
-      {/* ── Budget ───────────────────────────────────────────────────────────── */}
-      <SectionCard
-        title="Budget"
-        subtitle="Creators are only paid after you approve their submitted video."
-        error={errors.budget}
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <FieldLabel>Total Campaign Budget</FieldLabel>
-            <StyledInput
-              value={totalBudget}
-              onChange={v => { setTotalBudget(v); setErrors(prev => ({ ...prev, budget: "" })); }}
-              prefix="$"
-              type="number"
-              placeholder="5000"
-            />
-          </div>
-          <div>
-            <FieldLabel>Avg Creator Payout</FieldLabel>
-            <StyledInput
-              value={avgPayout}
-              onChange={setAvgPayout}
-              prefix="$"
-              type="number"
-              placeholder="200"
-            />
-          </div>
-        </div>
-
-        {budget > 0 && (
-          <div className="rounded-xl border border-white/8 bg-white/[0.025] p-4 grid grid-cols-3 divide-x divide-white/8 mt-1">
-            <div className="text-center pr-4">
-              <p className="text-2xl font-black text-[#C6FF00] tabular-nums">{estimatedCreators}</p>
-              <p className="text-[10px] text-white/35 mt-0.5 uppercase tracking-wider">Est. Creators</p>
-            </div>
-            <div className="text-center px-4">
-              <p className="text-2xl font-black text-white tabular-nums">{estimatedCreators}</p>
-              <p className="text-[10px] text-white/35 mt-0.5 uppercase tracking-wider">Est. Videos</p>
-            </div>
-            <div className="text-center pl-4">
-              <p className="text-2xl font-black text-white tabular-nums">${payout.toLocaleString()}</p>
-              <p className="text-[10px] text-white/35 mt-0.5 uppercase tracking-wider">Per Creator</p>
-            </div>
-          </div>
-        )}
-      </SectionCard>
-
-      {/* ── Creator Requirements ─────────────────────────────────────────────── */}
-      <SectionCard title="Creator Requirements" subtitle="BrandOps will match creators who fit this profile.">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <FieldLabel>Age Range</FieldLabel>
-            <div className="flex items-center gap-2">
-              <StyledInput value={ageMin} onChange={setAgeMin} type="number" placeholder="18" />
-              <span className="text-white/25 text-sm flex-shrink-0">to</span>
-              <StyledInput value={ageMax} onChange={setAgeMax} type="number" placeholder="35" />
-            </div>
-          </div>
-          <div>
-            <FieldLabel>Location</FieldLabel>
-            <StyledInput value={creatorLocation} onChange={setCreatorLocation} placeholder="e.g. United States, UK" />
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel>Gender</FieldLabel>
-          <div className="flex gap-2 flex-wrap">
-            {GENDERS.map(g => (
-              <Pill key={g} label={g} active={gender === g} onClick={() => setGender(g)} />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel>Follower Range</FieldLabel>
-          <div className="flex gap-2 flex-wrap">
-            {FOLLOWER_RANGES.map(f => (
-              <Pill key={f} label={f} active={followerRange === f} onClick={() => setFollowerRange(f)} />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel>Niches <span className="text-white/20 normal-case font-normal tracking-normal ml-1">— select all that apply</span></FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {NICHES_LIST.map(n => (
-              <CheckboxChip key={n} label={n} checked={niches.includes(n)} onChange={() => toggleNiche(n)} />
-            ))}
-          </div>
-        </div>
-      </SectionCard>
-
-      {/* ── Usage Rights ─────────────────────────────────────────────────────── */}
-      <SectionCard title="Usage Rights">
-        <div className="grid grid-cols-2 gap-2">
-          {USAGE_OPTIONS.map(u => (
-            <button
-              key={u.id}
-              type="button"
-              onClick={() => setUsageRights(u.id)}
-              className={`py-3 px-4 rounded-xl text-xs font-semibold transition-all border ${
-                usageRights === u.id
-                  ? "bg-[#C6FF00]/10 border-[#C6FF00]/40 text-[#C6FF00]"
-                  : "bg-white/3 border-white/8 text-white/50 hover:text-white/80 hover:border-white/15"
-              }`}
-            >
-              {u.label}
-            </button>
-          ))}
-        </div>
-      </SectionCard>
-
-      {/* ── Timeline ─────────────────────────────────────────────────────────── */}
-      <SectionCard title="Timeline" error={errors.deadline}>
-        <div>
-          <FieldLabel>Creator Submission Deadline</FieldLabel>
-          <input
-            type="date"
-            value={deadline}
-            onChange={e => { setDeadline(e.target.value); setErrors(prev => ({ ...prev, deadline: "" })); }}
-            className="w-full bg-white/4 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none transition-all focus:border-[#C6FF00]/40 focus:bg-white/[0.06]"
-          />
-        </div>
-      </SectionCard>
-
-      {/* ── Inspiration ──────────────────────────────────────────────────────── */}
-      <SectionCard
-        title="Inspiration & References"
-        subtitle='Drop links or describe the style you want. AI will turn them into creator directions.'
-      >
-        <div>
-          <FieldLabel>Example Links</FieldLabel>
-          <div className="relative">
-            <Link2 className="absolute left-3.5 top-3 h-4 w-4 text-white/25 pointer-events-none" />
-            <textarea
-              value={inspirationLinks}
-              onChange={e => setInspirationLinks(e.target.value)}
-              placeholder={"TikTok, Instagram Reels, YouTube, or product page links — one per line"}
-              rows={3}
-              className="w-full bg-white/4 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/25 outline-none transition-all focus:border-[#C6FF00]/40 focus:bg-white/[0.06] resize-none"
-            />
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel>Style Notes</FieldLabel>
-          <div className="relative">
-            <FileText className="absolute left-3.5 top-3 h-4 w-4 text-white/25 pointer-events-none" />
-            <textarea
-              value={styleNotes}
-              onChange={e => setStyleNotes(e.target.value)}
-              placeholder={`Example: "Make it feel natural, not too salesy. Think creator explaining a tool they actually use. Avoid cheesy transitions."`}
-              rows={3}
-              className="w-full bg-white/4 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/25 outline-none transition-all focus:border-[#C6FF00]/40 focus:bg-white/[0.06] resize-none"
-            />
-          </div>
-        </div>
-
-        <div className="border-2 border-dashed border-white/8 rounded-xl p-5 text-center">
-          <p className="text-xs text-white/25">📎 Upload images, videos, product photos</p>
-          <p className="text-[10px] text-white/15 mt-1">Coming soon</p>
-        </div>
-      </SectionCard>
-
-      {/* ── Generate Hooks ────────────────────────────────────────────────────── */}
+    <div className="max-w-2xl mx-auto pb-20">
+      {/* Back */}
       <button
-        type="button"
-        onClick={generateHooks}
-        disabled={generatingHooks}
-        className="w-full py-3 rounded-xl border border-[#C6FF00]/20 bg-[#C6FF00]/5 text-[#C6FF00] text-sm font-semibold hover:bg-[#C6FF00]/10 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+        onClick={() => step === "result" ? setStep("prompt") : setLocation("/campaigns")}
+        className="flex items-center gap-1.5 text-white/30 hover:text-white/60 text-xs mb-6 mt-1 transition-colors"
       >
-        {generatingHooks ? (
-          <><Loader2 className="h-4 w-4 animate-spin" /> Generating hooks &amp; scripts…</>
-        ) : (
-          <><Sparkles className="h-4 w-4" /> Generate Hook Ideas &amp; Sample Scripts</>
-        )}
+        <ArrowLeft className="h-3.5 w-3.5" />
+        {step === "result" ? "Edit prompt" : "Back to Campaigns"}
       </button>
 
-      {/* ── AI Hooks & Scripts ────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {hooks.length > 0 && (
+      <AnimatePresence mode="wait">
+
+        {/* ── STEP 1: Prompt ─────────────────────────────────────────────── */}
+        {step === "prompt" && (
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            key="prompt"
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            className="space-y-4"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            className="space-y-5"
           >
-            {/* Hooks */}
-            <SectionCard title="Suggested Hooks" subtitle="Copy, edit, or regenerate — these go into your creator brief.">
-              <div className="space-y-2">
-                {hooks.map((h, i) => (
-                  <div key={i} className="flex items-start gap-3 bg-white/[0.03] border border-white/8 rounded-xl px-4 py-3">
-                    <p className="flex-1 text-sm text-white/80 leading-relaxed">"{h}"</p>
-                    <button
-                      type="button"
-                      onClick={() => copyHook(h, i)}
-                      className="text-white/25 hover:text-[#C6FF00] transition-colors flex-shrink-0 mt-0.5"
-                      title="Copy hook"
-                    >
-                      {copiedHook === i
-                        ? <Check className="h-4 w-4 text-[#C6FF00]" />
-                        : <Copy className="h-4 w-4" />
-                      }
-                    </button>
-                  </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-white">New Campaign</h1>
+              <p className="text-white/40 text-sm mt-1">
+                Describe what you need — AI writes the complete brief in seconds.
+              </p>
+            </div>
+
+            {/* Main prompt */}
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && prompt.trim()) generate(); }}
+                placeholder={"Example: I'm launching a skincare serum and need 15 UGC videos for TikTok. Budget around $3,000. I want authentic product demos and strong hooks for paid ads."}
+                rows={5}
+                className="w-full bg-white/[0.04] border border-white/[0.10] rounded-2xl px-5 py-4 text-sm text-white placeholder-white/25 outline-none transition-all focus:border-[#C6FF00]/40 focus:bg-white/[0.06] resize-none leading-relaxed"
+              />
+              <span className="absolute bottom-3.5 right-4 text-[10px] text-white/15 select-none">⌘↵</span>
+            </div>
+
+            {/* Quick chips */}
+            <div>
+              <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest mb-2.5">Quick add</p>
+              <div className="flex flex-wrap gap-2">
+                {CHIPS.map(chip => (
+                  <button
+                    key={chip}
+                    onClick={() => appendChip(chip)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-white/[0.09] bg-white/[0.03] text-white/50 hover:text-white hover:border-[#C6FF00]/35 hover:bg-[#C6FF00]/8 transition-all"
+                  >
+                    {chip}
+                  </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={generateHooks}
-                disabled={generatingHooks}
-                className="flex items-center gap-1.5 text-xs text-white/25 hover:text-white/55 transition-colors mt-1"
-              >
-                <RefreshCw className="h-3 w-3" /> Regenerate
-              </button>
-            </SectionCard>
+            </div>
 
-            {/* Scripts */}
-            {scripts.length > 0 && (
-              <SectionCard title="Sample Scripts" subtitle="Give creators a starting point — they'll make it their own.">
-                <div className="flex gap-2 mb-1">
-                  {scripts.map((s, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setActiveScript(i)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        activeScript === i
-                          ? "bg-[#C6FF00] text-black"
-                          : "bg-white/5 text-white/45 hover:text-white"
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
+            {/* Optional fields */}
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest mb-2">Budget <span className="text-white/15 font-normal normal-case tracking-normal">optional</span></p>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 text-sm pointer-events-none">$</span>
+                  <input
+                    type="number"
+                    value={budget}
+                    onChange={e => setBudget(e.target.value)}
+                    placeholder="5000"
+                    className="w-full bg-white/4 border border-white/10 rounded-xl pl-7 pr-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-[#C6FF00]/40 transition-all"
+                  />
                 </div>
-                <div className="bg-white/[0.03] border border-white/8 rounded-xl p-4 mt-2">
-                  <pre className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed font-sans">
-                    {scripts[activeScript]?.content}
-                  </pre>
-                </div>
-              </SectionCard>
-            )}
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-bold text-white/25 uppercase tracking-widest mb-2">Deadline <span className="text-white/15 font-normal normal-case tracking-normal">optional</span></p>
+                <input
+                  value={deadline}
+                  onChange={e => setDeadline(e.target.value)}
+                  placeholder="e.g. 2 weeks"
+                  className="w-full bg-white/4 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-[#C6FF00]/40 transition-all"
+                />
+              </div>
+            </div>
+
+            {/* CTA */}
+            <button
+              onClick={generate}
+              disabled={!prompt.trim()}
+              className="w-full py-4 rounded-2xl bg-[#C6FF00] text-black font-bold text-sm hover:bg-[#d4ff33] transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <Sparkles className="h-4 w-4" /> Generate Campaign
+            </button>
           </motion.div>
         )}
+
+        {/* ── STEP 2: Generating ─────────────────────────────────────────── */}
+        {step === "generating" && (
+          <motion.div
+            key="generating"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center py-24 gap-8"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-[#C6FF00]/10 border border-[#C6FF00]/20 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 text-[#C6FF00] animate-spin" />
+            </div>
+            <div className="space-y-2.5 w-full max-w-xs">
+              {GEN_STEPS.map((s, i) => (
+                <div key={s} className={cn(
+                  "flex items-center gap-3 text-sm transition-all duration-300",
+                  i < genStep ? "text-[#C6FF00]/50" : i === genStep ? "text-white font-medium" : "text-white/20"
+                )}>
+                  {i < genStep
+                    ? <CheckCircle2 className="h-4 w-4 text-[#C6FF00] shrink-0" />
+                    : i === genStep
+                    ? <Loader2 className="h-4 w-4 text-[#C6FF00] animate-spin shrink-0" />
+                    : <div className="h-4 w-4 rounded-full border border-white/15 shrink-0" />}
+                  {s}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── STEP 3: Result ─────────────────────────────────────────────── */}
+        {step === "result" && generated && (
+          <motion.div
+            key="result"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-3"
+          >
+            {/* Status bar */}
+            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-[#C6FF00]/8 border border-[#C6FF00]/15">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-[#C6FF00]" />
+                <span className="text-sm font-semibold text-[#C6FF00]">Campaign ready — edit anything below</span>
+              </div>
+              <button
+                onClick={() => setStep("prompt")}
+                className="text-xs text-white/35 hover:text-white flex items-center gap-1 transition-colors"
+              >
+                <RotateCcw className="h-3 w-3" /> Regenerate
+              </button>
+            </div>
+
+            {/* Title */}
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5">
+              <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2">Campaign Title</p>
+              <input
+                value={generated.title}
+                onChange={e => patch("title", e.target.value)}
+                className="w-full bg-white/4 border border-white/10 rounded-xl px-4 py-2.5 text-base font-semibold text-white focus:outline-none focus:border-[#C6FF00]/40 transition-colors"
+              />
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Budget", value: `$${generated.estimatedTotalCost.toLocaleString()}`, accent: true },
+                { label: "Videos", value: String(generated.suggestedVideoCount), accent: false },
+                { label: "Per Video", value: `$${generated.suggestedPayoutPerVideo.toLocaleString()}`, accent: false },
+              ].map(({ label, value, accent }) => (
+                <div key={label} className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-center">
+                  <p className={cn("text-xl font-black tabular-nums", accent ? "text-[#C6FF00]" : "text-white")}>{value}</p>
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">{label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Editable sections */}
+            <Accordion label="📝 Creator Brief" defaultOpen>
+              <EditableBlock value={generated.creatorBrief} onChange={v => patch("creatorBrief", v)} rows={6} />
+            </Accordion>
+
+            <Accordion label={`💡 Hook Ideas (${generated.hookIdeas.length})`} defaultOpen>
+              <EditableList items={generated.hookIdeas} onChange={v => patch("hookIdeas", v)} accent="text-[#C6FF00]" />
+            </Accordion>
+
+            <Accordion label={`🎬 Video Concepts (${generated.videoConceptIdeas.length})`}>
+              <EditableList items={generated.videoConceptIdeas} onChange={v => patch("videoConceptIdeas", v)} accent="text-blue-400" />
+            </Accordion>
+
+            <Accordion label={`📣 CTA Ideas (${generated.ctaIdeas.length})`}>
+              <EditableList items={generated.ctaIdeas} onChange={v => patch("ctaIdeas", v)} accent="text-yellow-400" />
+            </Accordion>
+
+            <Accordion label="🎯 Deliverables">
+              <EditableBlock value={generated.deliverables} onChange={v => patch("deliverables", v)} rows={2} />
+            </Accordion>
+
+            <Accordion label="✅ Do's & Don'ts">
+              <div className="grid grid-cols-2 gap-4 pt-3">
+                <div>
+                  <p className="text-[10px] text-green-400 font-bold uppercase tracking-wide mb-1">Do</p>
+                  <EditableList items={generated.doList} onChange={v => patch("doList", v)} accent="text-green-400" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-red-400 font-bold uppercase tracking-wide mb-1">Don't</p>
+                  <EditableList items={generated.dontList} onChange={v => patch("dontList", v)} accent="text-red-400" />
+                </div>
+              </div>
+            </Accordion>
+
+            <Accordion label="⚖️ Usage Rights & Payout">
+              <EditableBlock value={generated.usageRights} onChange={v => patch("usageRights", v)} rows={2} />
+              <EditableBlock value={generated.payoutStrategy} onChange={v => patch("payoutStrategy", v)} rows={2} />
+            </Accordion>
+
+            {/* Sticky footer */}
+            <div className="sticky bottom-0 pt-4 pb-2 bg-gradient-to-t from-background via-background to-transparent">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => save("draft")}
+                  disabled={saving}
+                  className="flex-1 py-3.5 rounded-xl border border-white/12 text-white/60 hover:text-white font-semibold text-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {saving ? "Saving…" : "Save Draft"}
+                </button>
+                <button
+                  onClick={() => save("active")}
+                  disabled={saving}
+                  className="flex-1 py-3.5 rounded-xl bg-[#C6FF00] text-black font-bold text-sm hover:bg-[#d4ff33] transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {saving ? "Publishing…" : "Publish Campaign"}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
       </AnimatePresence>
-
-      {/* ── Actions ───────────────────────────────────────────────────────────── */}
-      <div className="flex gap-3 pt-2">
-        <button
-          type="button"
-          onClick={() => setLocation("/campaigns")}
-          className="px-6 py-3 rounded-xl border border-white/10 text-white/45 text-sm font-semibold hover:text-white hover:border-white/20 transition-all"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={buildCampaign}
-          disabled={building}
-          className="flex-1 py-3.5 rounded-xl bg-[#C6FF00] text-black font-bold text-sm hover:bg-[#d4ff33] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {building ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Building your campaign…</>
-          ) : (
-            <><Sparkles className="h-4 w-4" /> Build My Campaign</>
-          )}
-        </button>
-      </div>
-
-      {Object.keys(errors).length > 0 && (
-        <p className="text-xs text-red-400/80 text-center">
-          Please fill in the required fields above before building.
-        </p>
-      )}
-    </motion.div>
+    </div>
   );
 }
