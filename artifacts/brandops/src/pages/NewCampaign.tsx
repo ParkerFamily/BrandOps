@@ -3,11 +3,12 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Sparkles, ArrowLeft, Loader2, CheckCircle2, RotateCcw,
-  Save, Send, ChevronDown, Plus, Trash2,
+  Save, Send, ChevronDown, Plus, Trash2, CreditCard, ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fsCreateCampaign } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { useStripeGate } from "@/hooks/use-stripe-gate";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL;
@@ -140,6 +141,8 @@ export default function NewCampaign() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { loading: stripeLoading, ready: stripeReady, startSetup } = useStripeGate();
+  const [settingUpStripe, setSettingUpStripe] = useState(false);
 
   const [step, setStep] = useState<Step>("prompt");
   const [prompt, setPrompt] = useState("");
@@ -252,6 +255,11 @@ export default function NewCampaign() {
     }
   }
 
+  const handleSetupStripe = async () => {
+    setSettingUpStripe(true);
+    try { await startSetup(); } catch { setSettingUpStripe(false); }
+  };
+
   return (
     <div className="max-w-2xl mx-auto pb-20">
       {/* Back */}
@@ -263,7 +271,48 @@ export default function NewCampaign() {
         {step === "result" ? "Edit prompt" : "Back to Campaigns"}
       </button>
 
-      <AnimatePresence mode="wait">
+      {/* ── Stripe gate for brands ── */}
+      {(stripeLoading || stripeReady === false) && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+          className="rounded-2xl border border-card-border bg-card p-8 flex flex-col items-center text-center gap-4"
+        >
+          {stripeLoading ? (
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          ) : (
+            <>
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <CreditCard className="h-7 w-7 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">Add a payment method first</h2>
+                <p className="text-sm text-white/50 mt-1.5 max-w-sm leading-relaxed">
+                  Campaigns require a payment method on file so creators get paid automatically when you approve their videos.
+                </p>
+              </div>
+              <button
+                onClick={handleSetupStripe}
+                disabled={settingUpStripe}
+                className={cn(
+                  "flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-all",
+                  "bg-primary text-black hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.2)]",
+                  settingUpStripe && "opacity-60 cursor-not-allowed"
+                )}
+              >
+                {settingUpStripe
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Setting up…</>
+                  : <><CreditCard className="h-4 w-4" /> Add Payment Method <ArrowRight className="h-3.5 w-3.5" /></>
+                }
+              </button>
+            </>
+          )}
+        </motion.div>
+      )}
+
+      {/* Main flow — only shown when Stripe is ready */}
+      {!stripeLoading && stripeReady && <AnimatePresence mode="wait">
 
         {/* ── STEP 1: Prompt ─────────────────────────────────────────────── */}
         {step === "prompt" && (
@@ -487,7 +536,7 @@ export default function NewCampaign() {
           </motion.div>
         )}
 
-      </AnimatePresence>
+      </AnimatePresence>}
     </div>
   );
 }

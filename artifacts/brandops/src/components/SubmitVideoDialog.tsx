@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { Upload, Link, CheckCircle, Loader2 } from "lucide-react";
+import { useStripeGate } from "@/hooks/use-stripe-gate";
+import { Upload, Link, CheckCircle, Loader2, Zap, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -25,6 +26,8 @@ interface Props {
 export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, preselectedCampaignTitle }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { loading: stripeLoading, ready: stripeReady, startSetup } = useStripeGate();
+  const [settingUpStripe, setSettingUpStripe] = useState(false);
 
   const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
   const [campaignId, setCampaignId] = useState<string>(preselectedCampaignId ?? "");
@@ -83,6 +86,11 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
     }
   }
 
+  const handleSetupStripe = async () => {
+    setSettingUpStripe(true);
+    try { await startSetup(); } catch { setSettingUpStripe(false); }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] bg-card border-card-border text-card-foreground">
@@ -96,13 +104,49 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
           </DialogDescription>
         </DialogHeader>
 
+        {/* Stripe gate — creator must set up payouts first */}
+        {(stripeLoading || stripeReady === false) && !done && (
+          <div className={cn(
+            "rounded-xl border p-5 flex flex-col items-center text-center gap-3",
+            stripeLoading
+              ? "border-border bg-muted/20"
+              : "border-yellow-500/30 bg-yellow-500/5"
+          )}>
+            {stripeLoading ? (
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-full bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center">
+                  <Zap className="h-5 w-5 text-yellow-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-foreground">Set up payouts first</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Connect your bank account via Stripe so you get paid when the brand approves your video.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleSetupStripe}
+                  disabled={settingUpStripe}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 w-full"
+                >
+                  {settingUpStripe
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Setting up…</>
+                    : <><Zap className="h-4 w-4" /> Set Up Payouts <ArrowRight className="h-3.5 w-3.5" /></>
+                  }
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
         {done ? (
           <div className="flex flex-col items-center gap-3 py-8">
             <CheckCircle className="h-12 w-12 text-primary" />
             <p className="font-semibold text-lg">Submitted!</p>
             <p className="text-sm text-muted-foreground text-center">The brand team will review your video and get back to you.</p>
           </div>
-        ) : (
+        ) : (!stripeLoading && stripeReady) ? (
           <div className="space-y-5 py-2">
             {/* Campaign selector */}
             <div className="space-y-2">
@@ -178,7 +222,7 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
               )}
             </Button>
           </div>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   );

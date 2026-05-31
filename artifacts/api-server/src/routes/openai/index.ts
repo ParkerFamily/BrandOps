@@ -150,7 +150,7 @@ router.post("/openai/campaign-builder", async (req, res): Promise<void> => {
     totalBudget, avgPayout, creatorRequirements, niches, usageRights,
     deadline, inspirationLinks, styleNotes, hooks, scripts,
   } = req.body as {
-    prompt?: string; budget?: number; deadline?: string;
+    prompt?: string; budget?: number;
     goal?: string; productDescription?: string; deliverables?: string[];
     deliverableLength?: string; platform?: string; tone?: string;
     totalBudget?: number; avgPayout?: number;

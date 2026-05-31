@@ -361,6 +361,32 @@ router.get('/stripe/creator-connect/status', async (req, res): Promise<void> => 
 
 // ── BRAND PAYMENT METHOD SETUP ────────────────────────────────────────────
 
+// Check brand payment method status
+router.get('/stripe/brand-setup/status', async (req, res): Promise<void> => {
+  const uid = typeof req.query.uid === 'string' ? req.query.uid : '';
+  if (!uid) {
+    res.status(400).json({ error: 'uid is required' });
+    return;
+  }
+
+  const [profile] = await db
+    .select()
+    .from(userProfilesTable)
+    .where(eq(userProfilesTable.firebaseUid, uid))
+    .limit(1);
+
+  if (!profile?.stripeCustomerId) {
+    res.json({ ready: false, hasCustomer: false, hasPaymentMethod: false });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const methods = await stripe.paymentMethods.list({ customer: profile.stripeCustomerId, type: 'card', limit: 1 });
+  const hasPaymentMethod = methods.data.length > 0;
+
+  res.json({ ready: hasPaymentMethod, hasCustomer: true, hasPaymentMethod, customerId: profile.stripeCustomerId });
+});
+
 // Start brand payment method setup — creates Stripe Customer + Checkout setup session
 router.post('/stripe/brand-setup/start', async (req, res): Promise<void> => {
   const { uid, email, name, returnUrl } = req.body as {
