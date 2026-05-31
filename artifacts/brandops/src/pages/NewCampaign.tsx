@@ -276,6 +276,7 @@ export default function NewCampaign() {
       const goalLabel = GOALS.find(g => g.id === goal)?.label ?? goal;
 
       const id = await fsCreateCampaign({
+        // ── Core fields ─────────────────────────────────────────────────────
         title: ai.title ?? `${goalLabel} Campaign`,
         description: ai.creatorBrief ?? productDescription,
         platform,
@@ -291,16 +292,28 @@ export default function NewCampaign() {
         inspirationUrls: inspirationLinks,
         brandUid: user?.uid ?? "",
         ownerFirebaseUid: user?.uid ?? "",
+        // ── Structured fields (raw — mobile reads these directly) ───────────
+        goal,
+        deliverableTypes: deliverables,
+        deliverableLength,
+        usageRightsType: usageRights,
+        creatorRequirements: {
+          ageRange: `${ageMin}–${ageMax}`,
+          gender,
+          location: creatorLocation || undefined,
+          followerRange,
+        },
+        niches: niches.length ? niches : undefined,
+        styleNotes: styleNotes.trim() || undefined,
+        generatedScripts: scripts.length ? scripts : undefined,
+        // ── AI-generated brief content ───────────────────────────────────────
         aiData: {
           hookIdeas: hooks.length ? hooks : (ai.hookIdeas ?? []),
           videoConceptIdeas: ai.videoConceptIdeas ?? [],
           ctaIdeas: ai.ctaIdeas ?? [],
           creatorBrief: ai.creatorBrief ?? "",
           approvalCriteria: ai.approvalCriteria ?? [],
-          deliverables: [
-            deliverables.join(", "),
-            deliverableLength,
-          ].filter(Boolean).join(" · "),
+          deliverables: `${deliverables.join(", ")} · ${deliverableLength}`,
           usageRights: usageLabel,
           payoutStrategy: ai.payoutStrategy ?? "",
           doList: ai.doList ?? [],

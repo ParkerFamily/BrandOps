@@ -43,6 +43,20 @@ export interface FsCampaign {
   videoStyle?: string;
   brandUid?: string;
   ownerFirebaseUid?: string;
+  // Structured campaign builder fields — stored as raw arrays/objects for mobile sync
+  goal?: string;                    // e.g. "sales", "awareness", "downloads"
+  deliverableTypes?: string[];      // e.g. ["Talking Head", "Product Demo"]
+  deliverableLength?: string;       // e.g. "30s", "60s", "Custom"
+  usageRightsType?: string;         // e.g. "organic", "organic_paid", "whitelisting", "full_buyout"
+  creatorRequirements?: {
+    ageRange?: string;              // e.g. "18–35"
+    gender?: string;                // e.g. "Any", "Female"
+    location?: string;              // e.g. "United States"
+    followerRange?: string;         // e.g. "10K–50K"
+  };
+  niches?: string[];                // e.g. ["Beauty", "Fitness"]
+  styleNotes?: string;              // free-text inspiration style notes
+  generatedScripts?: { label: string; content: string }[];  // AI sample scripts A/B/C
   // Full AI-generated brief content
   aiData?: {
     hookIdeas?: string[];
