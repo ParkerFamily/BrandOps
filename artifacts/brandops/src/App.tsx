@@ -22,6 +22,7 @@ import Analytics from "@/pages/Analytics";
 import AIAssistant from "@/pages/AIAssistant";
 import Team from "@/pages/Team";
 import Settings from "@/pages/Settings";
+import Billing from "@/pages/Billing";
 import Subscribe from "@/pages/Subscribe";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
@@ -89,6 +90,7 @@ function AppRoutes() {
               <Route path="/ai" component={AIAssistant} />
               <Route path="/team" component={Team} />
               <Route path="/settings" component={Settings} />
+              <Route path="/billing" component={Billing} />
               <Route component={NotFound} />
             </Switch>
           </Layout>

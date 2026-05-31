@@ -10,50 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Check, User, Briefcase, Globe, CreditCard, Shield, LogOut,
-  Zap, ExternalLink, RefreshCw, CheckCircle2, AlertTriangle, Clock
+  Zap, ExternalLink, CheckCircle2, AlertTriangle, Clock, RefreshCw
 } from "lucide-react";
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { getOnboarded, clearOnboarded } from "@/lib/onboarding";
 
-const PRICING = [
-  {
-    name: "Starter",
-    monthlyPrice: 49,
-    annualMonthly: 24.5,
-    annualTotal: 294,
-    desc: "For solo founders and small brands just getting started.",
-    features: ["3 active campaigns", "50 creator slots", "AI campaign builder", "Basic analytics", "Stripe payouts", "Email support"],
-    cta: "Start Free Trial",
-    highlight: false,
-    stripeMonthly: "price_1TcYGnL8wN3kCgjXK1ffZG9F",
-    stripeAnnual: "price_1TcYGnL8wN3kCgjXLhff0cBU",
-  },
-  {
-    name: "Growth",
-    monthlyPrice: 149,
-    annualMonthly: 74.5,
-    annualTotal: 894,
-    desc: "For growing brands running multiple campaigns.",
-    features: ["Unlimited campaigns", "500 creator slots", "AI campaign builder", "AI submission review", "Advanced analytics", "AI assistant", "Priority support", "Team members (5)"],
-    cta: "Start Free Trial",
-    highlight: true,
-    stripeMonthly: "price_1TcYGoL8wN3kCgjXSrhDw5iB",
-    stripeAnnual: "price_1TcYGoL8wN3kCgjXo4rvaJq6",
-  },
-  {
-    name: "Enterprise",
-    monthlyPrice: null,
-    annualMonthly: null,
-    annualTotal: null,
-    desc: "For agencies and enterprise brands at scale.",
-    features: ["Unlimited everything", "Custom creator network", "White-label option", "Custom AI training", "Dedicated account manager", "SLA guarantee", "Custom integrations"],
-    cta: "Contact Sales",
-    highlight: false,
-    stripeMonthly: null,
-    stripeAnnual: null,
-  },
-];
 
 const BASE = import.meta.env.BASE_URL;
 const PROFILE_KEY = "brandops_profile";
@@ -416,9 +377,6 @@ export default function Settings() {
 
   const [profile, setProfile] = useState<Profile>(loadProfile);
   const [saved, setSaved] = useState(false);
-  const [annual, setAnnual] = useState(false);
-  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-
   // Handle Stripe return callbacks
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -447,30 +405,6 @@ export default function Settings() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const startSubscription = async (priceId: string, planName: string) => {
-    if (!user) return;
-    setCheckoutLoading(priceId);
-    try {
-      const res = await fetch(`${BASE}api/stripe/subscription/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: user.uid,
-          email: user.email ?? "",
-          name: user.displayName ?? user.email,
-          priceId,
-          returnUrl: window.location.origin,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to start checkout");
-      const { url } = await res.json() as { url: string };
-      window.location.href = url;
-    } catch (err) {
-      toast({ title: `${planName} checkout failed`, description: String(err), variant: "destructive" });
-      setCheckoutLoading(null);
-    }
-  };
 
   const handleSave = () => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
@@ -655,138 +589,20 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Billing & Plans — full width, brand only */}
+      {/* Link to Billing page for brands */}
       {!isCreator && (
-        <div className="space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-primary" />
-                Billing &amp; Plans
-              </h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                14-day free trial on all plans. No credit card required.
-              </p>
-            </div>
-
-            {/* Toggle */}
-            <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-full p-1 shrink-0">
-              <button
-                onClick={() => setAnnual(false)}
-                className={cn(
-                  "px-5 py-2 rounded-full text-sm font-semibold transition-all",
-                  !annual ? "bg-white text-black" : "text-white/50 hover:text-white"
-                )}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setAnnual(true)}
-                className={cn(
-                  "px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2",
-                  annual ? "bg-white text-black" : "text-white/50 hover:text-white"
-                )}
-              >
-                Yearly
-                <span className={cn(
-                  "text-xs font-bold px-2 py-0.5 rounded-full transition-all",
-                  annual ? "bg-[#C6FF00] text-black" : "bg-[#C6FF00]/20 text-[#C6FF00]"
-                )}>
-                  Save 50%
-                </span>
-              </button>
-            </div>
+        <div className="flex items-center gap-3 px-5 py-4 rounded-2xl bg-white/[0.03] border border-white/8">
+          <CreditCard className="h-4 w-4 text-primary shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Billing &amp; Plans</p>
+            <p className="text-xs text-muted-foreground">Manage your subscription and payment method.</p>
           </div>
-
-          {/* Pricing cards */}
-          <div className="grid md:grid-cols-3 gap-6">
-            {PRICING.map(({ name, monthlyPrice, annualMonthly, annualTotal, desc, features, cta, highlight, stripeMonthly, stripeAnnual }, i) => {
-              const displayPrice = annual ? annualMonthly : monthlyPrice;
-              const originalPrice = annual ? monthlyPrice : null;
-              const priceId = annual ? stripeAnnual : stripeMonthly;
-              const isLoading = priceId !== null && checkoutLoading === priceId;
-
-              return (
-                <motion.div
-                  key={name}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.06 }}
-                  className={cn(
-                    "rounded-2xl border flex flex-col relative",
-                    highlight ? "pt-8 p-6" : "p-6",
-                    highlight
-                      ? "bg-[#C6FF00]/5 border-[#C6FF00]/30 shadow-[0_0_40px_rgba(198,255,0,0.06)]"
-                      : "bg-card border-card-border"
-                  )}
-                >
-                  {highlight && (
-                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#C6FF00] text-black text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap">
-                      Most Popular
-                    </div>
-                  )}
-                  <div className="mb-5">
-                    <div className="text-white font-bold text-base mb-1">{name}</div>
-                    <p className="text-white/40 text-xs">{desc}</p>
-                  </div>
-                  <div className="mb-5">
-                    {displayPrice ? (
-                      <div>
-                        <div className="flex items-end gap-2">
-                          {originalPrice && annual && (
-                            <span className="text-white/30 line-through text-lg font-bold mb-0.5">${originalPrice}</span>
-                          )}
-                          <span className="text-3xl font-black">${displayPrice}</span>
-                          <span className="text-white/40 text-sm mb-1">/mo</span>
-                        </div>
-                        {annual && annualTotal ? (
-                          <motion.p
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="text-[#C6FF00] text-xs mt-1 font-medium"
-                          >
-                            Billed ${annualTotal}/year · 50% off
-                          </motion.p>
-                        ) : (
-                          <p className="text-white/30 text-xs mt-1">or ${annualMonthly}/mo billed yearly</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-2xl font-black">Custom</div>
-                    )}
-                  </div>
-                  <ul className="space-y-2.5 mb-6 flex-1">
-                    {features.map((f) => (
-                      <li key={f} className="flex items-center gap-2 text-sm text-white/70">
-                        <Check className={cn("h-4 w-4 shrink-0", highlight ? "text-[#C6FF00]" : "text-white/40")} />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    disabled={isLoading}
-                    onClick={() => {
-                      if (priceId) {
-                        startSubscription(priceId, name);
-                      } else {
-                        window.open("mailto:sales@brandops.io?subject=Enterprise inquiry", "_blank");
-                      }
-                    }}
-                    className={cn(
-                      "w-full py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed",
-                      highlight
-                        ? "bg-[#C6FF00] text-black hover:bg-[#d4ff33]"
-                        : "bg-white/5 text-white hover:bg-white/10 border border-white/10"
-                    )}
-                  >
-                    {isLoading ? (
-                      <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Redirecting…</>
-                    ) : cta}
-                  </button>
-                </motion.div>
-              );
-            })}
-          </div>
+          <a
+            href={`${BASE}billing`}
+            className="text-xs font-semibold text-primary border border-primary/30 bg-primary/10 hover:bg-primary/20 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            View Plans →
+          </a>
         </div>
       )}
 

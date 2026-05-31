@@ -10,16 +10,17 @@ import {
   Settings,
   Menu,
   LogOut,
-  Sparkles,
   Zap,
   Command,
   Video,
   DollarSign,
+  Receipt,
 } from "lucide-react";
 import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { FloatingAI } from "@/components/FloatingAI";
 
 import { getOnboarded } from "@/lib/onboarding";
 const getOnboarding = getOnboarded;
@@ -31,7 +32,7 @@ const BRAND_NAV = [
   { path: "/submissions", label: "Submissions", icon: Inbox },
   { path: "/payments", label: "Payments", icon: CreditCard },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
-  { path: "/ai", label: "AI Assistant", icon: Sparkles },
+  { path: "/billing", label: "Billing & Plans", icon: Receipt },
 ];
 
 const CREATOR_NAV = [
@@ -39,7 +40,6 @@ const CREATOR_NAV = [
   { path: "/campaigns", label: "Available Campaigns", icon: Megaphone },
   { path: "/submissions", label: "My Submissions", icon: Video },
   { path: "/payments", label: "My Earnings", icon: DollarSign },
-  { path: "/ai", label: "AI Assistant", icon: Sparkles },
 ];
 
 const BOTTOM_NAV_ITEMS = [
@@ -99,9 +99,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               )}
             />
             <span>{item.label}</span>
-            {item.label === "AI Assistant" && (
+            {item.label === "Billing & Plans" && (
               <span className="ml-auto text-[10px] bg-primary/10 text-primary border border-primary/20 rounded px-1.5 py-0.5 font-semibold tracking-wide">
-                AI
+                ✦
               </span>
             )}
           </Link>
@@ -225,6 +225,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="max-w-7xl mx-auto">{children}</div>
         </main>
       </div>
+
+      {/* Floating AI — draggable over the whole app */}
+      <FloatingAI />
     </div>
   );
 }
