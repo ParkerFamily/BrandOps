@@ -210,7 +210,15 @@ export default function CampaignDetail() {
       await fsDeleteCampaign(id);
       toast({ title: "Campaign deleted" });
       setLocation("/campaigns");
-    } catch { toast({ title: "Failed to delete", variant: "destructive" }); setActionPending(false); }
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code ?? "";
+      const msg = code === "permission-denied"
+        ? "Permission denied — please sign out and back in, then try again."
+        : "Failed to delete. Please try again.";
+      console.error("[delete campaign]", err);
+      toast({ title: msg, variant: "destructive" });
+      setActionPending(false);
+    }
   };
 
   const handleReview = async (submissionId: string, status: "approved" | "rejected" | "revision_requested") => {
