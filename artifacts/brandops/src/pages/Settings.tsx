@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,56 +9,86 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Check, User, Briefcase, Globe, CreditCard, Shield, LogOut,
-  Zap, ExternalLink, CheckCircle2, AlertTriangle, Clock, RefreshCw
+  Zap, ExternalLink, CheckCircle2, AlertTriangle, Clock, RefreshCw,
+  UsersRound, Bell, Sparkles, ChevronRight, Trash2, Mail,
+  BrainCircuit, Target, Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getOnboarded, clearOnboarded } from "@/lib/onboarding";
-
+import { motion, AnimatePresence } from "framer-motion";
 
 const BASE = import.meta.env.BASE_URL;
 const PROFILE_KEY = "brandops_profile";
+const NOTIF_KEY = "brandops_notifications";
+const AIPREF_KEY = "brandops_ai_prefs";
 
 interface OnboardingData {
-  accountType: string;
-  goal: string;
-  platforms: string[];
-  budget: string;
-  niches: string[];
-  teamSize: string;
-  turnaround: string;
-  completedAt?: string;
+  accountType: string; goal: string; platforms: string[];
+  budget: string; niches: string[]; teamSize: string; turnaround: string;
 }
-
-interface Profile {
-  brandName: string;
-  website: string;
-}
-
-interface UserStripeStatus {
-  stripeConnectAccountId: string | null;
-  stripeConnectOnboarded: boolean;
-  stripeCustomerId: string | null;
-}
-
-interface ConnectStatus {
-  connected: boolean;
-  accountId?: string;
-  payoutsEnabled?: boolean;
-  chargesEnabled?: boolean;
-  detailsSubmitted?: boolean;
-  requiresAction?: boolean;
-}
+interface Profile { brandName: string; website: string }
+interface UserStripeStatus { stripeConnectAccountId: string | null; stripeConnectOnboarded: boolean; stripeCustomerId: string | null }
+interface ConnectStatus { connected: boolean; accountId?: string; payoutsEnabled?: boolean; chargesEnabled?: boolean; detailsSubmitted?: boolean; requiresAction?: boolean }
+interface Notifications { submissions: boolean; campaigns: boolean; payments: boolean; digest: boolean }
+interface AiPrefs { defaultNiches: string; defaultGoal: string; contentStyle: string }
 
 function loadProfile(): Profile {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    if (raw) return JSON.parse(raw) as Profile;
-  } catch {}
+  try { const r = localStorage.getItem(PROFILE_KEY); if (r) return JSON.parse(r); } catch {}
   return { brandName: "", website: "" };
 }
+function loadNotifs(): Notifications {
+  try { const r = localStorage.getItem(NOTIF_KEY); if (r) return JSON.parse(r); } catch {}
+  return { submissions: true, campaigns: true, payments: true, digest: false };
+}
+function loadAiPrefs(): AiPrefs {
+  try { const r = localStorage.getItem(AIPREF_KEY); if (r) return JSON.parse(r); } catch {}
+  return { defaultNiches: "", defaultGoal: "", contentStyle: "" };
+}
 
-/* ─── Creator Payout Setup Card ─────────────────────────────────────────── */
+/* ─── Toggle ────────────────────────────────────────────────────────────── */
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none",
+        checked ? "bg-[#C6FF00]" : "bg-white/15"
+      )}
+    >
+      <span className={cn(
+        "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transform transition-transform",
+        checked ? "translate-x-4" : "translate-x-0"
+      )} />
+    </button>
+  );
+}
 
+/* ─── Row ───────────────────────────────────────────────────────────────── */
+function SettingRow({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-6 py-4 border-b border-white/5 last:border-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-white">{label}</p>
+        {desc && <p className="text-xs text-white/40 mt-0.5">{desc}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+/* ─── Section heading ───────────────────────────────────────────────────── */
+function SectionHead({ title, desc }: { title: string; desc?: string }) {
+  return (
+    <div className="mb-6">
+      <h2 className="text-base font-bold text-white">{title}</h2>
+      {desc && <p className="text-xs text-white/40 mt-0.5">{desc}</p>}
+    </div>
+  );
+}
+
+/* ─── Creator Payout Setup ──────────────────────────────────────────────── */
 function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; name?: string | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -89,18 +118,10 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid, email, name, returnUrl: window.location.origin }),
       });
-      const data = await res.json() as { url?: string; error?: string; activationUrl?: string };
-      if (res.status === 402 && data.error === "connect_not_enabled") {
-        setConnectNotEnabled(true);
-        setStarting(false);
-        return;
-      }
-      if (res.status === 402 && data.error === "platform_profile_incomplete") {
-        setPlatformProfileIncomplete(true);
-        setStarting(false);
-        return;
-      }
-      if (!res.ok || !data.url) throw new Error(data.error ?? "Failed to start onboarding");
+      const data = await res.json() as { url?: string; error?: string };
+      if (res.status === 402 && data.error === "connect_not_enabled") { setConnectNotEnabled(true); setStarting(false); return; }
+      if (res.status === 402 && data.error === "platform_profile_incomplete") { setPlatformProfileIncomplete(true); setStarting(false); return; }
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Failed");
       window.location.href = data.url;
     } catch (err) {
       toast({ title: "Setup failed", description: String(err), variant: "destructive" });
@@ -108,164 +129,80 @@ function CreatorPayoutSetup({ uid, email, name }: { uid: string; email: string; 
     }
   };
 
-  const refreshStatus = async () => {
-    setRefreshing(true);
-    await queryClient.invalidateQueries({ queryKey: ["creator-connect-status", uid] });
-    setRefreshing(false);
-  };
-
   const isReady = connectStatus?.payoutsEnabled && connectStatus?.detailsSubmitted;
   const inProgress = connectStatus?.connected && !isReady;
 
   return (
-    <Card className="bg-card border-card-border">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Zap className="h-4 w-4 text-primary" />
-            Payout Setup
-          </CardTitle>
-          {isLoading ? null : isReady ? (
-            <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-              <CheckCircle2 className="h-3 w-3 mr-1" /> Active
-            </Badge>
-          ) : inProgress ? (
-            <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">
-              <Clock className="h-3 w-3 mr-1" /> Incomplete
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground text-xs">
-              <AlertTriangle className="h-3 w-3 mr-1" /> Not set up
-            </Badge>
-          )}
+    <div className="space-y-4">
+      {/* Status row */}
+      <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/8">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+            isReady ? "bg-green-500/10 border border-green-500/20" : "bg-yellow-500/10 border border-yellow-500/20"
+          )}>
+            <Zap className={cn("h-4 w-4", isReady ? "text-green-400" : "text-yellow-400")} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">
+              {isLoading ? "Checking…" : isReady ? "Payouts enabled" : inProgress ? "Setup incomplete" : "Not connected"}
+            </p>
+            <p className="text-xs text-white/40">
+              {isReady ? "Your bank account is connected and active." : "Connect via Stripe to receive payments."}
+            </p>
+          </div>
         </div>
-        <CardDescription>
-          Connect your bank account via Stripe so you get paid for approved videos.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Platform profile incomplete — actionable step */}
-        {platformProfileIncomplete && (
-          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/30 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-yellow-400">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              Stripe Connect platform profile is incomplete
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Stripe requires you to fill out a short platform profile before creators can onboard.
-              This is a one-time step — takes under a minute.
-            </p>
-            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside leading-relaxed">
-              <li>Click the link below to open your Stripe Connect settings</li>
-              <li>Fill in the platform profile form and save</li>
-              <li>Come back and click <span className="text-foreground font-medium">"Set Up Payouts"</span> again</li>
-            </ol>
-            <a
-              href="https://dashboard.stripe.com/settings/connect/platform-profile"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-primary font-medium underline underline-offset-2"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Open Stripe → Connect Platform Profile
-            </a>
-          </div>
+        {!isLoading && (isReady
+          ? <Badge className="bg-green-500/15 text-green-400 border-green-500/25 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Active</Badge>
+          : inProgress
+          ? <Badge className="bg-yellow-500/15 text-yellow-400 border-yellow-500/25 text-xs"><Clock className="h-3 w-3 mr-1" />Incomplete</Badge>
+          : <Badge variant="outline" className="text-white/40 text-xs border-white/15"><AlertTriangle className="h-3 w-3 mr-1" />Not set up</Badge>
         )}
+      </div>
 
-        {/* Stripe Connect not enabled — actionable step */}
-        {connectNotEnabled && (
-          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/30 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-yellow-400">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              Stripe Connect needs to be enabled on your account
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Stripe Connect is the feature that lets platforms pay out to individual creators.
-              It's a one-time activation — takes about 2 minutes in your Stripe dashboard.
-            </p>
-            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside leading-relaxed">
-              <li>Click the button below to open your Stripe dashboard</li>
-              <li>Click <span className="text-foreground font-medium">"Get started with Connect"</span></li>
-              <li>Complete the short activation form</li>
-              <li>Come back here and click <span className="text-foreground font-medium">"Set Up Payouts"</span> again</li>
-            </ol>
-            <a
-              href="https://dashboard.stripe.com/connect/accounts/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-primary font-medium underline underline-offset-2"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Open Stripe Dashboard → Connect
-            </a>
-          </div>
-        )}
-
-        {!connectNotEnabled && (
-          isReady ? (
-            <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-green-400">
-                <CheckCircle2 className="h-4 w-4" /> Payouts enabled
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Your bank account is connected and payouts are live. Brands send earnings directly to you.
-              </p>
-            </div>
-          ) : inProgress ? (
-            <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
-                <Clock className="h-4 w-4" /> Onboarding incomplete
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Your Stripe account was created but still needs more info. Click below to finish.
-              </p>
-            </div>
-          ) : (
-            <div className="p-4 rounded-lg bg-muted/40 border border-border space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Connect a bank account or debit card to receive payments. Takes ~2 minutes via
-                Stripe's secure onboarding.
-              </p>
-            </div>
-          )
-        )}
-
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={startOnboarding}
-            disabled={starting}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shadow-[0_0_20px_rgba(198,255,0,0.1)]"
+      {/* Warnings */}
+      {(connectNotEnabled || platformProfileIncomplete) && (
+        <div className="p-4 rounded-xl bg-yellow-500/5 border border-yellow-500/25 space-y-2">
+          <p className="text-sm font-semibold text-yellow-400 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            {platformProfileIncomplete ? "Platform profile incomplete" : "Stripe Connect not enabled"}
+          </p>
+          <a
+            href={platformProfileIncomplete
+              ? "https://dashboard.stripe.com/settings/connect/platform-profile"
+              : "https://dashboard.stripe.com/connect/accounts/overview"}
+            target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-[#C6FF00] font-medium underline underline-offset-2"
           >
-            {starting ? (
-              <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Redirecting…</>
-            ) : isReady ? (
-              <><ExternalLink className="h-3.5 w-3.5" /> Manage Payout Account</>
-            ) : inProgress ? (
-              <><ExternalLink className="h-3.5 w-3.5" /> Finish Setup</>
-            ) : (
-              <><Zap className="h-3.5 w-3.5" /> Set Up Payouts</>
-            )}
-          </Button>
-          {connectStatus?.connected && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={refreshStatus}
-              disabled={refreshing}
-              className="text-muted-foreground gap-1.5 h-9"
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-              Refresh status
-            </Button>
-          )}
+            <ExternalLink className="h-3 w-3" />
+            Open Stripe Dashboard →
+          </a>
         </div>
-      </CardContent>
-    </Card>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button onClick={startOnboarding} disabled={starting} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
+          {starting ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Redirecting…</>
+            : isReady ? <><ExternalLink className="h-3.5 w-3.5" />Manage Payout Account</>
+            : inProgress ? <><ExternalLink className="h-3.5 w-3.5" />Finish Setup</>
+            : <><Zap className="h-3.5 w-3.5" />Set Up Payouts</>}
+        </Button>
+        {connectStatus?.connected && (
+          <Button variant="ghost" size="sm" onClick={async () => {
+            setRefreshing(true);
+            await queryClient.invalidateQueries({ queryKey: ["creator-connect-status", uid] });
+            setRefreshing(false);
+          }} disabled={refreshing} className="text-white/40 gap-1.5 h-9">
+            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+            Refresh
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
-/* ─── Brand Payment Method Setup Card ───────────────────────────────────── */
-
+/* ─── Brand Payment Setup ───────────────────────────────────────────────── */
 function BrandPaymentSetup({ uid, email, name }: { uid: string; email: string; name?: string | null }) {
   const { toast } = useToast();
   const [starting, setStarting] = useState(false);
@@ -290,7 +227,7 @@ function BrandPaymentSetup({ uid, email, name }: { uid: string; email: string; n
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid, email, name, returnUrl: window.location.origin }),
       });
-      if (!res.ok) throw new Error("Failed to start payment setup");
+      if (!res.ok) throw new Error("Failed");
       const { url } = await res.json() as { url: string };
       window.location.href = url;
     } catch (err) {
@@ -300,72 +237,79 @@ function BrandPaymentSetup({ uid, email, name }: { uid: string; email: string; n
   };
 
   return (
-    <Card className="bg-card border-card-border">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CreditCard className="h-4 w-4 text-primary" />
-            Payment Method
-          </CardTitle>
-          {hasPaymentMethod ? (
-            <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-              <CheckCircle2 className="h-3 w-3 mr-1" /> On file
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground text-xs">
-              <AlertTriangle className="h-3 w-3 mr-1" /> Required
-            </Badge>
-          )}
+    <div className="space-y-4">
+      {/* Compact payment row */}
+      <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/8">
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+            hasPaymentMethod ? "bg-green-500/10 border border-green-500/20" : "bg-white/5 border border-white/10"
+          )}>
+            <CreditCard className={cn("h-4 w-4", hasPaymentMethod ? "text-green-400" : "text-white/40")} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">
+              {hasPaymentMethod ? "Payment method on file" : "No payment method"}
+            </p>
+            <p className="text-xs text-white/40">
+              {hasPaymentMethod ? "Ready to fund campaigns and pay creators." : "Required to launch campaigns."}
+            </p>
+          </div>
         </div>
-        <CardDescription>
-          Add a card or bank account to fund campaigns and pay creators.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {hasPaymentMethod ? (
-          <div className="p-4 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-green-400">
-              <CheckCircle2 className="h-4 w-4" /> Payment method on file
-            </div>
-            <p className="text-xs text-muted-foreground">
-              You're ready to pay creators. Manage your payment methods or invoices via Stripe.
-            </p>
-          </div>
-        ) : (
-          <div className="p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
-              <AlertTriangle className="h-4 w-4" /> No payment method yet
-            </div>
-            <p className="text-xs text-muted-foreground">
-              You need to add a card before you can issue payouts to creators through the platform.
-            </p>
-          </div>
-        )}
-
-        <Button
+        <button
           onClick={startSetup}
           disabled={starting}
-          className={cn(
-            "gap-2",
-            hasPaymentMethod
-              ? "bg-muted text-foreground border border-border hover:bg-muted/80"
-              : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(198,255,0,0.1)]"
-          )}
+          className="text-xs font-semibold text-[#C6FF00] hover:text-[#d4ff33] transition-colors flex items-center gap-1 disabled:opacity-50"
         >
-          {starting ? (
-            <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Redirecting…</>
-          ) : hasPaymentMethod ? (
-            <><ExternalLink className="h-3.5 w-3.5" /> Manage Payment Methods</>
-          ) : (
-            <><CreditCard className="h-3.5 w-3.5" /> Add Payment Method</>
-          )}
-        </Button>
-      </CardContent>
-    </Card>
+          {starting ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
+          {hasPaymentMethod ? "Manage →" : "Add →"}
+        </button>
+      </div>
+
+      {/* Link to full billing */}
+      <a
+        href={`${BASE}billing`}
+        className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/8 hover:bg-white/[0.05] transition-colors group"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+            <Receipt className="h-4 w-4 text-white/40" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">Subscription & Plans</p>
+            <p className="text-xs text-white/40">Currently on Free plan · 1 campaign</p>
+          </div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-white/25 group-hover:text-white/50 transition-colors" />
+      </a>
+    </div>
   );
 }
 
 /* ─── Main Settings Page ─────────────────────────────────────────────────── */
+
+type Tab = "profile" | "workspace" | "team" | "billing" | "notifications" | "ai";
+
+const BRAND_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: "profile", label: "Profile", icon: User },
+  { id: "workspace", label: "Workspace", icon: Briefcase },
+  { id: "team", label: "Team", icon: UsersRound },
+  { id: "billing", label: "Billing", icon: CreditCard },
+  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "ai", label: "AI Preferences", icon: BrainCircuit },
+];
+
+const CREATOR_TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: "profile", label: "Profile", icon: User },
+  { id: "workspace", label: "Creator Profile", icon: Briefcase },
+  { id: "billing", label: "Payouts", icon: Zap },
+  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "ai", label: "AI Preferences", icon: BrainCircuit },
+];
+
+const MOCK_TEAM = [
+  { name: "You", email: "", role: "Owner", self: true },
+];
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -375,19 +319,28 @@ export default function Settings() {
   const onboarding = getOnboarded() as OnboardingData | null;
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
+  const [tab, setTab] = useState<Tab>("profile");
   const [profile, setProfile] = useState<Profile>(loadProfile);
-  const [saved, setSaved] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [notifs, setNotifs] = useState<Notifications>(loadNotifs);
+  const [aiPrefs, setAiPrefs] = useState<AiPrefs>(loadAiPrefs);
+  const [aiSaved, setAiSaved] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const TABS = isCreator ? CREATOR_TABS : BRAND_TABS;
+
   // Handle Stripe return callbacks
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stripeConnect = params.get("stripe_connect");
     const stripeSetup = params.get("stripe_setup");
     const stripeSub = params.get("stripe_sub");
-
     if (stripeConnect === "complete") {
-      toast({ title: "Stripe connected!", description: "Your payout account is being verified. Refresh to see your status." });
+      toast({ title: "Stripe connected!", description: "Your payout account is being verified." });
       queryClient.invalidateQueries({ queryKey: ["creator-connect-status"] });
       navigate("/settings", { replace: true });
+      setTab("billing");
     } else if (stripeConnect === "refresh") {
       toast({ title: "Session expired", description: "Please start the Stripe setup again." });
       navigate("/settings", { replace: true });
@@ -395,217 +348,435 @@ export default function Settings() {
       toast({ title: "Payment method saved!", description: "You can now fund campaigns and pay creators." });
       queryClient.invalidateQueries({ queryKey: ["user-stripe-status"] });
       navigate("/settings", { replace: true });
+      setTab("billing");
     } else if (stripeSetup === "cancelled") {
       navigate("/settings", { replace: true });
     } else if (stripeSub === "complete") {
       toast({ title: "Subscription activated!", description: "Your 14-day free trial has started." });
       navigate("/settings", { replace: true });
+      setTab("billing");
     } else if (stripeSub === "cancelled") {
       navigate("/settings", { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSave = () => {
+  const saveProfile = () => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-    setSaved(true);
-    toast({ title: "Profile saved", description: "Your workspace profile has been updated." });
-    setTimeout(() => setSaved(false), 2000);
+    setProfileSaved(true);
+    toast({ title: "Profile saved" });
+    setTimeout(() => setProfileSaved(false), 2000);
+  };
+
+  const saveNotifs = (next: Notifications) => {
+    setNotifs(next);
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+  };
+
+  const saveAiPrefs = () => {
+    localStorage.setItem(AIPREF_KEY, JSON.stringify(aiPrefs));
+    setAiSaved(true);
+    toast({ title: "AI preferences saved" });
+    setTimeout(() => setAiSaved(false), 2000);
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 max-w-4xl">
+      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your workspace and account.</p>
+        <p className="text-white/40 text-sm mt-1">Manage your account, workspace, and preferences.</p>
       </div>
 
-      {/* Top settings — 2-column desktop grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="flex gap-8">
+        {/* Left nav */}
+        <nav className="shrink-0 w-40 space-y-0.5">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={cn(
+                "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-left transition-all",
+                tab === id
+                  ? "bg-white/8 text-white"
+                  : "text-white/40 hover:text-white/70 hover:bg-white/4"
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              {label}
+            </button>
+          ))}
+        </nav>
 
-        {/* Left column */}
-        <div className="space-y-6">
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+              className="space-y-6"
+            >
 
-          {/* Account Info */}
-          <Card className="bg-card border-card-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-4 w-4 text-primary" />
-                Account
-              </CardTitle>
-              <CardDescription>Your signed-in account details.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border">
-                {user?.photoURL ? (
-                  <img src={user.photoURL} alt="avatar" className="h-10 w-10 rounded-full object-cover ring-2 ring-primary/20" />
-                ) : (
-                  <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <span className="text-sm font-bold text-primary">
-                      {(user?.displayName ?? user?.email ?? "U")[0].toUpperCase()}
-                    </span>
+              {/* ── PROFILE ───────────────────────────────────────────── */}
+              {tab === "profile" && (
+                <div className="space-y-6">
+                  {/* Avatar + identity */}
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-4">
+                    <SectionHead title="Account" desc="Your identity on BrandOps." />
+                    <div className="flex items-center gap-4">
+                      {user?.photoURL ? (
+                        <img src={user.photoURL} alt="avatar" className="h-14 w-14 rounded-2xl object-cover ring-2 ring-[#C6FF00]/20" />
+                      ) : (
+                        <div className="h-14 w-14 rounded-2xl bg-[#C6FF00]/10 border border-[#C6FF00]/20 flex items-center justify-center shrink-0">
+                          <span className="text-lg font-black text-[#C6FF00]">
+                            {(user?.displayName ?? user?.email ?? "U")[0].toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-bold text-white">{user?.displayName ?? "—"}</p>
+                        <p className="text-sm text-white/40">{user?.email}</p>
+                        <span className="inline-block mt-1.5 text-xs bg-[#C6FF00]/10 text-[#C6FF00] border border-[#C6FF00]/20 rounded px-2 py-0.5 font-medium">
+                          {onboarding?.accountType ?? "Brand"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 divide-y divide-white/5">
+                      <SettingRow label="Email" desc={user?.email ?? "—"}>
+                        <span className="text-xs text-white/30 bg-white/5 border border-white/8 rounded px-2 py-1">Managed by Google</span>
+                      </SettingRow>
+                      <SettingRow label="Password" desc="Reset via email link">
+                        <button
+                          onClick={async () => {
+                            toast({ title: "Reset email sent", description: "Check your inbox for a password reset link." });
+                          }}
+                          className="text-xs font-semibold text-[#C6FF00] hover:text-[#d4ff33] transition-colors"
+                        >
+                          Send reset →
+                        </button>
+                      </SettingRow>
+                      <SettingRow label="Two-factor authentication" desc="Add an extra layer of security">
+                        <span className="text-xs text-white/25 bg-white/5 border border-white/8 rounded px-2 py-1">Coming soon</span>
+                      </SettingRow>
+                    </div>
                   </div>
-                )}
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{user?.displayName ?? "—"}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+
+                  {/* Sign out */}
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-3">
+                    <SectionHead title="Session" />
+                    <button
+                      onClick={logout}
+                      className="flex items-center gap-2 text-sm font-semibold text-white/60 hover:text-white transition-colors"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sign out of BrandOps
+                    </button>
+                  </div>
+
+                  {/* Danger zone */}
+                  <div className="p-5 rounded-2xl bg-red-500/[0.04] border border-red-500/20 space-y-3">
+                    <SectionHead title="Danger Zone" desc="Irreversible actions — proceed with care." />
+                    <button
+                      onClick={() => setDeletingAccount(true)}
+                      className="flex items-center gap-2 text-sm font-semibold text-red-400 hover:text-red-300 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete account
+                    </button>
+                    {deletingAccount && (
+                      <div className="pt-2 space-y-3">
+                        <p className="text-xs text-white/50">
+                          This permanently deletes your account, all campaigns, and removes you from the platform.
+                          This cannot be undone.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              toast({ title: "Contact support", description: "Email legal@brandops.io to request account deletion." });
+                              setDeletingAccount(false);
+                            }}
+                            className="text-xs font-semibold bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 py-1.5 transition-colors"
+                          >
+                            Yes, delete my account
+                          </button>
+                          <button onClick={() => setDeletingAccount(false)} className="text-xs text-white/40 hover:text-white transition-colors px-2">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {onboarding?.accountType && (
-                  <span className="ml-auto shrink-0 text-xs bg-primary/10 text-primary border border-primary/20 rounded px-2 py-1 font-medium">
-                    {onboarding.accountType}
-                  </span>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={logout}
-                className="text-muted-foreground border-border hover:text-foreground gap-2"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                Sign out
-              </Button>
-            </CardContent>
-          </Card>
+              )}
 
-          {/* Workspace Profile */}
-          <Card className="bg-card border-card-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="h-4 w-4 text-primary" />
-                {isCreator ? "Creator Profile" : "Workspace Profile"}
-              </CardTitle>
-              <CardDescription>
-                {isCreator ? "Update your creator info." : "Update your brand information."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="brand-name">{isCreator ? "Display Name" : "Brand Name"}</Label>
-                <Input
-                  id="brand-name"
-                  placeholder={isCreator ? "Your creator name" : "Your brand name"}
-                  value={profile.brandName}
-                  onChange={(e) => setProfile((p) => ({ ...p, brandName: e.target.value }))}
-                  className="bg-background border-input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="website" className="flex items-center gap-1.5">
-                  <Globe className="h-3 w-3" />
-                  {isCreator ? "Portfolio / Link" : "Website"}
-                </Label>
-                <Input
-                  id="website"
-                  placeholder={isCreator ? "https://yourportfolio.com" : "https://yourbrand.com"}
-                  value={profile.website}
-                  onChange={(e) => setProfile((p) => ({ ...p, website: e.target.value }))}
-                  className="bg-background border-input"
-                />
-              </div>
-              <Button
-                onClick={handleSave}
-                className={cn(
-                  "gap-2 transition-all",
-                  saved ? "bg-green-600 hover:bg-green-600" : "bg-primary text-primary-foreground hover:bg-primary/90"
-                )}
-              >
-                {saved ? <><Check className="h-3.5 w-3.5" /> Saved</> : "Save Changes"}
-              </Button>
-            </CardContent>
-          </Card>
-
-        </div>
-
-        {/* Right column */}
-        <div className="space-y-6">
-
-          {/* Role-specific Stripe Setup */}
-          {user && (
-            isCreator
-              ? <CreatorPayoutSetup uid={user.uid} email={user.email ?? ""} name={user.displayName} />
-              : <BrandPaymentSetup uid={user.uid} email={user.email ?? ""} name={user.displayName} />
-          )}
-
-          {/* Workspace Configuration */}
-          {onboarding && (
-            <Card className="bg-card border-card-border">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-primary" />
-                  Workspace Configuration
-                </CardTitle>
-                <CardDescription>
-                  Your onboarding selections — these personalize your AI and workspace.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {[
-                    { label: "Account Type", value: onboarding.accountType },
-                    { label: isCreator ? "Content Style" : "Primary Goal", value: onboarding.goal },
-                    { label: isCreator ? "Target Rate" : "Budget", value: onboarding.budget },
-                    { label: isCreator ? "Turnaround" : "Team Size", value: isCreator ? onboarding.turnaround : onboarding.teamSize },
-                  ].filter((r) => r.value).map(({ label, value }) => (
-                    <div key={label} className="p-3 rounded-lg bg-background border border-border">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{label}</p>
-                      <p className="font-medium text-sm">{value}</p>
+              {/* ── WORKSPACE ─────────────────────────────────────────── */}
+              {tab === "workspace" && (
+                <div className="space-y-6">
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-5">
+                    <SectionHead
+                      title={isCreator ? "Creator Profile" : "Workspace"}
+                      desc={isCreator ? "Your public creator identity." : "Your brand's presence on BrandOps."}
+                    />
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="brand-name" className="text-xs text-white/50 uppercase tracking-widest">
+                          {isCreator ? "Display Name" : "Brand Name"}
+                        </Label>
+                        <Input
+                          id="brand-name"
+                          placeholder={isCreator ? "Your creator name" : "Your brand name"}
+                          value={profile.brandName}
+                          onChange={(e) => setProfile(p => ({ ...p, brandName: e.target.value }))}
+                          className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="website" className="text-xs text-white/50 uppercase tracking-widest flex items-center gap-1.5">
+                          <Globe className="h-3 w-3" />
+                          {isCreator ? "Portfolio / Link" : "Website"}
+                        </Label>
+                        <Input
+                          id="website"
+                          placeholder={isCreator ? "https://yourportfolio.com" : "https://yourbrand.com"}
+                          value={profile.website}
+                          onChange={(e) => setProfile(p => ({ ...p, website: e.target.value }))}
+                          className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
+                        />
+                      </div>
+                      {!isCreator && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-white/50 uppercase tracking-widest">Logo</Label>
+                          <div className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02]">
+                            <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                              <Briefcase className="h-4 w-4 text-white/25" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-white/50">Upload a logo (PNG, SVG, max 2 MB)</p>
+                              <button className="text-xs text-[#C6FF00] mt-0.5 font-medium">Choose file →</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  {onboarding.niches?.length > 0 && (
-                    <div className="col-span-2 p-3 rounded-lg bg-background border border-border">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Niches</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {onboarding.niches.map((n) => (
-                          <span key={n} className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-full px-2 py-0.5">{n}</span>
-                        ))}
+                    <Button
+                      onClick={saveProfile}
+                      className={cn(
+                        "gap-2 transition-all",
+                        profileSaved ? "bg-green-600 hover:bg-green-600" : "bg-primary text-primary-foreground hover:bg-primary/90"
+                      )}
+                    >
+                      {profileSaved ? <><Check className="h-3.5 w-3.5" />Saved</> : "Save Changes"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── TEAM ──────────────────────────────────────────────── */}
+              {tab === "team" && (
+                <div className="space-y-6">
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-5">
+                    <SectionHead title="Team Members" desc="People who have access to your BrandOps workspace." />
+
+                    {/* Members list */}
+                    <div className="space-y-2">
+                      {[
+                        { name: user?.displayName ?? "You", email: user?.email ?? "", role: "Owner", self: true },
+                      ].map(({ name, email, role, self }) => (
+                        <div key={email} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/8">
+                          <div className="w-8 h-8 rounded-full bg-[#C6FF00]/10 border border-[#C6FF00]/20 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-[#C6FF00]">{(name ?? "U")[0].toUpperCase()}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{name} {self && <span className="text-white/30 text-xs">(you)</span>}</p>
+                            <p className="text-xs text-white/35 truncate">{email}</p>
+                          </div>
+                          <span className="text-xs text-[#C6FF00] bg-[#C6FF00]/10 border border-[#C6FF00]/20 rounded px-2 py-0.5 font-medium shrink-0">{role}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Invite */}
+                    <div className="pt-2 space-y-3 border-t border-white/6">
+                      <p className="text-sm font-semibold text-white">Invite member</p>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="teammate@company.com"
+                          value={inviteEmail}
+                          onChange={e => setInviteEmail(e.target.value)}
+                          className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
+                        />
+                        <Button
+                          onClick={() => {
+                            if (!inviteEmail.trim()) return;
+                            toast({ title: "Invite sent", description: `An invite was sent to ${inviteEmail}.` });
+                            setInviteEmail("");
+                          }}
+                          className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 shrink-0"
+                        >
+                          <Mail className="h-3.5 w-3.5" />
+                          Invite
+                        </Button>
                       </div>
                     </div>
-                  )}
-                  {onboarding.platforms?.length > 0 && !isCreator && (
-                    <div className="col-span-2 p-3 rounded-lg bg-background border border-border">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Video Channels</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {onboarding.platforms.map((p) => (
-                          <span key={p} className="text-xs bg-white/5 text-foreground border border-border rounded-full px-2 py-0.5">{p}</span>
+                  </div>
+
+                  {/* Role guide */}
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-4">
+                    <SectionHead title="Roles" desc="What each role can do." />
+                    <div className="space-y-3">
+                      {[
+                        { role: "Owner", desc: "Full access — billing, settings, team management, all campaigns." },
+                        { role: "Admin", desc: "Create and manage campaigns, approve submissions, manage creators." },
+                        { role: "Manager", desc: "Manage assigned campaigns, review submissions. No billing access." },
+                        { role: "Viewer", desc: "Read-only access to campaigns and analytics." },
+                      ].map(({ role, desc }) => (
+                        <div key={role} className="flex items-start gap-3">
+                          <span className="text-xs text-white/60 bg-white/5 border border-white/10 rounded px-2 py-0.5 font-semibold shrink-0 mt-0.5 w-16 text-center">{role}</span>
+                          <p className="text-xs text-white/40">{desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── BILLING ───────────────────────────────────────────── */}
+              {tab === "billing" && (
+                <div className="space-y-6">
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-5">
+                    <SectionHead
+                      title={isCreator ? "Payout Setup" : "Billing"}
+                      desc={isCreator ? "Connect your bank account to receive creator payments." : "Manage your payment method and subscription."}
+                    />
+                    {user && (
+                      isCreator
+                        ? <CreatorPayoutSetup uid={user.uid} email={user.email ?? ""} name={user.displayName} />
+                        : <BrandPaymentSetup uid={user.uid} email={user.email ?? ""} name={user.displayName} />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── NOTIFICATIONS ─────────────────────────────────────── */}
+              {tab === "notifications" && (
+                <div className="space-y-6">
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8">
+                    <SectionHead title="Email Notifications" desc="Choose what we send to your inbox." />
+                    <div className="divide-y divide-white/5">
+                      <SettingRow label="Creator submissions" desc="When a creator submits a video to your campaign">
+                        <Toggle checked={notifs.submissions} onChange={v => saveNotifs({ ...notifs, submissions: v })} />
+                      </SettingRow>
+                      <SettingRow label="Campaign updates" desc="Status changes, brief edits, and milestones">
+                        <Toggle checked={notifs.campaigns} onChange={v => saveNotifs({ ...notifs, campaigns: v })} />
+                      </SettingRow>
+                      <SettingRow label="Payment confirmations" desc="Payout receipts and subscription renewals">
+                        <Toggle checked={notifs.payments} onChange={v => saveNotifs({ ...notifs, payments: v })} />
+                      </SettingRow>
+                      <SettingRow label="Weekly digest" desc="A summary of your workspace activity every Monday">
+                        <Toggle checked={notifs.digest} onChange={v => saveNotifs({ ...notifs, digest: v })} />
+                      </SettingRow>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── AI PREFERENCES ────────────────────────────────────── */}
+              {tab === "ai" && (
+                <div className="space-y-6">
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-5">
+                    <SectionHead title="AI Preferences" desc="Tune how the AI Assistant and campaign builder work for you." />
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-white/50 uppercase tracking-widest flex items-center gap-1.5">
+                          <Target className="h-3 w-3" />
+                          Default creator niches
+                        </Label>
+                        <Input
+                          placeholder="e.g. Fitness, Tech, Lifestyle"
+                          value={aiPrefs.defaultNiches}
+                          onChange={e => setAiPrefs(p => ({ ...p, defaultNiches: e.target.value }))}
+                          className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
+                        />
+                        <p className="text-xs text-white/30">These are pre-filled when you create campaigns.</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-white/50 uppercase tracking-widest flex items-center gap-1.5">
+                          <Sparkles className="h-3 w-3" />
+                          Default campaign goal
+                        </Label>
+                        <Input
+                          placeholder="e.g. Drive product page conversions"
+                          value={aiPrefs.defaultGoal}
+                          onChange={e => setAiPrefs(p => ({ ...p, defaultGoal: e.target.value }))}
+                          className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-white/50 uppercase tracking-widest flex items-center gap-1.5">
+                          <BrainCircuit className="h-3 w-3" />
+                          Content style preferences
+                        </Label>
+                        <Input
+                          placeholder="e.g. Authentic, unboxing-style, no heavy editing"
+                          value={aiPrefs.contentStyle}
+                          onChange={e => setAiPrefs(p => ({ ...p, contentStyle: e.target.value }))}
+                          className="bg-white/5 border-white/10 focus:border-[#C6FF00]/40"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      onClick={saveAiPrefs}
+                      className={cn("gap-2 transition-all", aiSaved ? "bg-green-600 hover:bg-green-600" : "bg-primary text-primary-foreground hover:bg-primary/90")}
+                    >
+                      {aiSaved ? <><Check className="h-3.5 w-3.5" />Saved</> : "Save Preferences"}
+                    </Button>
+                  </div>
+
+                  {/* Onboarding data — collapsed */}
+                  {onboarding && (
+                    <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/8 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <SectionHead title="Onboarding Snapshot" desc="Your initial setup — used to personalize AI context." />
+                        <button
+                          onClick={() => { clearOnboarded(); window.location.href = "/onboarding"; }}
+                          className="text-xs text-white/30 hover:text-white/60 transition-colors shrink-0"
+                        >
+                          Re-run →
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: "Account Type", value: onboarding.accountType },
+                          { label: isCreator ? "Content Style" : "Goal", value: onboarding.goal },
+                          { label: isCreator ? "Target Rate" : "Budget", value: onboarding.budget },
+                          { label: isCreator ? "Turnaround" : "Team Size", value: isCreator ? onboarding.turnaround : onboarding.teamSize },
+                        ].filter(r => r.value).map(({ label, value }) => (
+                          <div key={label} className="p-3 rounded-lg bg-white/[0.03] border border-white/6">
+                            <p className="text-[10px] text-white/30 uppercase tracking-widest mb-0.5">{label}</p>
+                            <p className="text-sm font-medium text-white">{value}</p>
+                          </div>
                         ))}
                       </div>
+                      {onboarding.niches?.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {onboarding.niches.map(n => (
+                            <span key={n} className="text-xs bg-[#C6FF00]/10 text-[#C6FF00] border border-[#C6FF00]/20 rounded-full px-2 py-0.5">{n}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  To change these,{" "}
-                  <button
-                    onClick={() => { clearOnboarded(); window.location.href = "/onboarding"; }}
-                    className="text-primary underline underline-offset-2"
-                  >
-                    re-run onboarding
-                  </button>.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+              )}
 
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
-
-      {/* Link to Billing page for brands */}
-      {!isCreator && (
-        <div className="flex items-center gap-3 px-5 py-4 rounded-2xl bg-white/[0.03] border border-white/8">
-          <CreditCard className="h-4 w-4 text-primary shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold">Billing &amp; Plans</p>
-            <p className="text-xs text-muted-foreground">Manage your subscription and payment method.</p>
-          </div>
-          <a
-            href={`${BASE}billing`}
-            className="text-xs font-semibold text-primary border border-primary/30 bg-primary/10 hover:bg-primary/20 rounded-lg px-3 py-1.5 transition-colors"
-          >
-            View Plans →
-          </a>
-        </div>
-      )}
-
     </div>
   );
 }

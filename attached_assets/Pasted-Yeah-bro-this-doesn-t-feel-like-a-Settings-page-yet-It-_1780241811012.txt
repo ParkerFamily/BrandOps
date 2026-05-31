@@ -1,0 +1,185 @@
+Yeah bro, this doesn't feel like a Settings page yet.
+
+It feels like a dashboard page that got renamed "Settings."
+
+A few things jump out immediately:
+
+1. Way too much empty space
+
+The left column ends halfway down the page.
+
+The right column ends halfway down the page.
+
+Then there's a giant empty black hole before Billing & Plans.
+
+Everything should be tighter.
+
+2. Workspace Configuration shouldn't even be here
+
+Stuff like:
+
+Account Type
+Team Size
+Budget
+Niches
+Video Channels
+
+is onboarding data.
+
+Most users never need to see that again.
+
+Move that into:
+
+Settings → Preferences
+
+or
+
+Settings → AI Preferences
+
+Collapse it by default.
+
+3. Missing actual settings
+
+When I click Settings I expect:
+
+Account
+Name
+Email
+Password
+2FA
+Delete Account
+Workspace
+Brand Name
+Website
+Logo
+Team Members
+Billing
+Subscription
+Payment Methods
+Invoices
+Notifications
+Email notifications
+Creator submissions
+Payment notifications
+Campaign updates
+Integrations
+Stripe
+TikTok
+Meta
+Google Drive
+Dropbox
+AI Preferences
+Preferred creator niches
+Default campaign goals
+AI generation defaults
+4. Payment Method card is huge
+
+You have:
+
+Payment Method
+
+Payment method on file
+
+Manage Payment Methods
+
+That's basically 2 lines of information taking up a huge card.
+
+Could be:
+
+Payment Methods
+Visa •••• 4242
+Manage →
+
+Done.
+
+5. Account card feels weird
+
+Currently:
+
+Vito
+parkerdevito@gmail.com
+Brand
+
+That should be:
+
+Profile
+Name
+Email
+Role
+Sign Out
+
+or
+
+Workspace Owner
+
+Not a giant card.
+
+6. Missing Team Management
+
+For BrandOps this is actually huge.
+
+You should have:
+
+Team Members
+
+Owner
+
+Admin
+
+Manager
+
+Viewer
+
+Invite Team Member
+
+Because agencies and brands will eventually have multiple people reviewing content.
+
+My layout would be:
+SETTINGS
+
+Profile
+--------------------------------
+Name
+Email
+Password
+2FA
+
+Workspace
+--------------------------------
+Brand Name
+Website
+Logo
+
+Team
+--------------------------------
+Members
+Roles
+Invitations
+
+Billing
+--------------------------------
+Subscription
+Payment Methods
+Invoices
+
+Notifications
+--------------------------------
+Creator Submissions
+Campaign Updates
+Payments
+
+Integrations
+--------------------------------
+Stripe
+Meta
+TikTok
+Google Drive
+
+AI Preferences
+--------------------------------
+Default Campaign Settings
+Creator Preferences
+
+Much cleaner.
+
+Right now I'd honestly remove Workspace Configuration entirely and replace it with Notifications and Integrations. Those are things people actually expect to configure in settings.
