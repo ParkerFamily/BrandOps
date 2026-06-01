@@ -10,10 +10,12 @@ import stripeRouter from "./stripe";
 import openaiRouter from "./openai";
 import emailRouter from "./email";
 import usersRouter from "./users";
+import authRouter from "./auth";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(authRouter);
 router.use(dashboardRouter);
 router.use(campaignsRouter);
 router.use(creatorsRouter);
