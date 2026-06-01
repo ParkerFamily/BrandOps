@@ -6,12 +6,21 @@
 import { readFileSync } from "fs";
 import { createSign } from "crypto";
 
-const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-if (!raw) {
-  console.error("FIREBASE_SERVICE_ACCOUNT env var not set (must be the full service account JSON)");
-  process.exit(1);
+function loadServiceAccount() {
+  // Try env vars first
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON ?? process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (raw) {
+    try { return JSON.parse(raw); } catch { /* fall through */ }
+  }
+  // Fall back to bundled file
+  try {
+    return JSON.parse(readFileSync("artifacts/api-server/src/serviceAccount.json", "utf8"));
+  } catch {
+    console.error("Cannot load service account — set FIREBASE_SERVICE_ACCOUNT_JSON or ensure serviceAccount.json exists");
+    process.exit(1);
+  }
 }
-const sa = JSON.parse(raw);
+const sa = loadServiceAccount();
 const rules = readFileSync("firestore.rules", "utf8");
 
 function buildJwt() {

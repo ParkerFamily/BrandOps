@@ -58,38 +58,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Slow path: check Firestore directly — source of truth for "has this user onboarded?"
+      // Slow path: check Firestore + API in parallel — source of truth for "has this user onboarded?"
       setLoading(true);
       try {
-        const profile = await fsGetUserProfile(firebaseUser.uid);
-        if (profile?.onboarded) {
-          // User doc exists and is marked onboarded — restore local state and go to dashboard
+        // Run Firestore read and API check in parallel so neither blocks the other
+        const [fsProfile, apiRes] = await Promise.allSettled([
+          fsGetUserProfile(firebaseUser.uid),
+          fetch(`${BASE}api/users/${firebaseUser.uid}`),
+        ]);
+
+        // Check Firestore first
+        if (fsProfile.status === "fulfilled" && fsProfile.value) {
+          const profile = fsProfile.value;
+          // Doc exists → user is known, treat as onboarded regardless of field value
           if (profile.onboardingData) {
             setOnboarded(profile.onboardingData as OnboardingData);
           }
           setOnboardedState(true);
-        } else {
-          // No Firestore doc → genuinely new user, needs onboarding
-          setOnboardedState(false);
+          setLoading(false);
+          return;
         }
-      } catch {
-        // Firestore read failed (offline, etc.) — fall back to PostgreSQL
-        try {
-          const res = await fetch(`${BASE}api/users/${firebaseUser.uid}`);
-          if (res.ok) {
-            const status = await res.json();
-            if (status.onboarded && status.onboardingData) {
+
+        // Firestore miss or failure → try API result
+        if (apiRes.status === "fulfilled" && apiRes.value.ok) {
+          const status = await apiRes.value.json() as { onboarded: boolean; onboardingData?: unknown };
+          if (status.onboarded) {
+            // User exists in DB — they've been through onboarding before
+            if (status.onboardingData) {
               setOnboarded(status.onboardingData as OnboardingData);
-              setOnboardedState(true);
-            } else {
-              setOnboardedState(false);
             }
-          } else {
-            setOnboardedState(false);
+            setOnboardedState(true);
+            setLoading(false);
+            return;
           }
-        } catch {
-          setOnboardedState(false);
         }
+
+        // Neither source has a record → genuinely new user
+        setOnboardedState(false);
+      } catch {
+        setOnboardedState(false);
       }
       setLoading(false);
     });
