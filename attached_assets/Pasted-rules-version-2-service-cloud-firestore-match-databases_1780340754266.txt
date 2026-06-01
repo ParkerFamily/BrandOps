@@ -77,16 +77,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Creators — brand/admin can read and manage creator profiles
-    match /creators/{creatorId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Payments — authenticated users can read/write their own payment records
-    match /payments/{paymentId} {
-      allow read, write: if request.auth != null;
-    }
-
     match /{document=**} {
       allow read, write: if false;
     }
