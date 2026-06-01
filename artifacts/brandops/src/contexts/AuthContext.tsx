@@ -11,6 +11,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { setOnboarded, getOnboarded, clearOnboarded, type OnboardingData } from "@/lib/onboarding";
+import { fsGetUserProfile, fsSetUserProfile } from "@/lib/firestore";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -28,23 +29,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-async function fetchOnboardingStatus(uid: string): Promise<{ onboarded: boolean; onboardingData?: Record<string, unknown> }> {
-  try {
-    const res = await fetch(`${BASE}api/users/${uid}`);
-    if (!res.ok) return { onboarded: false };
-    return await res.json();
-  } catch {
-    return { onboarded: false };
-  }
-}
-
-function isNewAccount(firebaseUser: User): boolean {
-  const created = firebaseUser.metadata.creationTime;
-  if (!created) return false;
-  const ageMs = Date.now() - new Date(created).getTime();
-  return ageMs < 5 * 60 * 1000; // less than 5 minutes old = brand new
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,12 +43,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Fast path: localStorage / cookie hit → already onboarded
+      // Fast path: localStorage / cookie hit
       const local = getOnboarded();
       if (local) {
         setOnboardedState(true);
         setLoading(false);
-        // Backfill server in background (fire-and-forget)
+        // Backfill Firestore + server in background
+        fsSetUserProfile(firebaseUser.uid, local).catch(() => {});
         fetch(`${BASE}api/users/${firebaseUser.uid}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -73,24 +58,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Slow path: check server record
+      // Slow path: check Firestore directly — source of truth for "has this user onboarded?"
       setLoading(true);
-      const status = await fetchOnboardingStatus(firebaseUser.uid);
-
-      if (status.onboarded && status.onboardingData) {
-        // Server has a record — restore it locally and proceed
-        setOnboarded(status.onboardingData as OnboardingData);
-        setOnboardedState(true);
-      } else if (isNewAccount(firebaseUser)) {
-        // Genuinely brand-new account (< 5 min old) with no server record → needs onboarding
-        setOnboardedState(false);
-      } else {
-        // Returning user whose server record is missing (cleared DB, new region, etc.)
-        // Don't punish them with Onboarding — let them into the dashboard
-        // They can re-configure via Settings > AI Preferences if needed
-        setOnboardedState(true);
+      try {
+        const profile = await fsGetUserProfile(firebaseUser.uid);
+        if (profile?.onboarded) {
+          // User doc exists and is marked onboarded — restore local state and go to dashboard
+          if (profile.onboardingData) {
+            setOnboarded(profile.onboardingData as OnboardingData);
+          }
+          setOnboardedState(true);
+        } else {
+          // No Firestore doc → genuinely new user, needs onboarding
+          setOnboardedState(false);
+        }
+      } catch {
+        // Firestore read failed (offline, etc.) — fall back to PostgreSQL
+        try {
+          const res = await fetch(`${BASE}api/users/${firebaseUser.uid}`);
+          if (res.ok) {
+            const status = await res.json();
+            if (status.onboarded && status.onboardingData) {
+              setOnboarded(status.onboardingData as OnboardingData);
+              setOnboardedState(true);
+            } else {
+              setOnboardedState(false);
+            }
+          } else {
+            setOnboardedState(false);
+          }
+        } catch {
+          setOnboardedState(false);
+        }
       }
-
       setLoading(false);
     });
     return unsubscribe;
@@ -100,13 +100,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setOnboarded(data as OnboardingData);
     setOnboardedState(true);
     if (user) {
-      try {
-        await fetch(`${BASE}api/users/${user.uid}`, {
+      // Write to Firestore (primary) and PostgreSQL (backup) in parallel
+      await Promise.allSettled([
+        fsSetUserProfile(user.uid, data),
+        fetch(`${BASE}api/users/${user.uid}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
-        });
-      } catch { /* non-fatal */ }
+        }),
+      ]);
     }
   }, [user]);
 

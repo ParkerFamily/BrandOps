@@ -393,6 +393,30 @@ export function fsSubscribePayments(
   );
 }
 
+// ── User profile (onboarding status) ──────────────────────────────────────────
+
+export interface FsUserProfile {
+  onboarded: boolean;
+  onboardingData?: Record<string, unknown>;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export async function fsGetUserProfile(uid: string): Promise<FsUserProfile | null> {
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) return null;
+  return snap.data() as FsUserProfile;
+}
+
+export async function fsSetUserProfile(uid: string, data: Record<string, unknown>): Promise<void> {
+  const { setDoc } = await import("firebase/firestore");
+  await setDoc(doc(db, "users", uid), {
+    onboarded: true,
+    onboardingData: data,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
 // ── React hooks (real-time subscriptions) ─────────────────────────────────────
 
 export { ts };
