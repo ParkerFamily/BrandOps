@@ -10,7 +10,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
-import { setOnboarded, getOnboarded, clearOnboarded } from "@/lib/onboarding";
+import { setOnboarded, getOnboarded, clearOnboarded, type OnboardingData } from "@/lib/onboarding";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -38,6 +38,13 @@ async function fetchOnboardingStatus(uid: string): Promise<{ onboarded: boolean;
   }
 }
 
+function isNewAccount(firebaseUser: User): boolean {
+  const created = firebaseUser.metadata.creationTime;
+  if (!created) return false;
+  const ageMs = Date.now() - new Date(created).getTime();
+  return ageMs < 5 * 60 * 1000; // less than 5 minutes old = brand new
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         return;
       }
-      // Fast path: check local storage / cookie
+
+      // Fast path: localStorage / cookie hit → already onboarded
       const local = getOnboarded();
       if (local) {
         setOnboardedState(true);
@@ -64,23 +72,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => {});
         return;
       }
-      // Slow path: check server
+
+      // Slow path: check server record
       setLoading(true);
       const status = await fetchOnboardingStatus(firebaseUser.uid);
+
       if (status.onboarded && status.onboardingData) {
-        // Restore into local storage / cookie from server record
-        setOnboarded(status.onboardingData as Parameters<typeof setOnboarded>[0]);
+        // Server has a record — restore it locally and proceed
+        setOnboarded(status.onboardingData as OnboardingData);
         setOnboardedState(true);
-      } else {
+      } else if (isNewAccount(firebaseUser)) {
+        // Genuinely brand-new account (< 5 min old) with no server record → needs onboarding
         setOnboardedState(false);
+      } else {
+        // Returning user whose server record is missing (cleared DB, new region, etc.)
+        // Don't punish them with Onboarding — let them into the dashboard
+        // They can re-configure via Settings > AI Preferences if needed
+        setOnboardedState(true);
       }
+
       setLoading(false);
     });
     return unsubscribe;
   }, []);
 
   const markOnboarded = useCallback(async (data: Record<string, unknown>) => {
-    setOnboarded(data as Parameters<typeof setOnboarded>[0]);
+    setOnboarded(data as OnboardingData);
     setOnboardedState(true);
     if (user) {
       try {
