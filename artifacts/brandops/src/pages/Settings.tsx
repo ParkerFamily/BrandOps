@@ -208,17 +208,18 @@ function BrandPaymentSetup({ uid, email, name }: { uid: string; email: string; n
   const { toast } = useToast();
   const [starting, setStarting] = useState(false);
 
-  const { data: profileData } = useQuery<UserStripeStatus>({
-    queryKey: ["user-stripe-status", uid],
+  const { data: brandSetupStatus, isLoading: statusLoading } = useQuery<{ ready: boolean; hasCustomer: boolean; hasPaymentMethod: boolean }>({
+    queryKey: ["brand-payment-status", uid],
     queryFn: async () => {
-      const res = await fetch(`${BASE}api/users/${uid}`);
-      if (!res.ok) return { stripeConnectAccountId: null, stripeConnectOnboarded: false, stripeCustomerId: null };
-      return res.json() as Promise<UserStripeStatus>;
+      const res = await fetch(`${BASE}api/stripe/brand-setup/status?uid=${encodeURIComponent(uid)}`);
+      if (!res.ok) return { ready: false, hasCustomer: false, hasPaymentMethod: false };
+      return res.json();
     },
     staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
-  const hasPaymentMethod = !!profileData?.stripeCustomerId;
+  const hasPaymentMethod = !!brandSetupStatus?.hasPaymentMethod;
 
   const startSetup = async () => {
     setStarting(true);
@@ -361,7 +362,7 @@ export default function Settings() {
       navigate("/settings", { replace: true });
     } else if (stripeSetup === "complete") {
       toast({ title: "Payment method saved!", description: "You can now fund campaigns and pay creators." });
-      queryClient.invalidateQueries({ queryKey: ["user-stripe-status"] });
+      queryClient.invalidateQueries({ queryKey: ["brand-payment-status"] });
       navigate("/settings", { replace: true });
       setTab("billing");
     } else if (stripeSetup === "cancelled") {
