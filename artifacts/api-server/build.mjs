@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, copyFile, access } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -120,7 +120,19 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
   });
 }
 
-buildAll().catch((err) => {
+async function copyAssets() {
+  const src = path.resolve(artifactDir, "src/serviceAccount.json");
+  const dest = path.resolve(artifactDir, "dist/serviceAccount.json");
+  try {
+    await access(src);
+    await copyFile(src, dest);
+    console.log("✓ serviceAccount.json copied to dist/");
+  } catch {
+    // No file — that's fine, env var will be used instead
+  }
+}
+
+buildAll().then(copyAssets).catch((err) => {
   console.error(err);
   process.exit(1);
 });
