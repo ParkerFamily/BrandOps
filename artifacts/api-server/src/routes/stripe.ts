@@ -3,13 +3,12 @@ import { sql, eq } from 'drizzle-orm';
 import { db, creatorsTable, paymentsTable, campaignsTable, userProfilesTable } from '@workspace/db';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { logger } from '../lib/logger';
-import { getFirebaseAdmin } from '../firebaseAdmin';
+import { writeFirestoreDoc } from '../firebaseAdmin';
 
 // Write Stripe status fields to Firestore users/{uid} so mobile app stays in sync
 async function syncToFirestore(uid: string, fields: Record<string, unknown>): Promise<void> {
   try {
-    const db = getFirebaseAdmin().firestore();
-    await db.collection('users').doc(uid).set(fields, { merge: true });
+    await writeFirestoreDoc('users', uid, fields);
   } catch (err) {
     logger.warn({ err, uid }, 'Firestore sync failed (non-fatal)');
   }
