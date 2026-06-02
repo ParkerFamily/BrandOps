@@ -1,1 +1,3 @@
 - [Firestore rules deployment](firestore-rules-deploy.md) — use `scripts/deploy-firestore-rules.mjs` with `FIREBASE_SERVICE_ACCOUNT` (JSON) env var; firebase CLI --token flag is deprecated and broken.
+- [Firestore write architecture](firestore-rest-write.md) — gRPC Admin SDK is blocked in Replit; use REST API via `writeFirestoreDoc()` in `firebaseAdmin.ts` with `cert()` credential for OAuth2 token exchange.
+- [Firebase service account key rotation](firebase-sa-key.md) — old keys (ee7c271c, 3e7c6eeb) were revoked; active key is 5bb3c063; must update `serviceAccount.json` AND `FIREBASE_SERVICE_ACCOUNT_JSON` secret together.
