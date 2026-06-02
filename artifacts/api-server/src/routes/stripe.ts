@@ -569,4 +569,89 @@ router.post('/stripe/subscription/start', async (req, res): Promise<void> => {
   res.json({ url: session.url });
 });
 
+// One-shot backfill: sync all PostgreSQL Stripe data → Firestore
+router.post('/admin/backfill-stripe-firestore', async (req, res): Promise<void> => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.SESSION_SECRET) {
+    res.status(403).json({ error: 'forbidden' });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+
+  const users = await db
+    .select()
+    .from(userProfilesTable)
+    .where(
+      // only users with some stripe data
+      sql`stripe_customer_id IS NOT NULL OR stripe_connect_account_id IS NOT NULL`
+    );
+
+  const PRICE_PLAN: Record<string, string> = {
+    'price_1TcYGnL8wN3kCgjXK1ffZG9F': 'starter',
+    'price_1TcYGnL8wN3kCgjXLhff0cBU': 'starter',
+    'price_1TcYGoL8wN3kCgjXSrhDw5iB': 'growth',
+    'price_1TcYGoL8wN3kCgjXo4rvaJq6': 'growth',
+  };
+
+  const results: { uid: string; status: string; fields?: Record<string, unknown>; error?: string }[] = [];
+
+  for (const user of users) {
+    const uid = user.firebaseUid;
+    const fields: Record<string, unknown> = {};
+
+    try {
+      if (user.stripeCustomerId) {
+        fields.stripeCustomerId = user.stripeCustomerId;
+
+        const methods = await stripe.paymentMethods.list({ customer: user.stripeCustomerId, type: 'card', limit: 1 });
+        if (methods.data.length > 0) {
+          fields.stripeConnected = true;
+          fields.payoutMethodReady = true;
+        }
+
+        const [activeSubs, trialingSubs] = await Promise.all([
+          stripe.subscriptions.list({ customer: user.stripeCustomerId, status: 'active', limit: 1 }),
+          stripe.subscriptions.list({ customer: user.stripeCustomerId, status: 'trialing', limit: 1 }),
+        ]);
+
+        const sub = activeSubs.data[0] ?? trialingSubs.data[0];
+        if (sub) {
+          const priceId = sub.items.data[0]?.price.id ?? '';
+          fields.subscriptionPlan = PRICE_PLAN[priceId] ?? 'enterprise';
+          fields.subscriptionStatus = sub.status;
+          fields.stripeConnected = true;
+        }
+      }
+
+      if (user.stripeConnectAccountId) {
+        fields.stripeConnectAccountId = user.stripeConnectAccountId;
+        const account = await stripe.accounts.retrieve(user.stripeConnectAccountId);
+        if (account.payouts_enabled && account.charges_enabled) {
+          fields.stripeConnected = true;
+          fields.stripePayoutsEnabled = true;
+          fields.payoutMethodReady = true;
+        }
+      }
+
+      if (Object.keys(fields).length === 0) {
+        results.push({ uid, status: 'skipped' });
+        continue;
+      }
+
+      await syncToFirestore(uid, fields);
+      results.push({ uid, status: 'synced', fields });
+    } catch (err: any) {
+      results.push({ uid, status: 'failed', error: err?.message });
+    }
+  }
+
+  const synced = results.filter(r => r.status === 'synced').length;
+  const skipped = results.filter(r => r.status === 'skipped').length;
+  const failed = results.filter(r => r.status === 'failed').length;
+
+  req.log.info({ synced, skipped, failed }, 'Stripe → Firestore backfill complete');
+  res.json({ synced, skipped, failed, results });
+});
+
 export default router;

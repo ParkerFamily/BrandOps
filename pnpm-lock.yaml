@@ -683,6 +683,16 @@ importers:
         version: 25.6.2
 
   scripts:
+    dependencies:
+      firebase-admin:
+        specifier: ^13.10.0
+        version: 13.10.0
+      pg:
+        specifier: ^8.16.0
+        version: 8.20.0
+      stripe:
+        specifier: ^20.0.0
+        version: 20.0.0(@types/node@25.6.2)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
