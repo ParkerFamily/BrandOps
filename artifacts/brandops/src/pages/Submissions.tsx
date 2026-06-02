@@ -4,6 +4,7 @@ import {
   fsSubscribeSubmissions, fsUpdateSubmission, fsGetSubmission,
   type FsSubmission,
 } from "@/lib/firestore";
+import { where } from "firebase/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -194,12 +195,13 @@ export default function Submissions() {
 
   useEffect(() => {
     if (!user?.uid) return;
+    const field = isCreator ? "creatorFirebaseUid" : "campaignOwnerUid";
     const unsub = fsSubscribeSubmissions((data) => {
       setSubmissions(data);
       setIsLoading(false);
-    });
+    }, [where(field, "==", user.uid)]);
     return unsub;
-  }, [user?.uid]);
+  }, [user?.uid, isCreator]);
 
   const filtered = statusFilter === "all"
     ? submissions
