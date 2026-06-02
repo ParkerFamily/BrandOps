@@ -570,6 +570,7 @@ router.post('/stripe/subscription/start', async (req, res): Promise<void> => {
 });
 
 // One-shot backfill: sync all PostgreSQL Stripe data → Firestore
+// Also accepts { uid, email } body to force-sync a single user by Stripe email lookup
 router.post('/admin/backfill-stripe-firestore', async (req, res): Promise<void> => {
   const secret = req.headers['x-admin-secret'];
   if (secret !== process.env.SESSION_SECRET) {
@@ -578,6 +579,48 @@ router.post('/admin/backfill-stripe-firestore', async (req, res): Promise<void> 
   }
 
   const stripe = await getUncachableStripeClient();
+
+  // ── Single-user mode: look up by email in Stripe ──────────────────────
+  const { uid: singleUid, email: singleEmail } = req.body as { uid?: string; email?: string };
+  if (singleUid && singleEmail) {
+    const existing = await stripe.customers.list({ email: singleEmail, limit: 1 });
+    const customer = existing.data[0];
+    if (!customer) {
+      res.json({ synced: 0, skipped: 1, failed: 0, results: [{ uid: singleUid, status: 'skipped', error: 'No Stripe customer found for email' }] });
+      return;
+    }
+
+    const fields: Record<string, unknown> = { stripeCustomerId: customer.id };
+
+    await db.insert(userProfilesTable)
+      .values({ firebaseUid: singleUid, stripeCustomerId: customer.id })
+      .onConflictDoUpdate({
+        target: userProfilesTable.firebaseUid,
+        set: { stripeCustomerId: customer.id, updatedAt: new Date() },
+      });
+
+    const methods = await stripe.paymentMethods.list({ customer: customer.id, type: 'card', limit: 1 });
+    if (methods.data.length > 0) { fields.stripeConnected = true; fields.payoutMethodReady = true; }
+
+    const [activeSubs, trialingSubs] = await Promise.all([
+      stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 1 }),
+      stripe.subscriptions.list({ customer: customer.id, status: 'trialing', limit: 1 }),
+    ]);
+    const sub = activeSubs.data[0] ?? trialingSubs.data[0];
+    if (sub) {
+      const PRICE_PLAN: Record<string, string> = {
+        'price_1TcYGnL8wN3kCgjXK1ffZG9F': 'starter', 'price_1TcYGnL8wN3kCgjXLhff0cBU': 'starter',
+        'price_1TcYGoL8wN3kCgjXSrhDw5iB': 'growth',  'price_1TcYGoL8wN3kCgjXo4rvaJq6': 'growth',
+      };
+      fields.subscriptionPlan = PRICE_PLAN[sub.items.data[0]?.price.id ?? ''] ?? 'enterprise';
+      fields.subscriptionStatus = sub.status;
+      fields.stripeConnected = true;
+    }
+
+    await syncToFirestore(singleUid, fields);
+    res.json({ synced: 1, skipped: 0, failed: 0, results: [{ uid: singleUid, status: 'synced', fields }] });
+    return;
+  }
 
   const users = await db
     .select()
