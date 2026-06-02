@@ -3,6 +3,17 @@ import { sql, eq } from 'drizzle-orm';
 import { db, creatorsTable, paymentsTable, campaignsTable, userProfilesTable } from '@workspace/db';
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { logger } from '../lib/logger';
+import { getFirebaseAdmin } from '../firebaseAdmin';
+
+// Write Stripe status fields to Firestore users/{uid} so mobile app stays in sync
+async function syncToFirestore(uid: string, fields: Record<string, unknown>): Promise<void> {
+  try {
+    const db = getFirebaseAdmin().firestore();
+    await db.collection('users').doc(uid).set(fields, { merge: true });
+  } catch (err) {
+    logger.warn({ err, uid }, 'Firestore sync failed (non-fatal)');
+  }
+}
 
 const router: IRouter = Router();
 
@@ -343,10 +354,17 @@ router.get('/stripe/creator-connect/status', async (req, res): Promise<void> => 
   const fullyOnboarded = account.payouts_enabled && account.charges_enabled;
 
   if (fullyOnboarded && !profile.stripeConnectOnboarded) {
-    await db
-      .update(userProfilesTable)
-      .set({ stripeConnectOnboarded: true, updatedAt: new Date() })
-      .where(eq(userProfilesTable.firebaseUid, uid));
+    await Promise.all([
+      db.update(userProfilesTable)
+        .set({ stripeConnectOnboarded: true, updatedAt: new Date() })
+        .where(eq(userProfilesTable.firebaseUid, uid)),
+      syncToFirestore(uid, {
+        stripeConnected: true,
+        stripePayoutsEnabled: true,
+        payoutMethodReady: true,
+        stripeConnectAccountId: account.id,
+      }),
+    ]);
   }
 
   res.json({
@@ -383,6 +401,14 @@ router.get('/stripe/brand-setup/status', async (req, res): Promise<void> => {
   const stripe = await getUncachableStripeClient();
   const methods = await stripe.paymentMethods.list({ customer: profile.stripeCustomerId, type: 'card', limit: 1 });
   const hasPaymentMethod = methods.data.length > 0;
+
+  if (hasPaymentMethod) {
+    await syncToFirestore(uid, {
+      stripeCustomerId: profile.stripeCustomerId,
+      stripeConnected: true,
+      payoutMethodReady: true,
+    });
+  }
 
   res.json({ ready: hasPaymentMethod, hasCustomer: true, hasPaymentMethod, customerId: profile.stripeCustomerId });
 });
@@ -477,6 +503,12 @@ router.get('/stripe/subscription/status', async (req, res): Promise<void> => {
 
   const priceId = sub.items.data[0]?.price.id ?? '';
   const info = PRICE_PLAN[priceId] ?? { plan: 'enterprise', memberLimit: null };
+
+  await syncToFirestore(uid, {
+    subscriptionPlan: info.plan,
+    subscriptionStatus: sub.status,
+    stripeConnected: true,
+  });
 
   req.log.info({ uid, plan: info.plan, priceId, status: sub.status }, 'Subscription status checked');
   res.json({ plan: info.plan, memberLimit: info.memberLimit, status: sub.status, currentPeriodEnd: (sub as unknown as Record<string, unknown>)['current_period_end'] ?? null });
