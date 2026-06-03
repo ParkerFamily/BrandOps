@@ -1,0 +1,92 @@
+Build an automated BrandOps video processing system.
+
+When a creator uploads a video for a campaign, the app should:
+
+1. Upload the raw video to storage.
+2. Send the video audio to OpenAI Whisper/transcription.
+3. Generate accurate subtitles with timestamps.
+4. Use OpenAI to create short overlay text based on the campaign goal, brand name, CTA, and video transcript.
+5. Add burned-in captions to the video.
+6. Add a brand logo/watermark overlay.
+7. Add a CTA text overlay such as “Shop Now,” “Download Now,” or the campaign CTA.
+8. Export a final vertical 9:16 video ready for TikTok, Instagram Reels, and YouTube Shorts.
+9. Save the final video URL back to the campaign submission.
+10. Let the creator preview the processed video before submitting it to the brand.
+
+Use FFmpeg or Remotion for video rendering. OpenAI should only handle transcription, caption generation, and overlay text suggestions. The backend should handle the actual video editing/rendering.
+
+Add this too:
+
+Start with MVP only:
+- auto subtitles
+- brand logo watermark
+- CTA overlay
+- final exported video preview
+
+Do not build advanced AI clip selection yet.
+
+That keeps Replit from overbuilding it.
+
+im saying whoever uploaded it should be able to see it
+
+Oh yeah bro, they absolutely should.
+
+The flow should be:
+
+Creator uploads video
+↓
+BrandOps processes video
+↓
+Adds captions
+↓
+Adds logo
+↓
+Adds CTA
+↓
+Creates preview
+↓
+Creator watches preview
+↓
+[Approve]
+[Request Changes]
+[Use Original]
+↓
+Submit to Brand
+
+I would NEVER automatically submit the AI-edited version to the brand without the creator seeing it first.
+
+Think about it:
+
+Captions could be wrong
+CTA could cover their face
+Logo could be too big
+Timing could look weird
+
+Creators will want final control.
+
+For Replit I'd say:
+
+After video processing is complete, generate a preview version that is visible only to the creator who uploaded the content.
+
+The creator must be able to:
+
+- Watch the processed video
+- Compare original vs processed version
+- Toggle captions on/off
+- Toggle logo overlay on/off
+- Toggle CTA overlay on/off
+- Approve final version
+
+Only after approval should the processed video be submitted to the brand for review.
+
+Honestly bro, this could become a selling point for BrandOps:
+
+Upload Video
+↓
+BrandOps Auto-Enhances It
+↓
+Preview Changes
+↓
+One-Click Submit
+
+That saves creators from opening CapCut every single time just to add captions and a logo. That's real value.

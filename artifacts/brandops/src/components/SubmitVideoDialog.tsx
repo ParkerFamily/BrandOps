@@ -64,6 +64,8 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
       await fsCreateSubmission({
         campaignId,
         creatorId: user?.uid ?? "unknown",
+        creatorFirebaseUid: user?.uid ?? "unknown",
+        campaignOwnerUid: selected?.ownerFirebaseUid ?? selected?.brandUid ?? "",
         creatorName: user?.displayName ?? user?.email ?? "Creator",
         creatorEmail: user?.email ?? "",
         campaignTitle: selected?.title ?? preselectedCampaignTitle ?? "",

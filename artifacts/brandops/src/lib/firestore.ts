@@ -111,6 +111,8 @@ export interface FsSubmission {
   id?: string;
   campaignId: string;
   creatorId: string;
+  creatorFirebaseUid?: string;
+  campaignOwnerUid?: string;
   creatorName?: string;
   creatorEmail?: string;
   campaignTitle?: string;
@@ -119,6 +121,12 @@ export interface FsSubmission {
   status: "pending" | "reviewing" | "approved" | "rejected" | "revision_requested" | "paid";
   notes?: string;
   payoutAmount?: number;
+  // Video processing pipeline
+  processingStatus?: "idle" | "processing" | "done" | "error";
+  processedVideoUrl?: string;
+  subtitlesContent?: string;
+  processingError?: string;
+  creatorApproval?: "approved_processed" | "approved_original";
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -294,7 +302,9 @@ export async function fsCreateSubmission(
 ): Promise<string> {
   const ref = await addDoc(collection(db, "submissions"), {
     ...data,
+    creatorFirebaseUid: data.creatorFirebaseUid ?? data.creatorId,
     status: data.status || "pending",
+    processingStatus: "idle",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

@@ -100,6 +100,93 @@ function toFirestoreValue(val: unknown): unknown {
   return { stringValue: String(val) };
 }
 
+// Convert Firestore REST typed field value back to plain JS
+function fromFirestoreValue(val: Record<string, unknown>): unknown {
+  if ("nullValue" in val) return null;
+  if ("booleanValue" in val) return val.booleanValue;
+  if ("integerValue" in val) return Number(val.integerValue);
+  if ("doubleValue" in val) return val.doubleValue;
+  if ("stringValue" in val) return val.stringValue;
+  if ("timestampValue" in val) return val.timestampValue;
+  if ("arrayValue" in val) {
+    const arr = val.arrayValue as { values?: unknown[] };
+    return (arr.values ?? []).map(v => fromFirestoreValue(v as Record<string, unknown>));
+  }
+  if ("mapValue" in val) {
+    const map = val.mapValue as { fields?: Record<string, unknown> };
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(map.fields ?? {})) {
+      result[k] = fromFirestoreValue(v as Record<string, unknown>);
+    }
+    return result;
+  }
+  return null;
+}
+
+export async function readFirestoreDoc<T>(
+  collectionName: string,
+  docId: string,
+): Promise<T | null> {
+  const sa = loadServiceAccount();
+  const projectId = sa.project_id;
+  const token = await getAccessToken();
+
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionName}/${docId}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firestore REST read failed (${res.status}): ${text}`);
+  }
+  const body = (await res.json()) as { fields?: Record<string, unknown> };
+  if (!body.fields) return null;
+
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(body.fields)) {
+    result[k] = fromFirestoreValue(v as Record<string, unknown>);
+  }
+  return result as T;
+}
+
+// ── Firebase Storage upload via REST ─────────────────────────────────────────
+
+const STORAGE_BUCKET = "rareswap-ec574.firebasestorage.app";
+
+export async function uploadToFirebaseStorage(
+  fileBuffer: Buffer,
+  storagePath: string,
+  contentType: string,
+): Promise<string> {
+  const token = await getAccessToken();
+  const uploadUrl =
+    `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o` +
+    `?uploadType=media&name=${encodeURIComponent(storagePath)}`;
+
+  const res = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": contentType,
+    },
+    body: fileBuffer,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firebase Storage upload failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as { downloadTokens?: string; name?: string };
+  const downloadToken = data.downloadTokens ?? "";
+  const encodedPath = encodeURIComponent(storagePath);
+  return (
+    `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodedPath}` +
+    `?alt=media&token=${downloadToken}`
+  );
+}
+
 export async function writeFirestoreDoc(
   collection: string,
   docId: string,

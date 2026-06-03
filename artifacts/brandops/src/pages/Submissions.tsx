@@ -13,11 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload } from "lucide-react";
+import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload, Wand2 } from "lucide-react";
 import { format } from "date-fns";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
+import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 
 const BASE = import.meta.env.BASE_URL;
@@ -187,6 +188,8 @@ export default function Submissions() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [previewSub, setPreviewSub] = useState<FsSubmission | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const onboarding = getOnboarding();
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
@@ -214,6 +217,26 @@ export default function Submissions() {
       .then(s => setSelectedSub(s))
       .finally(() => setSelectedLoading(false));
   }, [selectedSubmissionId]);
+
+  const handleEnhance = async (sub: FsSubmission) => {
+    try {
+      const res = await fetch(`${BASE}api/video/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: sub.id,
+          videoUrl: sub.videoUrl,
+          campaignTitle: sub.campaignTitle ?? "",
+          brandName: sub.campaignTitle ?? "Brand",
+          ctaText: "Learn More",
+        }),
+      });
+      if (!res.ok) throw new Error("Server error");
+      toast({ title: "Processing started!", description: "BrandOps is enhancing your video — this takes 1–2 min." });
+    } catch {
+      toast({ title: "Failed to start processing", variant: "destructive" });
+    }
+  };
 
   const handleReview = async (id: string, status: "approved" | "rejected" | "revision_requested") => {
     try {
@@ -332,6 +355,52 @@ export default function Submissions() {
                     <Button variant="secondary" size="sm" onClick={() => setSelectedSubmissionId(sub.id!)}>
                       <Eye className="h-4 w-4 mr-1.5" /> Details
                     </Button>
+
+                    {/* Creator: enhance / processing status / preview */}
+                    {isCreator && (
+                      <>
+                        {(!sub.processingStatus || sub.processingStatus === "idle") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEnhance(sub)}
+                            className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                          >
+                            <Wand2 className="h-3.5 w-3.5" /> Enhance with AI
+                          </Button>
+                        )}
+                        {sub.processingStatus === "processing" && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground py-1.5 px-2 rounded-lg bg-primary/5 border border-primary/15">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            <span>Processing your video…</span>
+                          </div>
+                        )}
+                        {sub.processingStatus === "done" && (
+                          <Button
+                            size="sm"
+                            onClick={() => { setPreviewSub(sub); setPreviewOpen(true); }}
+                            className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_12px_rgba(198,255,0,0.2)]"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" /> Preview Enhanced
+                          </Button>
+                        )}
+                        {sub.processingStatus === "error" && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-red-400">Processing failed</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEnhance(sub)}
+                              className="text-xs text-muted-foreground h-auto py-1 px-2"
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Brand: approve / revision / reject */}
                     {!isCreator && (sub.status === "pending" || sub.status === "reviewing") && (
                       <>
                         <Button
@@ -426,6 +495,15 @@ export default function Submissions() {
       </Dialog>
 
       <SubmitVideoDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+
+      {previewSub && (
+        <VideoPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          submission={previewSub}
+          onApproved={() => setPreviewSub(null)}
+        />
+      )}
     </div>
   );
 }
