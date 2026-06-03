@@ -15,9 +15,10 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   submission: FsSubmission;
   onApproved?: () => void;
+  isBrand?: boolean;
 }
 
-export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved }: Props) {
+export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved, isBrand }: Props) {
   const { toast } = useToast();
   const [activeView, setActiveView] = useState<"original" | "enhanced">("enhanced");
   const [approving, setApproving] = useState(false);
@@ -32,8 +33,10 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved 
       });
       if (!res.ok) throw new Error("Request failed");
       toast({
-        title: choice === "processed" ? "Enhanced version submitted!" : "Original submitted to brand!",
-        description: "The brand team will now review your video.",
+        title: isBrand
+          ? choice === "processed" ? "Enhanced version approved!" : "Original approved!"
+          : choice === "processed" ? "Enhanced version submitted!" : "Original submitted to brand!",
+        description: isBrand ? "Submission marked as approved." : "The brand team will now review your video.",
       });
       onApproved?.();
       onOpenChange(false);
@@ -213,11 +216,11 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved 
                   )}
                 >
                   {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Submit Enhanced to Brand
+                  {isBrand ? "Approve Enhanced" : "Submit Enhanced to Brand"}
                 </Button>
                 <Button variant="outline" onClick={() => handleApprove("original")} disabled={approving} className="gap-2">
                   <Film className="h-4 w-4" />
-                  Use Original
+                  {isBrand ? "Approve Original" : "Use Original"}
                 </Button>
               </div>
             </div>

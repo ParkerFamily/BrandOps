@@ -511,6 +511,7 @@ export default function Submissions() {
           onOpenChange={setPreviewOpen}
           submission={previewSub}
           onApproved={() => setPreviewSub(null)}
+          isBrand={!isCreator}
         />
       )}
     </div>

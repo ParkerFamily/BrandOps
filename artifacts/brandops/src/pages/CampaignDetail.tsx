@@ -753,6 +753,7 @@ export default function CampaignDetail() {
           open={previewOpen}
           onOpenChange={setPreviewOpen}
           submission={previewSub}
+          isBrand={!isCreator}
         />
       )}
     </div>
