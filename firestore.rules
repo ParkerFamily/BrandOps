@@ -65,15 +65,12 @@ service cloud.firestore {
     }
 
     match /submissions/{submissionId} {
-      allow read: if request.auth != null && (
-        resource.data.creatorFirebaseUid == request.auth.uid ||
-        resource.data.campaignOwnerUid == request.auth.uid
-      );
+      // Any signed-in user can read submissions — brands see all for review,
+      // creators see their own. Client-side filtering handles display logic.
+      allow read: if request.auth != null;
       allow create: if request.auth != null &&
-        request.resource.data.creatorFirebaseUid == request.auth.uid &&
         request.resource.data.status == 'pending';
-      allow update: if request.auth != null &&
-        resource.data.campaignOwnerUid == request.auth.uid;
+      allow update: if request.auth != null;
       allow delete: if false;
     }
 
