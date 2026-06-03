@@ -110,6 +110,7 @@ export interface FsCreator {
 export interface FsSubmission {
   id?: string;
   campaignId: string;
+  campaignDocId?: string;
   creatorId: string;
   creatorFirebaseUid?: string;
   campaignOwnerUid?: string;
@@ -302,6 +303,7 @@ export async function fsCreateSubmission(
 ): Promise<string> {
   const ref = await addDoc(collection(db, "submissions"), {
     ...data,
+    campaignDocId: data.campaignId,
     creatorFirebaseUid: data.creatorFirebaseUid ?? data.creatorId,
     status: data.status || "pending",
     processingStatus: "idle",

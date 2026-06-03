@@ -127,11 +127,34 @@ export default function CampaignDetail() {
 
   useEffect(() => {
     if (!id || !user?.uid) return;
-    const unsub = fsSubscribeSubmissions(
-      data => { setSubmissions(data); setSubmissionsLoading(false); },
-      [where("campaignId", "==", id)]
-    );
-    return unsub;
+    // Submissions may be stored under either "campaignId" (created via app) or
+    // "campaignDocId" (created via mobile/external upload). Run both and merge.
+    let byId: FsSubmission[] = [];
+    let byDocId: FsSubmission[] = [];
+
+    const merge = (a: FsSubmission[], b: FsSubmission[]) => {
+      const combined = [...a, ...b];
+      const seen = new Set<string>();
+      return combined.filter(s => {
+        if (!s.id || seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      });
+    };
+
+    const unsubA = fsSubscribeSubmissions(data => {
+      byId = data;
+      setSubmissions(merge(byId, byDocId));
+      setSubmissionsLoading(false);
+    }, [where("campaignId", "==", id)]);
+
+    const unsubB = fsSubscribeSubmissions(data => {
+      byDocId = data;
+      setSubmissions(merge(byId, byDocId));
+      setSubmissionsLoading(false);
+    }, [where("campaignDocId", "==", id)]);
+
+    return () => { unsubA(); unsubB(); };
   }, [id, user?.uid]);
 
   const stats = {
