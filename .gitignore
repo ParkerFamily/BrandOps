@@ -54,3 +54,7 @@ Thumbs.db
 google-services.json
 google-services_*.json
 attached_assets/*.json
+# Catch pasted service-account txt files
+attached_assets/*service-account*.txt
+attached_assets/*private_key*.txt
+attached_assets/Pasted--type-service-account*.txt
