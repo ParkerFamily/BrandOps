@@ -17,10 +17,11 @@ import {
   Check, X, PlayCircle, ExternalLink, Trash2, Upload,
   Zap, DollarSign, Clock, TrendingUp, AlertTriangle,
   Lightbulb, ChevronRight, Copy, CheckCheck,
-  ArrowRight, Sparkles, RotateCcw,
+  ArrowRight, Sparkles, RotateCcw, Wand2, Loader2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
+import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -109,6 +110,8 @@ export default function CampaignDetail() {
   const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
+  const [previewSub, setPreviewSub] = useState<FsSubmission | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const [coachRecs, setCoachRecs] = useState<CoachRec[]>([]);
   const [coachLoading, setCoachLoading] = useState(false);
@@ -249,6 +252,26 @@ export default function CampaignDetail() {
       await fsUpdateSubmission(submissionId, { status });
       toast({ title: `Submission ${status.replace("_", " ")}` });
     } catch { toast({ title: "Failed to update submission", variant: "destructive" }); }
+  };
+
+  const handleEnhance = async (sub: FsSubmission) => {
+    try {
+      const res = await fetch(`${BASE}api/video/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: sub.id,
+          videoUrl: sub.videoUrl,
+          campaignTitle: sub.campaignTitle ?? campaign?.title ?? "",
+          brandName: campaign?.title ?? "Brand",
+          ctaText: "Learn More",
+        }),
+      });
+      if (!res.ok) throw new Error("Server error");
+      toast({ title: "Processing started!", description: "BrandOps is enhancing your video — this takes 1–2 min." });
+    } catch {
+      toast({ title: "Failed to start processing", variant: "destructive" });
+    }
   };
 
   const refetchCoach = () => {
@@ -477,17 +500,31 @@ export default function CampaignDetail() {
                 submissions.map(sub => (
                   <Card key={sub.id} className="bg-card border-card-border overflow-hidden">
                     <div className="flex flex-col sm:flex-row">
-                      <div className="sm:w-44 bg-muted relative aspect-video sm:aspect-auto flex items-center justify-center group shrink-0">
-                        {sub.thumbnailUrl ? (
+                      {/* Video area — inline player for direct URLs, thumbnail fallback */}
+                      <div className="sm:w-48 bg-black relative aspect-video sm:aspect-auto shrink-0 overflow-hidden">
+                        {sub.videoUrl ? (
+                          <video
+                            src={sub.videoUrl}
+                            controls
+                            playsInline
+                            className="w-full h-full object-contain"
+                            poster={sub.thumbnailUrl}
+                          />
+                        ) : sub.thumbnailUrl ? (
                           <img src={sub.thumbnailUrl} alt="Thumbnail" className="object-cover w-full h-full" />
                         ) : (
-                          <PlayCircle className="h-8 w-8 text-muted-foreground" />
+                          <div className="w-full h-full flex items-center justify-center">
+                            <PlayCircle className="h-8 w-8 text-muted-foreground" />
+                          </div>
                         )}
-                        <a href={sub.videoUrl} target="_blank" rel="noopener noreferrer"
-                          className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <ExternalLink className="h-6 w-6 text-white" />
-                        </a>
+                        {sub.videoUrl && (
+                          <a href={sub.videoUrl} target="_blank" rel="noopener noreferrer"
+                            className="absolute top-1.5 right-1.5 bg-black/60 rounded p-1 opacity-60 hover:opacity-100 transition-opacity">
+                            <ExternalLink className="h-3.5 w-3.5 text-white" />
+                          </a>
+                        )}
                       </div>
+
                       <div className="p-4 flex-1 flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                           <div>
@@ -501,19 +538,49 @@ export default function CampaignDetail() {
                           </div>
                           <Badge variant="outline" className="capitalize">{sub.status.replace("_", " ")}</Badge>
                         </div>
-                        {!isCreator && (sub.status === "reviewing" || sub.status === "pending") && (
-                          <div className="flex gap-2 mt-4 pt-4 border-t border-border">
-                            <Button size="sm" onClick={() => handleReview(sub.id!, "approved")} className="bg-primary text-primary-foreground hover:bg-primary/90" data-testid={`btn-approve-${sub.id}`}>
-                              <Check className="h-4 w-4 mr-1" /> Approve
+
+                        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
+                          {/* AI enhance — available to creators and brands */}
+                          {(!sub.processingStatus || sub.processingStatus === "idle") && (
+                            <Button size="sm" variant="outline" onClick={() => handleEnhance(sub)}
+                              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10">
+                              <Wand2 className="h-3.5 w-3.5" /> Enhance with AI
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleReview(sub.id!, "revision_requested")} data-testid={`btn-revision-${sub.id}`}>
-                              Request Revision
+                          )}
+                          {sub.processingStatus === "processing" && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1.5 px-2 rounded-lg bg-primary/5 border border-primary/15">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                              <span>Processing…</span>
+                            </div>
+                          )}
+                          {sub.processingStatus === "done" && (
+                            <Button size="sm" onClick={() => { setPreviewSub(sub); setPreviewOpen(true); }}
+                              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_12px_rgba(198,255,0,0.2)]">
+                              <Sparkles className="h-3.5 w-3.5" /> Preview Enhanced
                             </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleReview(sub.id!, "rejected")} data-testid={`btn-reject-${sub.id}`}>
-                              <X className="h-4 w-4 mr-1" /> Reject
+                          )}
+                          {sub.processingStatus === "error" && (
+                            <Button size="sm" variant="ghost" onClick={() => handleEnhance(sub)}
+                              className="text-xs text-red-400 gap-1.5">
+                              <RotateCcw className="h-3.5 w-3.5" /> Retry
                             </Button>
-                          </div>
-                        )}
+                          )}
+
+                          {/* Brand review actions */}
+                          {!isCreator && (sub.status === "reviewing" || sub.status === "pending") && (
+                            <>
+                              <Button size="sm" onClick={() => handleReview(sub.id!, "approved")} className="bg-primary text-primary-foreground hover:bg-primary/90" data-testid={`btn-approve-${sub.id}`}>
+                                <Check className="h-4 w-4 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => handleReview(sub.id!, "revision_requested")} data-testid={`btn-revision-${sub.id}`}>
+                                Request Revision
+                              </Button>
+                              <Button size="sm" variant="destructive" onClick={() => handleReview(sub.id!, "rejected")} data-testid={`btn-reject-${sub.id}`}>
+                                <X className="h-4 w-4 mr-1" /> Reject
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </Card>
@@ -674,6 +741,14 @@ export default function CampaignDetail() {
           onOpenChange={setUploadOpen}
           preselectedCampaignId={id}
           preselectedCampaignTitle={campaign.title}
+        />
+      )}
+
+      {previewSub && (
+        <VideoPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          submission={previewSub}
         />
       )}
     </div>
