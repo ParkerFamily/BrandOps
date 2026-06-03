@@ -75,19 +75,28 @@ async function runFFmpeg(args: string[]): Promise<void> {
   });
 }
 
-async function transcribeAudio(audioPath: string): Promise<Segment[]> {
+async function transcribeAudio(audioPath: string): Promise<{ segments: Segment[]; fullText: string }> {
   const transcription = await (openai.audio.transcriptions.create as Function)({
     file: createReadStream(audioPath),
-    model: "whisper-1",
-    response_format: "verbose_json",
-    timestamp_granularities: ["segment"],
-  }) as { segments?: Array<{ start: number; end: number; text: string }> };
+    model: "gpt-4o-mini-transcribe",
+    response_format: "json",
+  }) as { text: string };
 
-  return (transcription.segments ?? []).map(s => ({
-    start: s.start,
-    end: s.end,
-    text: s.text.trim(),
-  }));
+  const fullText = transcription.text?.trim() ?? "";
+
+  // Build approximate SRT segments from word count (≈2.5 words/sec)
+  const WORDS_PER_SEG = 8;
+  const SECS_PER_WORD = 0.4;
+  const words = fullText.split(/\s+/).filter(Boolean);
+  const segments: Segment[] = [];
+  for (let i = 0; i < words.length; i += WORDS_PER_SEG) {
+    const chunk = words.slice(i, i + WORDS_PER_SEG).join(" ");
+    const start = i * SECS_PER_WORD;
+    const end = Math.min((i + WORDS_PER_SEG) * SECS_PER_WORD, words.length * SECS_PER_WORD + 0.5);
+    segments.push({ start, end, text: chunk });
+  }
+
+  return { segments, fullText };
 }
 
 interface ProcessParams {
@@ -126,14 +135,15 @@ async function processVideo(params: ProcessParams): Promise<void> {
 
     // 3. Transcribe
     let srtContent = "";
-    let segments: Segment[] = [];
+    let fullTranscript = "";
     try {
-      logger.info({ submissionId }, "Transcribing audio with Whisper");
-      segments = await transcribeAudio(audioPath);
+      logger.info({ submissionId }, "Transcribing audio");
+      const { segments, fullText } = await transcribeAudio(audioPath);
+      fullTranscript = fullText;
       srtContent = buildSrt(segments);
-      logger.info({ submissionId, segmentCount: segments.length }, "Transcription done");
+      logger.info({ submissionId, words: fullText.split(/\s+/).length }, "Transcription done");
     } catch (err) {
-      logger.warn({ err, submissionId }, "Whisper transcription failed — skipping captions");
+      logger.warn({ err, submissionId }, "Transcription failed — skipping captions");
     }
 
     // 4. Write SRT file (if we have captions)
@@ -201,7 +211,7 @@ async function processVideo(params: ProcessParams): Promise<void> {
     await writeFirestoreDoc("submissions", submissionId, {
       processingStatus: "done",
       processedVideoUrl,
-      subtitlesContent: srtContent || null,
+      subtitlesContent: fullTranscript || srtContent || null,
     });
     logger.info({ submissionId, processedVideoUrl }, "Video processing complete");
 

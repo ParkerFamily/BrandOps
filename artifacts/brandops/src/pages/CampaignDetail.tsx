@@ -177,6 +177,9 @@ export default function CampaignDetail() {
     coachFetched.current = true;
     setCoachLoading(true);
     try {
+      const transcripts = submissions
+        .map(sub => sub.subtitlesContent)
+        .filter((t): t is string => !!t && t.trim().length > 0);
       const res = await fetch(`${BASE}api/openai/campaign-coach`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -195,6 +198,7 @@ export default function CampaignDetail() {
           rejectedSubmissions: s.rejectedSubmissions,
           totalSpent: s.totalSpent,
           hookIdeas: c.aiData?.hookIdeas,
+          submissionTranscripts: transcripts,
         }),
       });
       const data = await res.json() as { recommendations?: CoachRec[] };

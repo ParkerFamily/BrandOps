@@ -276,17 +276,23 @@ Return ONLY this exact JSON:
 // ─── AI Submission Review ─────────────────────────────────────────────────────
 
 router.post("/openai/submission-review", async (req, res): Promise<void> => {
-  const { submissionId, videoUrl, campaignTitle, creatorName, creatorNiche, campaignDescription } = req.body;
+  const { submissionId, videoUrl, campaignTitle, creatorName, creatorNiche, campaignDescription, transcript } = req.body;
 
-  const systemPrompt = `You are an expert UGC content reviewer for brands. Score submissions honestly and give actionable feedback. Respond ONLY with valid JSON.`;
+  const systemPrompt = `You are an expert UGC content reviewer for brands. You have access to the full video transcript — use it to give specific, grounded feedback about what the creator actually said and how well it serves the campaign. Score submissions honestly. Respond ONLY with valid JSON.`;
+
+  const transcriptSection = transcript
+    ? `\nVIDEO TRANSCRIPT (what the creator actually said):\n"""\n${transcript.slice(0, 3000)}\n"""\nBase your scores and notes on this real content.`
+    : `\nNo transcript available — base scores on typical patterns for this niche/campaign type.`;
+
   const userPrompt = `Review this UGC video submission:
 Submission ID: ${submissionId}
 Campaign: ${campaignTitle || "Unknown"}
 Campaign Brief: ${campaignDescription || "Standard UGC campaign"}
 Creator: ${creatorName || "Unknown"} (${creatorNiche || "lifestyle"})
 Video URL: ${videoUrl || "not provided"}
+${transcriptSection}
 
-Score each dimension 1-10 and provide brief, specific notes. Return ONLY this JSON:
+Score each dimension 1-10 and provide brief, specific notes referencing what the creator actually said. Return ONLY this JSON:
 {
   "hookStrength": 7,
   "brandFit": 8,
@@ -294,13 +300,11 @@ Score each dimension 1-10 and provide brief, specific notes. Return ONLY this JS
   "ugcAuthenticity": 9,
   "conversionPotential": 7,
   "overallScore": 74,
-  "aiNotes": "One paragraph with specific, actionable feedback referencing the campaign goal",
+  "aiNotes": "One paragraph referencing specific things the creator said and how they serve (or miss) the campaign goal",
   "recommendation": "approve" | "revise" | "reject",
-  "strengths": ["strength 1", "strength 2"],
-  "improvements": ["improvement 1", "improvement 2"]
-}
-
-Note: overallScore is 0-100. Be honest but constructive. Since you can't view the video, base scores on typical performance patterns for this niche/campaign type and generate realistic, varied scores.`;
+  "strengths": ["specific strength referencing transcript", "another specific strength"],
+  "improvements": ["specific improvement with quote or reference", "another specific improvement"]
+}`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.4",
@@ -368,20 +372,27 @@ Return ONLY this JSON:
 router.post("/openai/campaign-coach", async (req, res): Promise<void> => {
   const { title, description, platform, totalBudget, payoutPerVideo, videosNeeded, deadline, niche,
           totalSubmissions, approvedSubmissions, pendingSubmissions, rejectedSubmissions, totalSpent,
-          hookIdeas, creatorBrief } = req.body;
+          hookIdeas, creatorBrief, submissionTranscripts } = req.body;
 
   const daysLeft = deadline ? Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000)) : null;
   const paceRatio = videosNeeded > 0 ? approvedSubmissions / videosNeeded : 0;
   const totalDays = deadline ? Math.ceil((new Date(deadline).getTime() - new Date(Date.now() - 30 * 86400000).getTime()) / 86400000) : 30;
   const timeRatio = totalDays > 0 ? (totalDays - (daysLeft ?? 0)) / totalDays : 0;
 
-  const systemPrompt = `You are an expert UGC campaign manager. You give sharp, specific, data-driven coaching — not generic advice. Respond ONLY with valid JSON.`;
+  const transcriptsSection = (submissionTranscripts as string[] | undefined)?.length
+    ? `\nCREATOR VIDEO TRANSCRIPTS (what creators actually said in their submissions):\n${
+        (submissionTranscripts as string[]).slice(0, 3).map((t, i) => `[Creator ${i + 1}]: ${t.slice(0, 600)}`).join("\n\n")
+      }\nUse these transcripts to give specific feedback about messaging, brand fit, hooks used, and what's working or missing.`
+    : "";
+
+  const systemPrompt = `You are an expert UGC campaign manager with access to creator video transcripts. You give sharp, specific, data-driven coaching grounded in what creators actually said — not generic advice. Respond ONLY with valid JSON.`;
   const userPrompt = `Analyze this live UGC campaign and generate 3 coaching recommendations:
 
 Campaign: "${title}"
 Budget: $${totalBudget} | Payout: $${payoutPerVideo}/video | Videos Needed: ${videosNeeded}
 ${daysLeft !== null ? `Days Left: ${daysLeft}` : ""}
 ${niche ? `Niche: ${niche}` : ""}
+${description ? `Brief: ${description.slice(0, 300)}` : ""}
 
 Live stats:
 - Total Submissions: ${totalSubmissions}
@@ -392,8 +403,9 @@ Live stats:
 - Progress vs deadline: ${Math.round(paceRatio * 100)}% of videos approved, ${Math.round(timeRatio * 100)}% of time elapsed
 
 ${hookIdeas?.length ? `Hook ideas on brief: ${hookIdeas.slice(0, 2).join("; ")}` : ""}
+${transcriptsSection}
 
-Give 3 coaching insights. Be SPECIFIC to this campaign's numbers. If behind pace, say so. If payout seems low for the niche, say so. If budget is about to run out, flag it.
+Give 3 coaching insights. Be SPECIFIC — reference actual transcript content where available, call out exact numbers, quote or paraphrase what creators said if relevant.
 
 Return ONLY this JSON:
 {

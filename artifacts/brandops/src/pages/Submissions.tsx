@@ -49,10 +49,13 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
-function AIScoreCard({ submissionId, campaignTitle, creatorName }: {
+function AIScoreCard({ submissionId, campaignTitle, creatorName, transcript, videoUrl, campaignDescription }: {
   submissionId: string;
   campaignTitle?: string;
   creatorName?: string;
+  transcript?: string;
+  videoUrl?: string;
+  campaignDescription?: string;
 }) {
   const [review, setReview] = useState<AIReview | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -62,7 +65,7 @@ function AIScoreCard({ submissionId, campaignTitle, creatorName }: {
       const r = await fetch(`${BASE}api/openai/submission-review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId, campaignTitle, creatorName }),
+        body: JSON.stringify({ submissionId, campaignTitle, creatorName, transcript, videoUrl, campaignDescription }),
       });
       if (!r.ok) throw new Error("Review failed");
       return r.json() as Promise<AIReview>;
@@ -351,6 +354,9 @@ export default function Submissions() {
                       submissionId={sub.id!}
                       campaignTitle={sub.campaignTitle}
                       creatorName={sub.creatorName}
+                      transcript={sub.subtitlesContent}
+                      videoUrl={sub.videoUrl}
+                      campaignDescription={sub.campaignTitle}
                     />
                   </div>
 
