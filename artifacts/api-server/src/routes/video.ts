@@ -467,20 +467,37 @@ router.post("/video/export-watermarked", async (req, res): Promise<void> => {
       ]);
     }
 
-    logger.info({ submissionId }, "Watermark export: uploading");
-    const videoBuffer = await readFile(outputPath);
-    const storagePath = `watermarked-exports/${submissionId}_wm.mp4`;
-    const url = await uploadToFirebaseStorage(videoBuffer, storagePath, "video/mp4");
+    // Stream the file directly to the client — no Firebase upload needed
+    logger.info({ submissionId }, "Watermark export: streaming to client");
+    const filename = `brandops_${submissionId}_watermarked.mp4`;
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
-    logger.info({ submissionId, url }, "Watermark export complete");
-    res.json({ url });
+    const { createReadStream } = await import("node:fs");
+    const stream = createReadStream(outputPath);
+    stream.pipe(res);
+
+    stream.on("end", () => {
+      unlink(inputPath).catch(() => {});
+      unlink(outputPath).catch(() => {});
+      logger.info({ submissionId }, "Watermark export complete");
+    });
+    stream.on("error", (err) => {
+      logger.error({ err, submissionId }, "Watermark stream error");
+      unlink(inputPath).catch(() => {});
+      unlink(outputPath).catch(() => {});
+    });
+    return; // don't fall through to finally cleanup
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ err, submissionId }, "Watermark export failed");
     res.status(500).json({ error: msg });
   } finally {
-    unlink(inputPath).catch(() => {});
-    unlink(outputPath).catch(() => {});
+    // only clean up on error path (success path cleans up on stream end)
+    if (!res.headersSent) {
+      unlink(inputPath).catch(() => {});
+      unlink(outputPath).catch(() => {});
+    }
   }
 });
 

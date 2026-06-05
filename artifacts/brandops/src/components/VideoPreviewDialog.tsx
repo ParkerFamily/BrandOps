@@ -85,8 +85,16 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
         body: JSON.stringify({ submissionId: submission.id, videoUrl }),
       });
       if (!res.ok) throw new Error("Server error");
-      const { url } = await res.json() as { url: string };
-      await handleDirectDownload(url, `brandops_${submission.id ?? "export"}`);
+      // Endpoint streams the file directly — save blob as download
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `brandops_${submission.id ?? "export"}_watermarked.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
     } catch {
       toast({ title: "Export failed", description: "Could not generate watermarked video.", variant: "destructive" });
     } finally {
