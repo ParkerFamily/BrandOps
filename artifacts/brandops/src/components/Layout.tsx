@@ -16,7 +16,7 @@ import {
   DollarSign,
   Receipt,
 } from "lucide-react";
-import logoPath from "@assets/ChatGPT_Image_May_28,_2026,_01_51_59_AM_1779947531447.png";
+import logoPath from "@assets/image_1780635730449.png";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -115,7 +115,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-border bg-sidebar">
         <div className="flex items-center gap-2.5 group cursor-pointer">
-          <BrandOpsIcon />
+          <img src={logoPath} alt="BrandOps" className="w-8 h-8 object-contain" />
           <span className="font-bold text-base tracking-tight">BrandOps</span>
         </div>
         <button
@@ -138,7 +138,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Logo area */}
         <div className="px-5 py-5 hidden md:block border-b border-sidebar-border/50 mb-3">
           <Link href="/dashboard" className="flex items-center gap-3 group">
-            <BrandOpsIcon />
+            <img src={logoPath} alt="BrandOps" className="w-8 h-8 object-contain" />
             <div>
               <div className="font-black text-base tracking-tight leading-none group-hover:text-primary transition-colors">
                 BrandOps

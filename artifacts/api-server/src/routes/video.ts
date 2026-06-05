@@ -423,24 +423,49 @@ router.post("/video/export-watermarked", async (req, res): Promise<void> => {
     logger.info({ submissionId }, "Watermark export: downloading video");
     await downloadVideo(videoUrl, inputPath);
 
-    // Top-right watermark: white text at 65% opacity, small dark backing box
-    const watermarkFilter =
-      "drawtext=text='BrandOps':" +
-      "x=w-tw-20:y=20:" +
-      "fontsize=26:fontcolor=white@0.65:" +
-      "box=1:boxcolor=black@0.35:boxborderw=10";
+    // Logo-based watermark: scale logo to 35% of video width, remove black bg via colorkey,
+    // center it at 45% opacity; fallback to drawtext if logo file is missing.
+    const logoFile = "/home/runner/workspace/artifacts/brandops/public/logo.png";
+    const logoExists = existsSync(logoFile);
 
-    logger.info({ submissionId }, "Watermark export: rendering with FFmpeg");
-    await runFFmpeg([
-      "-i", inputPath,
-      "-vf", watermarkFilter,
-      "-c:v", "libx264",
-      "-preset", "fast",
-      "-crf", "22",
-      "-movflags", "+faststart",
-      "-c:a", "copy",
-      "-y", outputPath,
-    ]);
+    logger.info({ submissionId, logoExists }, "Watermark export: rendering with FFmpeg");
+
+    if (logoExists) {
+      const filterComplex =
+        "[1:v]scale=iw*0.35:-1," +
+        "colorkey=0x000000:similarity=0.25:blend=0.1," +
+        "format=rgba,colorchannelmixer=aa=0.45[logo];" +
+        "[0:v][logo]overlay=(W-w)/2:(H-h)/2";
+
+      await runFFmpeg([
+        "-i", inputPath,
+        "-i", logoFile,
+        "-filter_complex", filterComplex,
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "22",
+        "-movflags", "+faststart",
+        "-c:a", "copy",
+        "-y", outputPath,
+      ]);
+    } else {
+      const watermarkFilter =
+        "drawtext=text='BrandOps':" +
+        "x=(w-tw)/2:y=(h-th)/2:" +
+        "fontsize=40:fontcolor=white@0.35:" +
+        "box=1:boxcolor=black@0.15:boxborderw=16";
+
+      await runFFmpeg([
+        "-i", inputPath,
+        "-vf", watermarkFilter,
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "22",
+        "-movflags", "+faststart",
+        "-c:a", "copy",
+        "-y", outputPath,
+      ]);
+    }
 
     logger.info({ submissionId }, "Watermark export: uploading");
     const videoBuffer = await readFile(outputPath);

@@ -178,26 +178,18 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
 
                 {/* BrandOps watermark overlay — visible for free plan users */}
                 {!planLoading && !canRemoveWatermark && (
-                  <div className="absolute top-3 right-3 pointer-events-none select-none">
-                    <div
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md"
-                      style={{
-                        background: "rgba(0,0,0,0.38)",
-                        backdropFilter: "blur(4px)",
-                        opacity: 0.72,
-                      }}
+                  <div className="absolute inset-0 pointer-events-none select-none flex flex-col items-center justify-center gap-3">
+                    <img
+                      src="/logo.png"
+                      alt="BrandOps watermark"
+                      style={{ width: "55%", maxWidth: 180, opacity: 0.22, filter: "drop-shadow(0 0 12px rgba(198,255,0,0.25))" }}
+                    />
+                    <span
+                      className="font-black tracking-widest uppercase"
+                      style={{ color: "rgba(198,255,0,0.35)", fontSize: 13, letterSpacing: "0.22em" }}
                     >
-                      <div
-                        className="w-3.5 h-3.5 rounded-[3px] shrink-0"
-                        style={{ background: "#FF3C00" }}
-                      />
-                      <span
-                        className="text-white font-bold tracking-wide"
-                        style={{ fontSize: 11, letterSpacing: "0.04em" }}
-                      >
-                        BrandOps
-                      </span>
-                    </div>
+                      BrandOps
+                    </span>
                   </div>
                 )}
 
