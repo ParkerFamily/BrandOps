@@ -336,9 +336,23 @@ function BrandPaymentsPage() {
   }>({ open: false });
 
   const allPayments = payments;
-  const totalPaid       = allPayments.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0);
-  const totalProcessing = allPayments.filter(p => p.status === "processing").reduce((s, p) => s + p.amount, 0);
-  const totalPending    = allPayments.filter(p => p.status === "pending").reduce((s, p) => s + p.amount, 0);
+
+  // Stripe is the authoritative source for paid/processing amounts.
+  // Firestore status is only updated to "processing" when a PI is created —
+  // it never auto-updates to "paid" when Stripe settles — so we must read
+  // actual statuses from the Stripe payouts response.
+  const stripeData = stripePayouts?.data ?? [];
+  const totalPaid = stripeData
+    .filter(p => p.status === "succeeded")
+    .reduce((s, p) => s + p.amount, 0);
+  const totalProcessing = stripeData
+    .filter(p => p.status === "processing" || p.status === "requires_confirmation")
+    .reduce((s, p) => s + p.amount, 0);
+  // Pending: Firestore payments not yet pushed to Stripe (no PI created yet)
+  const stripeSubmissionIds = new Set(stripeData.map(p => p.submissionId).filter(Boolean));
+  const totalPending = allPayments
+    .filter(p => p.status === "pending" && !stripeSubmissionIds.has(p.submissionId))
+    .reduce((s, p) => s + p.amount, 0);
 
   const handleProcessPayment = async (id: string) => {
     try {
@@ -403,7 +417,7 @@ function BrandPaymentsPage() {
               <p className="text-sm font-medium text-muted-foreground">Total Paid</p>
               <CheckCircle2 className="h-4 w-4 text-primary" />
             </div>
-            <div className="text-2xl font-bold">${totalPaid.toLocaleString()}</div>
+            <div className="text-2xl font-bold">${totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
         <Card className="bg-card border-card-border">
@@ -412,7 +426,7 @@ function BrandPaymentsPage() {
               <p className="text-sm font-medium text-muted-foreground">Processing</p>
               <Clock className="h-4 w-4 text-blue-400" />
             </div>
-            <div className="text-2xl font-bold">${totalProcessing.toLocaleString()}</div>
+            <div className="text-2xl font-bold">${totalProcessing.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
         <Card className="bg-card border-card-border">
@@ -421,7 +435,7 @@ function BrandPaymentsPage() {
               <p className="text-sm font-medium text-muted-foreground">Pending</p>
               <AlertCircle className="h-4 w-4 text-yellow-400" />
             </div>
-            <div className="text-2xl font-bold">${totalPending.toLocaleString()}</div>
+            <div className="text-2xl font-bold">${totalPending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </CardContent>
         </Card>
       </div>
@@ -509,8 +523,14 @@ function BrandPaymentsPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-sm">{payment.campaignTitle ?? "Unknown"}</TableCell>
-                    <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                    <TableCell className="text-right font-bold">${payment.amount}</TableCell>
+                    <TableCell>{
+                      // If Stripe has settled this payment, show Paid regardless of Firestore status
+                      stripeSubmissionIds.has(payment.submissionId) &&
+                      stripeData.find(s => s.submissionId === payment.submissionId)?.status === "succeeded"
+                        ? getStatusBadge("paid")
+                        : getStatusBadge(payment.status)
+                    }</TableCell>
+                    <TableCell className="text-right font-bold">${Number(payment.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right space-x-1">
                       {payment.status === "pending" && (
                         <>
