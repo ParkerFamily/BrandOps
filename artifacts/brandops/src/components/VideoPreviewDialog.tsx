@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Check, ExternalLink, Loader2, Film, Wand2, FileText } from "lucide-react";
+import { Sparkles, Check, ExternalLink, Loader2, Film, Wand2, FileText, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type FsSubmission } from "@/lib/firestore";
 
@@ -44,6 +44,20 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
       toast({ title: "Failed to submit", variant: "destructive" });
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleDownload = async (url: string, label: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${label.replace(/\s+/g, "_")}.mp4`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast({ title: "Download failed", description: "Try opening the video and saving manually.", variant: "destructive" });
     }
   };
 
@@ -189,6 +203,40 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
                   )}
                 </div>
               </ScrollArea>
+            </div>
+
+            {/* Export */}
+            <div className="px-5 pb-4 border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-3">Export</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => handleDownload(submission.videoUrl, `original_${submission.id ?? "video"}`)}
+                >
+                  <Download className="h-3.5 w-3.5" /> Download Original
+                </Button>
+                {hasEnhanced && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                    onClick={() => handleDownload(submission.processedVideoUrl!, `enhanced_${submission.id ?? "video"}`)}
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download Enhanced
+                  </Button>
+                )}
+                <a
+                  href={activeView === "enhanced" && hasEnhanced ? submission.processedVideoUrl : submission.videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground">
+                    <ExternalLink className="h-3.5 w-3.5" /> Open in Tab
+                  </Button>
+                </a>
+              </div>
             </div>
 
             {/* CTAs — only shown when enhanced version exists */}
