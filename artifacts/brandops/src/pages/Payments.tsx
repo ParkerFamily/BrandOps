@@ -1,7 +1,4 @@
-import { useState, useEffect } from "react";
-import {
-  fsSubscribePayments, fsUpdatePayment, type FsPayment,
-} from "@/lib/firestore";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -308,63 +305,79 @@ function CreatorEarningsPage() {
 
 /* ─────────────────────────── BRAND PAYMENTS ─────────────────────────────── */
 
+interface PgPayment {
+  id: number;
+  submissionId: number;
+  creatorId: number;
+  campaignId: number;
+  amount: number;
+  status: "pending" | "processing" | "paid" | "failed";
+  paidAt: string | null;
+  createdAt: string;
+  creator: { name: string; email: string } | null;
+  campaign: { title: string } | null;
+}
+
 function BrandPaymentsPage() {
-  const { user } = useAuth();
-  const [payments, setPayments] = useState<FsPayment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (!user?.uid) return;
-    const unsub = fsSubscribePayments((data) => {
-      setPayments(data);
-      setIsLoading(false);
-    });
-    return unsub;
-  }, [user?.uid]);
+  const { data: allPayments = [], isLoading, refetch } = useQuery<PgPayment[]>({
+    queryKey: ["payments"],
+    queryFn: async () => {
+      const res = await fetch(`${BASE}api/payments`);
+      if (!res.ok) throw new Error("Failed to load payments");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+  });
+
+  const updatePaymentStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await fetch(`${BASE}api/payments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Failed to update payment");
+      return res.json();
+    },
+    onSuccess: () => void refetch(),
+  });
 
   const { data: stripePayouts, isLoading: stripeLoading, error: stripeError } = useStripePayouts();
   const createPayoutIntent = useCreateStripePayoutIntent();
 
   const [payoutDialog, setPayoutDialog] = useState<{
     open: boolean;
-    paymentId?: string;
+    paymentId?: number;
     amount?: number;
     creator?: { name: string; email: string } | null;
-    submissionId?: string;
+    submissionId?: number;
     result?: { paymentIntentId: string };
   }>({ open: false });
 
-  const allPayments = payments;
-
-  // Stripe is the authoritative source for paid/processing amounts.
-  // Firestore status is only updated to "processing" when a PI is created —
-  // it never auto-updates to "paid" when Stripe settles — so we must read
-  // actual statuses from the Stripe payouts response.
-  const stripeData = stripePayouts?.data ?? [];
-  const totalPaid = stripeData
-    .filter(p => p.status === "succeeded")
+  // Totals come straight from PostgreSQL — the authoritative source
+  const totalPaid = allPayments
+    .filter(p => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);
-  const totalProcessing = stripeData
-    .filter(p => p.status === "processing" || p.status === "requires_confirmation")
+  const totalProcessing = allPayments
+    .filter(p => p.status === "processing")
     .reduce((s, p) => s + p.amount, 0);
-  // Pending: Firestore payments not yet pushed to Stripe (no PI created yet)
-  const stripeSubmissionIds = new Set(stripeData.map(p => p.submissionId).filter(Boolean));
   const totalPending = allPayments
-    .filter(p => p.status === "pending" && !stripeSubmissionIds.has(p.submissionId))
+    .filter(p => p.status === "pending")
     .reduce((s, p) => s + p.amount, 0);
 
-  const handleProcessPayment = async (id: string) => {
+  const handleProcessPayment = async (id: number) => {
     try {
-      await fsUpdatePayment(id, { status: "processing" });
+      await updatePaymentStatus.mutateAsync({ id, status: "processing" });
       toast({ title: "Payment marked as processing" });
     } catch {
       toast({ title: "Failed to update payment", variant: "destructive" });
     }
   };
 
-  const handleIssuePayout = (payment: FsPayment) => {
-    if (!payment.creatorEmail || !payment.creatorName) {
+  const handleIssuePayout = (payment: PgPayment) => {
+    if (!payment.creator?.email || !payment.creator?.name) {
       toast({ title: "No creator linked to payment", variant: "destructive" });
       return;
     }
@@ -372,7 +385,7 @@ function BrandPaymentsPage() {
       open: true,
       paymentId: payment.id,
       amount: payment.amount,
-      creator: { name: payment.creatorName, email: payment.creatorEmail },
+      creator: { name: payment.creator.name, email: payment.creator.email },
       submissionId: payment.submissionId,
     });
   };
@@ -384,13 +397,13 @@ function BrandPaymentsPage() {
         amount: payoutDialog.amount,
         creatorEmail: payoutDialog.creator.email,
         creatorName: payoutDialog.creator.name,
-        submissionId: payoutDialog.submissionId,
+        submissionId: String(payoutDialog.submissionId),
       },
       {
         onSuccess: (data) => {
           setPayoutDialog(d => ({ ...d, result: { paymentIntentId: data.paymentIntentId } }));
-          if (payoutDialog.paymentId) {
-            fsUpdatePayment(payoutDialog.paymentId, { status: "processing" });
+          if (payoutDialog.paymentId != null) {
+            updatePaymentStatus.mutate({ id: payoutDialog.paymentId, status: "processing" });
           }
           toast({ title: "Stripe payout intent created", description: `PI: ${data.paymentIntentId}` });
         },
@@ -512,29 +525,23 @@ function BrandPaymentsPage() {
               <TableBody>
                 {allPayments.map(payment => (
                   <TableRow key={payment.id} className="border-border hover:bg-muted/30">
-                    <TableCell className="text-muted-foreground text-sm">{format(new Date(getTimestamp(payment.createdAt)), "MMM d, yyyy")}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{format(new Date(payment.createdAt), "MMM d, yyyy")}</TableCell>
                     <TableCell>
-                      <div className="font-medium text-foreground text-sm">{payment.creatorName ?? "Unknown"}</div>
-                      <div className="text-xs text-muted-foreground">{payment.creatorEmail}</div>
-                      {!payment.creatorEmail && (
+                      <div className="font-medium text-foreground text-sm">{payment.creator?.name ?? "Unknown"}</div>
+                      <div className="text-xs text-muted-foreground">{payment.creator?.email}</div>
+                      {!payment.creator?.email && (
                         <div className="flex items-center gap-1 text-xs text-yellow-400 mt-0.5">
                           <TriangleAlert className="h-3 w-3" /> No payment info
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">{payment.campaignTitle ?? "Unknown"}</TableCell>
-                    <TableCell>{
-                      // If Stripe has settled this payment, show Paid regardless of Firestore status
-                      stripeSubmissionIds.has(payment.submissionId) &&
-                      stripeData.find(s => s.submissionId === payment.submissionId)?.status === "succeeded"
-                        ? getStatusBadge("paid")
-                        : getStatusBadge(payment.status)
-                    }</TableCell>
-                    <TableCell className="text-right font-bold">${Number(payment.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-sm">{payment.campaign?.title ?? "Unknown"}</TableCell>
+                    <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                    <TableCell className="text-right font-bold">${payment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right space-x-1">
                       {payment.status === "pending" && (
                         <>
-                          <Button size="sm" variant="ghost" onClick={() => handleProcessPayment(payment.id!)}>
+                          <Button size="sm" variant="ghost" onClick={() => handleProcessPayment(payment.id)}>
                             Mark Processing
                           </Button>
                           <Button
