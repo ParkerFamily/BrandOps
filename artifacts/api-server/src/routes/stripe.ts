@@ -120,7 +120,7 @@ router.get('/stripe/payout-intent/:id', async (req, res): Promise<void> => {
   res.json({ id: pi.id, status: pi.status, amount: pi.amount / 100, currency: pi.currency });
 });
 
-// List recent payout intents
+// List recent payout intents (creator payouts only)
 router.get('/stripe/payouts', async (req, res): Promise<void> => {
   const stripe = await getUncachableStripeClient();
   const paymentIntents = await stripe.paymentIntents.list({ limit: 20 });
@@ -137,6 +137,55 @@ router.get('/stripe/payouts', async (req, res): Promise<void> => {
     }));
 
   res.json({ data: payouts });
+});
+
+// All real charges for the authenticated brand — Stripe is the source of truth
+router.get('/stripe/brand-charges', async (req, res): Promise<void> => {
+  const uid = typeof req.query.uid === 'string' ? req.query.uid : '';
+  if (!uid) {
+    res.status(400).json({ error: 'uid is required' });
+    return;
+  }
+
+  const [profile] = await db
+    .select()
+    .from(userProfilesTable)
+    .where(eq(userProfilesTable.firebaseUid, uid))
+    .limit(1);
+
+  if (!profile?.stripeCustomerId) {
+    res.json({ data: [], totalPaid: 0, totalProcessing: 0, totalPending: 0 });
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+
+  // Fetch all charges for this customer (real money in/out)
+  const charges = await stripe.charges.list({
+    customer: profile.stripeCustomerId,
+    limit: 100,
+  });
+
+  const mapped = charges.data.map(c => ({
+    id: c.id,
+    amount: c.amount / 100,
+    currency: c.currency,
+    status: c.status, // 'succeeded' | 'pending' | 'failed'
+    description: c.description ?? c.metadata?.type ?? 'Charge',
+    receiptUrl: c.receipt_url,
+    createdAt: new Date(c.created * 1000).toISOString(),
+  }));
+
+  const totalPaid = mapped
+    .filter(c => c.status === 'succeeded')
+    .reduce((s, c) => s + c.amount, 0);
+  const totalProcessing = mapped
+    .filter(c => c.status === 'pending')
+    .reduce((s, c) => s + c.amount, 0);
+  const totalPending = 0; // pending means Stripe is processing — no separate "queued" bucket
+
+  req.log.info({ uid, customerId: profile.stripeCustomerId, count: mapped.length, totalPaid }, 'Brand charges fetched');
+  res.json({ data: mapped, totalPaid, totalProcessing, totalPending });
 });
 
 // Real earnings for a specific creator — queries Stripe directly by email
