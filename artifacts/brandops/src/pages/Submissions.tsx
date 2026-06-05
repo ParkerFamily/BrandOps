@@ -320,6 +320,14 @@ export default function Submissions() {
                 <div className="md:w-56 bg-muted relative aspect-video md:aspect-auto flex items-center justify-center group shrink-0">
                   {sub.thumbnailUrl ? (
                     <img src={sub.thumbnailUrl} alt="Thumbnail" className="object-cover w-full h-full" />
+                  ) : sub.videoUrl ? (
+                    <video
+                      src={sub.videoUrl}
+                      className="object-cover w-full h-full"
+                      preload="metadata"
+                      muted
+                      playsInline
+                    />
                   ) : (
                     <PlayCircle className="h-10 w-10 text-muted-foreground" />
                   )}
