@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
-import { VideoPreviewDialog, type CaptionStyle } from "@/components/VideoPreviewDialog";
+import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -258,26 +258,6 @@ export default function CampaignDetail() {
     } catch { toast({ title: "Failed to update submission", variant: "destructive" }); }
   };
 
-  const handleEnhance = async (sub: FsSubmission, captionStyle: CaptionStyle = "bold_white") => {
-    try {
-      const res = await fetch(`${BASE}api/video/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionId: sub.id,
-          videoUrl: sub.videoUrl,
-          campaignTitle: sub.campaignTitle ?? campaign?.title ?? "",
-          brandName: campaign?.title ?? "Brand",
-          ctaText: "Learn More",
-          captionStyle,
-        }),
-      });
-      if (!res.ok) throw new Error("Server error");
-      toast({ title: "Processing started!", description: "BrandOps is enhancing your video — this takes 1–2 min." });
-    } catch {
-      toast({ title: "Failed to start processing", variant: "destructive" });
-    }
-  };
 
   const refetchCoach = () => {
     if (!campaign) return;
@@ -545,31 +525,6 @@ export default function CampaignDetail() {
                         </div>
 
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
-                          {/* AI enhance — available to creators and brands */}
-                          {(!sub.processingStatus || sub.processingStatus === "idle") && (
-                            <Button size="sm" variant="outline" onClick={() => handleEnhance(sub)}
-                              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10">
-                              <Wand2 className="h-3.5 w-3.5" /> Enhance with AI
-                            </Button>
-                          )}
-                          {sub.processingStatus === "processing" && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground py-1.5 px-2 rounded-lg bg-primary/5 border border-primary/15">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                              <span>Processing…</span>
-                            </div>
-                          )}
-                          {sub.processingStatus === "done" && (
-                            <Button size="sm" onClick={() => { setPreviewSub(sub); setPreviewOpen(true); }}
-                              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_12px_rgba(198,255,0,0.2)]">
-                              <Sparkles className="h-3.5 w-3.5" /> Preview Enhanced
-                            </Button>
-                          )}
-                          {sub.processingStatus === "error" && (
-                            <Button size="sm" variant="ghost" onClick={() => handleEnhance(sub)}
-                              className="text-xs text-red-400 gap-1.5">
-                              <RotateCcw className="h-3.5 w-3.5" /> Retry
-                            </Button>
-                          )}
 
                           {/* Brand review actions */}
                           {!isCreator && (sub.status === "reviewing" || sub.status === "pending") && (
@@ -755,8 +710,6 @@ export default function CampaignDetail() {
           onOpenChange={setPreviewOpen}
           submission={previewSub}
           isBrand={!isCreator}
-          canEnhance={isCreator && (!previewSub.processingStatus || previewSub.processingStatus === "idle" || previewSub.processingStatus === "error")}
-          onEnhance={(style) => handleEnhance(previewSub, style)}
         />
       )}
     </div>

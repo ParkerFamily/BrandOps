@@ -18,7 +18,7 @@ import { format } from "date-fns";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
-import { VideoPreviewDialog, type CaptionStyle } from "@/components/VideoPreviewDialog";
+import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 
 const BASE = import.meta.env.BASE_URL;
@@ -224,26 +224,6 @@ export default function Submissions() {
       .finally(() => setSelectedLoading(false));
   }, [selectedSubmissionId]);
 
-  const handleEnhance = async (sub: FsSubmission, captionStyle: CaptionStyle = "bold_white") => {
-    try {
-      const res = await fetch(`${BASE}api/video/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionId: sub.id,
-          videoUrl: sub.videoUrl,
-          campaignTitle: sub.campaignTitle ?? "",
-          brandName: sub.campaignTitle ?? "Brand",
-          ctaText: "Learn More",
-          captionStyle,
-        }),
-      });
-      if (!res.ok) throw new Error("Server error");
-      toast({ title: "Processing started!", description: "BrandOps is enhancing your video — this takes 1–2 min." });
-    } catch {
-      toast({ title: "Failed to start processing", variant: "destructive" });
-    }
-  };
 
   const handleReview = async (id: string, status: "approved" | "rejected" | "revision_requested") => {
     try {
@@ -384,49 +364,6 @@ export default function Submissions() {
                       </Button>
                     )}
 
-                    {/* Creator: enhance / processing status / preview */}
-                    {isCreator && (
-                      <>
-                        {(!sub.processingStatus || sub.processingStatus === "idle") && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEnhance(sub)}
-                            className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-                          >
-                            <Wand2 className="h-3.5 w-3.5" /> Enhance with AI
-                          </Button>
-                        )}
-                        {sub.processingStatus === "processing" && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground py-1.5 px-2 rounded-lg bg-primary/5 border border-primary/15">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                            <span>Processing your video…</span>
-                          </div>
-                        )}
-                        {sub.processingStatus === "done" && (
-                          <Button
-                            size="sm"
-                            onClick={() => { setPreviewSub(sub); setPreviewOpen(true); }}
-                            className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_12px_rgba(198,255,0,0.2)]"
-                          >
-                            <Sparkles className="h-3.5 w-3.5" /> Preview Enhanced
-                          </Button>
-                        )}
-                        {sub.processingStatus === "error" && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-red-400">Processing failed</span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleEnhance(sub)}
-                              className="text-xs text-muted-foreground h-auto py-1 px-2"
-                            >
-                              Retry
-                            </Button>
-                          </div>
-                        )}
-                      </>
-                    )}
 
                     {/* Brand: approve / revision / reject */}
                     {!isCreator && (sub.status === "pending" || sub.status === "reviewing") && (
@@ -531,8 +468,6 @@ export default function Submissions() {
           submission={previewSub}
           onApproved={() => setPreviewSub(null)}
           isBrand={!isCreator}
-          canEnhance={isCreator && (!previewSub.processingStatus || previewSub.processingStatus === "idle" || previewSub.processingStatus === "error")}
-          onEnhance={(style) => handleEnhance(previewSub, style)}
         />
       )}
     </div>
