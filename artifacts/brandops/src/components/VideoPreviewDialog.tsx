@@ -1,12 +1,17 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Check, ExternalLink, Loader2, Film, Wand2, FileText, Download } from "lucide-react";
+import {
+  Sparkles, Check, ExternalLink, Loader2, Film, Wand2,
+  FileText, Download, Lock, Zap,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type FsSubmission } from "@/lib/firestore";
+import { useSubscription } from "@/hooks/use-subscription";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -20,8 +25,12 @@ interface Props {
 
 export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved, isBrand }: Props) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [activeView, setActiveView] = useState<"original" | "enhanced">("original");
   const [approving, setApproving] = useState(false);
+  const [watermarkLoading, setWatermarkLoading] = useState(false);
+
+  const { canRemoveWatermark, plan, isLoading: planLoading } = useSubscription();
 
   const handleApprove = async (choice: "processed" | "original") => {
     setApproving(true);
@@ -47,7 +56,8 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
     }
   };
 
-  const handleDownload = async (url: string, label: string) => {
+  // Download a URL directly (no server processing)
+  const handleDirectDownload = async (url: string, label: string) => {
     try {
       const res = await fetch(url);
       const blob = await res.blob();
@@ -61,12 +71,43 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
     }
   };
 
+  // Export with BrandOps watermark burned in server-side
+  const handleWatermarkedExport = async () => {
+    const videoUrl = activeView === "enhanced" && hasEnhanced
+      ? submission.processedVideoUrl!
+      : submission.videoUrl;
+
+    setWatermarkLoading(true);
+    try {
+      const res = await fetch(`${BASE}api/video/export-watermarked`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId: submission.id, videoUrl }),
+      });
+      if (!res.ok) throw new Error("Server error");
+      const { url } = await res.json() as { url: string };
+      await handleDirectDownload(url, `brandops_${submission.id ?? "export"}`);
+    } catch {
+      toast({ title: "Export failed", description: "Could not generate watermarked video.", variant: "destructive" });
+    } finally {
+      setWatermarkLoading(false);
+    }
+  };
+
+  const handleUpgradeRedirect = () => {
+    onOpenChange(false);
+    navigate("/billing");
+  };
+
   const isDirectVideoUrl = (url: string) =>
     /\.(mp4|webm|mov|ogg)(\?|$)/i.test(url) ||
     url.includes("firebasestorage.googleapis.com");
 
   const transcript = submission.subtitlesContent;
   const hasEnhanced = !!submission.processedVideoUrl;
+  const activeVideoUrl = activeView === "enhanced" && hasEnhanced
+    ? submission.processedVideoUrl!
+    : submission.videoUrl;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -84,7 +125,7 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
               </DialogHeader>
             </div>
 
-            {/* View toggle — only show if enhanced version exists */}
+            {/* View toggle — only shown when enhanced exists */}
             {hasEnhanced && (
               <div className="flex gap-1 bg-white/5 rounded-lg p-1 mx-4 mt-3 mb-2">
                 <button
@@ -96,8 +137,7 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
                       : "text-white/50 hover:text-white",
                   )}
                 >
-                  <Film className="h-3 w-3" />
-                  Original
+                  <Film className="h-3 w-3" /> Original
                 </button>
                 <button
                   onClick={() => setActiveView("enhanced")}
@@ -108,28 +148,19 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
                       : "text-white/50 hover:text-white",
                   )}
                 >
-                  <Wand2 className="h-3 w-3" />
-                  Enhanced
+                  <Wand2 className="h-3 w-3" /> Enhanced
                   <span className="ml-0.5 text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-bold">AI</span>
                 </button>
               </div>
             )}
 
-            {/* Portrait video container */}
+            {/* Portrait video */}
             <div className="relative flex-1 min-h-0 mx-4 mb-4 mt-3 rounded-xl overflow-hidden bg-zinc-900">
               <div className="w-full h-full" style={{ aspectRatio: "9/16", maxHeight: "65vh" }}>
-                {activeView === "enhanced" && hasEnhanced ? (
+                {isDirectVideoUrl(activeVideoUrl) ? (
                   <video
-                    key={submission.processedVideoUrl}
-                    src={submission.processedVideoUrl}
-                    controls
-                    playsInline
-                    className="w-full h-full object-contain"
-                  />
-                ) : isDirectVideoUrl(submission.videoUrl) ? (
-                  <video
-                    key={submission.videoUrl}
-                    src={submission.videoUrl}
+                    key={activeVideoUrl}
+                    src={activeVideoUrl}
                     controls
                     playsInline
                     className="w-full h-full object-contain"
@@ -138,10 +169,9 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
                   <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-muted-foreground p-4">
                     <Film className="h-10 w-10 opacity-30" />
                     <p className="text-sm text-center">Hosted externally</p>
-                    <a href={submission.videoUrl} target="_blank" rel="noopener noreferrer"
+                    <a href={activeVideoUrl} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 text-primary text-sm hover:underline">
-                      <ExternalLink className="h-4 w-4" />
-                      Open Video
+                      <ExternalLink className="h-4 w-4" /> Open Video
                     </a>
                   </div>
                 )}
@@ -163,8 +193,8 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
             </div>
           </div>
 
-          {/* Right — transcript + actions */}
-          <div className="flex-1 flex flex-col border-t lg:border-t-0 lg:border-l border-border min-h-0">
+          {/* Right — transcript + export + actions */}
+          <div className="flex-1 flex flex-col border-t lg:border-t-0 lg:border-l border-border min-h-0 overflow-y-auto">
 
             {/* Enhancements applied badge row */}
             {hasEnhanced && (
@@ -189,12 +219,10 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
                   {transcript && <span className="ml-2 normal-case text-primary/70 font-normal">via Deepgram</span>}
                 </p>
               </div>
-              <ScrollArea className="flex-1 rounded-lg bg-muted/30 border border-border">
+              <ScrollArea className="flex-1 rounded-lg bg-muted/30 border border-border min-h-[80px]">
                 <div className="p-4">
                   {transcript ? (
-                    <p className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap">
-                      {transcript}
-                    </p>
+                    <p className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap">{transcript}</p>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
                       <FileText className="h-8 w-8 text-muted-foreground/30" />
@@ -206,40 +234,84 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
             </div>
 
             {/* Export */}
-            <div className="px-5 pb-4 border-t border-border pt-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-3">Export</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() => handleDownload(submission.videoUrl, `original_${submission.id ?? "video"}`)}
-                >
-                  <Download className="h-3.5 w-3.5" /> Download Original
-                </Button>
-                {hasEnhanced && (
+            <div className="p-5 border-t border-border space-y-3">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Export</p>
+
+              <div className="grid grid-cols-1 gap-2">
+                {/* Export without watermark — paid only */}
+                <div className="relative">
                   <Button
                     size="sm"
                     variant="outline"
-                    className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
-                    onClick={() => handleDownload(submission.processedVideoUrl!, `enhanced_${submission.id ?? "video"}`)}
+                    className={cn(
+                      "w-full gap-2 justify-start",
+                      canRemoveWatermark
+                        ? "border-primary/40 text-primary hover:bg-primary/10"
+                        : "opacity-60 cursor-not-allowed",
+                    )}
+                    disabled={planLoading || !canRemoveWatermark}
+                    onClick={
+                      canRemoveWatermark
+                        ? () => handleDirectDownload(activeVideoUrl, `clean_${submission.id ?? "video"}`)
+                        : undefined
+                    }
                   >
-                    <Download className="h-3.5 w-3.5" /> Download Enhanced
+                    <Download className="h-3.5 w-3.5 shrink-0" />
+                    Export without watermark
+                    {!canRemoveWatermark && !planLoading && (
+                      <Badge className="ml-auto text-[10px] bg-primary/15 text-primary border-primary/30 gap-1 px-1.5">
+                        <Zap className="h-2.5 w-2.5" /> Upgrade
+                      </Badge>
+                    )}
                   </Button>
-                )}
-                <a
-                  href={activeView === "enhanced" && hasEnhanced ? submission.processedVideoUrl : submission.videoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  {!canRemoveWatermark && !planLoading && (
+                    <button
+                      onClick={handleUpgradeRedirect}
+                      className="absolute inset-0 w-full h-full rounded-md"
+                      aria-label="Upgrade to remove watermark"
+                    />
+                  )}
+                </div>
+
+                {/* Export with BrandOps watermark — always available */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full gap-2 justify-start"
+                  disabled={watermarkLoading}
+                  onClick={handleWatermarkedExport}
                 >
-                  <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground">
-                    <ExternalLink className="h-3.5 w-3.5" /> Open in Tab
+                  {watermarkLoading
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                    : <Download className="h-3.5 w-3.5 shrink-0" />
+                  }
+                  {watermarkLoading ? "Adding watermark…" : "Export with BrandOps watermark"}
+                </Button>
+
+                {/* Open in tab */}
+                <a href={activeVideoUrl} target="_blank" rel="noopener noreferrer" className="block">
+                  <Button size="sm" variant="ghost" className="w-full gap-2 justify-start text-muted-foreground hover:text-foreground">
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    Open in tab
                   </Button>
                 </a>
               </div>
+
+              {/* Upgrade nudge for free users */}
+              {!canRemoveWatermark && !planLoading && (
+                <div
+                  className="flex items-start gap-3 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 cursor-pointer hover:bg-primary/10 transition-colors"
+                  onClick={handleUpgradeRedirect}
+                >
+                  <Lock className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                  <p className="text-xs text-primary/80 leading-snug">
+                    Upgrade to Starter or Growth to remove the BrandOps watermark.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* CTAs — only shown when enhanced version exists */}
+            {/* Approve CTAs — only shown when enhanced version exists */}
             {hasEnhanced && (
               <div className="p-5 border-t border-border">
                 <div className="flex gap-3">

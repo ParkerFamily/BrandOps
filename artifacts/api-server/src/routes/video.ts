@@ -400,4 +400,63 @@ router.post("/video/approve", async (req, res): Promise<void> => {
   }
 });
 
+// ── Watermarked export ────────────────────────────────────────────────────────
+// Burns a semi-transparent "BrandOps" text watermark into the top-right corner.
+// Free users always export with this watermark; paid users can skip it.
+
+router.post("/video/export-watermarked", async (req, res): Promise<void> => {
+  const { submissionId, videoUrl } = req.body as {
+    submissionId?: string;
+    videoUrl?: string;
+  };
+
+  if (!submissionId || !videoUrl) {
+    res.status(400).json({ error: "submissionId and videoUrl are required" });
+    return;
+  }
+
+  const tmp = `/tmp/bo_wm_${submissionId}_${Date.now()}`;
+  const inputPath = `${tmp}_input.mp4`;
+  const outputPath = `${tmp}_wm.mp4`;
+
+  try {
+    logger.info({ submissionId }, "Watermark export: downloading video");
+    await downloadVideo(videoUrl, inputPath);
+
+    // Top-right watermark: white text at 65% opacity, small dark backing box
+    const watermarkFilter =
+      "drawtext=text='BrandOps':" +
+      "x=w-tw-20:y=20:" +
+      "fontsize=26:fontcolor=white@0.65:" +
+      "box=1:boxcolor=black@0.35:boxborderw=10";
+
+    logger.info({ submissionId }, "Watermark export: rendering with FFmpeg");
+    await runFFmpeg([
+      "-i", inputPath,
+      "-vf", watermarkFilter,
+      "-c:v", "libx264",
+      "-preset", "fast",
+      "-crf", "22",
+      "-movflags", "+faststart",
+      "-c:a", "copy",
+      "-y", outputPath,
+    ]);
+
+    logger.info({ submissionId }, "Watermark export: uploading");
+    const videoBuffer = await readFile(outputPath);
+    const storagePath = `watermarked-exports/${submissionId}_wm.mp4`;
+    const url = await uploadToFirebaseStorage(videoBuffer, storagePath, "video/mp4");
+
+    logger.info({ submissionId, url }, "Watermark export complete");
+    res.json({ url });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, submissionId }, "Watermark export failed");
+    res.status(500).json({ error: msg });
+  } finally {
+    unlink(inputPath).catch(() => {});
+    unlink(outputPath).catch(() => {});
+  }
+});
+
 export default router;
