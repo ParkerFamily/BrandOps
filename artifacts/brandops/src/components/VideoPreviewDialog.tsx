@@ -79,22 +79,34 @@ export function VideoPreviewDialog({ open, onOpenChange, submission, onApproved,
 
     setWatermarkLoading(true);
     try {
-      const res = await fetch(`${BASE}api/video/export-watermarked`, {
+      // 1. Start the job — returns immediately with a jobId
+      const startRes = await fetch(`${BASE}api/video/export-watermarked`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ submissionId: submission.id, videoUrl }),
       });
-      if (!res.ok) throw new Error("Server error");
-      // Endpoint streams the file directly — save blob as download
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = `brandops_${submission.id ?? "export"}_watermarked.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
+      if (!startRes.ok) throw new Error("Failed to start export");
+      const { jobId } = await startRes.json() as { jobId: string };
+
+      // 2. Poll status every 2s until done or error
+      while (true) {
+        await new Promise<void>((r) => setTimeout(r, 2000));
+        const statusRes = await fetch(`${BASE}api/video/export-watermarked/${encodeURIComponent(jobId)}/status`);
+        if (!statusRes.ok) throw new Error("Status check failed");
+        const { status, error } = await statusRes.json() as { status: string; error?: string };
+        if (status === "error") throw new Error(error ?? "Export failed");
+        if (status === "done") {
+          // 3. Trigger download — direct GET, no proxy timeout issue
+          const downloadUrl = `${BASE}api/video/export-watermarked/${encodeURIComponent(jobId)}/download`;
+          const a = document.createElement("a");
+          a.href = downloadUrl;
+          a.download = `brandops_${submission.id ?? "export"}_watermarked.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          break;
+        }
+      }
     } catch {
       toast({ title: "Export failed", description: "Could not generate watermarked video.", variant: "destructive" });
     } finally {

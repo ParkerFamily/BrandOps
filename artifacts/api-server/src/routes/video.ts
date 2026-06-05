@@ -400,11 +400,76 @@ router.post("/video/approve", async (req, res): Promise<void> => {
   }
 });
 
-// ── Watermarked export ────────────────────────────────────────────────────────
-// Burns a semi-transparent "BrandOps" text watermark into the top-right corner.
-// Free users always export with this watermark; paid users can skip it.
+// ── Watermarked export (async job pattern) ────────────────────────────────────
+// POST  /video/export-watermarked            → starts FFmpeg in background, returns { jobId }
+// GET   /video/export-watermarked/:jobId/status   → { status: 'pending'|'done'|'error', error? }
+// GET   /video/export-watermarked/:jobId/download → streams the finished file
 
-router.post("/video/export-watermarked", async (req, res): Promise<void> => {
+interface WmJob {
+  status: "pending" | "done" | "error";
+  outputPath?: string;
+  inputPath?: string;
+  error?: string;
+  submissionId: string;
+}
+
+const wmJobs = new Map<string, WmJob>();
+
+async function runWatermarkJob(jobId: string, job: WmJob, videoUrl: string): Promise<void> {
+  try {
+    logger.info({ jobId, submissionId: job.submissionId }, "Watermark job: downloading video");
+    await downloadVideo(videoUrl, job.inputPath!);
+
+    const logoFile = "/home/runner/workspace/artifacts/brandops/public/logo.png";
+    const logoExists = existsSync(logoFile);
+    logger.info({ jobId, logoExists }, "Watermark job: rendering with FFmpeg");
+
+    if (logoExists) {
+      const filterComplex =
+        "[1:v]scale=iw*0.35:-1," +
+        "colorkey=0x000000:similarity=0.25:blend=0.1," +
+        "format=rgba,colorchannelmixer=aa=0.45[logo];" +
+        "[0:v][logo]overlay=(W-w)/2:(H-h)/2";
+      await runFFmpeg([
+        "-i", job.inputPath!,
+        "-i", logoFile,
+        "-filter_complex", filterComplex,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "23",
+        "-movflags", "+faststart",
+        "-c:a", "copy",
+        "-y", job.outputPath!,
+      ]);
+    } else {
+      await runFFmpeg([
+        "-i", job.inputPath!,
+        "-vf",
+        "drawtext=text='BrandOps':x=(w-tw)/2:y=(h-th)/2:fontsize=40:fontcolor=white@0.35:box=1:boxcolor=black@0.15:boxborderw=16",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "23",
+        "-movflags", "+faststart",
+        "-c:a", "copy",
+        "-y", job.outputPath!,
+      ]);
+    }
+
+    job.status = "done";
+    logger.info({ jobId }, "Watermark job: done");
+  } catch (err) {
+    job.status = "error";
+    job.error = err instanceof Error ? err.message : String(err);
+    logger.error({ err, jobId }, "Watermark job failed");
+    unlink(job.inputPath!).catch(() => {});
+    unlink(job.outputPath!).catch(() => {});
+  } finally {
+    unlink(job.inputPath!).catch(() => {});
+  }
+}
+
+// Start a watermark job
+router.post("/video/export-watermarked", (req, res): void => {
   const { submissionId, videoUrl } = req.body as {
     submissionId?: string;
     videoUrl?: string;
@@ -415,90 +480,53 @@ router.post("/video/export-watermarked", async (req, res): Promise<void> => {
     return;
   }
 
-  const tmp = `/tmp/bo_wm_${submissionId}_${Date.now()}`;
-  const inputPath = `${tmp}_input.mp4`;
-  const outputPath = `${tmp}_wm.mp4`;
+  const jobId = `${submissionId}_${Date.now()}`;
+  const tmp = `/tmp/bo_wm_${jobId}`;
+  const job: WmJob = {
+    status: "pending",
+    submissionId,
+    inputPath: `${tmp}_input.mp4`,
+    outputPath: `${tmp}_wm.mp4`,
+  };
+  wmJobs.set(jobId, job);
 
-  try {
-    logger.info({ submissionId }, "Watermark export: downloading video");
-    await downloadVideo(videoUrl, inputPath);
+  // Fire-and-forget — response returns immediately
+  runWatermarkJob(jobId, job, videoUrl).catch(() => {});
 
-    // Logo-based watermark: scale logo to 35% of video width, remove black bg via colorkey,
-    // center it at 45% opacity; fallback to drawtext if logo file is missing.
-    const logoFile = "/home/runner/workspace/artifacts/brandops/public/logo.png";
-    const logoExists = existsSync(logoFile);
+  res.json({ jobId });
+});
 
-    logger.info({ submissionId, logoExists }, "Watermark export: rendering with FFmpeg");
+// Poll job status
+router.get("/video/export-watermarked/:jobId/status", (req, res): void => {
+  const job = wmJobs.get(req.params.jobId);
+  if (!job) { res.status(404).json({ error: "job not found" }); return; }
+  res.json({ status: job.status, error: job.error });
+});
 
-    if (logoExists) {
-      const filterComplex =
-        "[1:v]scale=iw*0.35:-1," +
-        "colorkey=0x000000:similarity=0.25:blend=0.1," +
-        "format=rgba,colorchannelmixer=aa=0.45[logo];" +
-        "[0:v][logo]overlay=(W-w)/2:(H-h)/2";
-
-      await runFFmpeg([
-        "-i", inputPath,
-        "-i", logoFile,
-        "-filter_complex", filterComplex,
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "22",
-        "-movflags", "+faststart",
-        "-c:a", "copy",
-        "-y", outputPath,
-      ]);
-    } else {
-      const watermarkFilter =
-        "drawtext=text='BrandOps':" +
-        "x=(w-tw)/2:y=(h-th)/2:" +
-        "fontsize=40:fontcolor=white@0.35:" +
-        "box=1:boxcolor=black@0.15:boxborderw=16";
-
-      await runFFmpeg([
-        "-i", inputPath,
-        "-vf", watermarkFilter,
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "22",
-        "-movflags", "+faststart",
-        "-c:a", "copy",
-        "-y", outputPath,
-      ]);
-    }
-
-    // Stream the file directly to the client — no Firebase upload needed
-    logger.info({ submissionId }, "Watermark export: streaming to client");
-    const filename = `brandops_${submissionId}_watermarked.mp4`;
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-
-    const { createReadStream } = await import("node:fs");
-    const stream = createReadStream(outputPath);
-    stream.pipe(res);
-
-    stream.on("end", () => {
-      unlink(inputPath).catch(() => {});
-      unlink(outputPath).catch(() => {});
-      logger.info({ submissionId }, "Watermark export complete");
-    });
-    stream.on("error", (err) => {
-      logger.error({ err, submissionId }, "Watermark stream error");
-      unlink(inputPath).catch(() => {});
-      unlink(outputPath).catch(() => {});
-    });
-    return; // don't fall through to finally cleanup
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error({ err, submissionId }, "Watermark export failed");
-    res.status(500).json({ error: msg });
-  } finally {
-    // only clean up on error path (success path cleans up on stream end)
-    if (!res.headersSent) {
-      unlink(inputPath).catch(() => {});
-      unlink(outputPath).catch(() => {});
-    }
+// Download the finished file
+router.get("/video/export-watermarked/:jobId/download", async (req, res): Promise<void> => {
+  const job = wmJobs.get(req.params.jobId);
+  if (!job || job.status !== "done" || !job.outputPath) {
+    res.status(404).json({ error: "file not ready" });
+    return;
   }
+
+  const filename = `brandops_${job.submissionId}_watermarked.mp4`;
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  const { createReadStream } = await import("node:fs");
+  const stream = createReadStream(job.outputPath);
+  stream.pipe(res);
+  stream.on("end", () => {
+    unlink(job.outputPath!).catch(() => {});
+    wmJobs.delete(req.params.jobId);
+    logger.info({ jobId: req.params.jobId }, "Watermark download complete");
+  });
+  stream.on("error", (err) => {
+    logger.error({ err }, "Watermark download stream error");
+    if (!res.headersSent) res.status(500).json({ error: "stream error" });
+  });
 });
 
 export default router;
