@@ -317,7 +317,10 @@ export default function Submissions() {
           {filtered.map(sub => (
             <Card key={sub.id} className="bg-card border-card-border overflow-hidden" data-testid={`card-submission-${sub.id}`}>
               <div className="flex flex-col md:flex-row">
-                <div className="md:w-56 bg-muted relative aspect-video md:aspect-auto flex items-center justify-center group shrink-0">
+                <div
+                  className="md:w-56 bg-muted relative aspect-video md:aspect-auto flex items-center justify-center group shrink-0 cursor-pointer"
+                  onClick={() => { if (sub.videoUrl) { setPreviewSub(sub); setPreviewOpen(true); } }}
+                >
                   {sub.thumbnailUrl ? (
                     <img src={sub.thumbnailUrl} alt="Thumbnail" className="object-cover w-full h-full" />
                   ) : sub.videoUrl ? (
@@ -331,14 +334,11 @@ export default function Submissions() {
                   ) : (
                     <PlayCircle className="h-10 w-10 text-muted-foreground" />
                   )}
-                  <a
-                    href={sub.videoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                  >
-                    <ExternalLink className="h-7 w-7 text-white" />
-                  </a>
+                  {sub.videoUrl && (
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <PlayCircle className="h-12 w-12 text-white drop-shadow-lg" />
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-5 flex-1 flex flex-col justify-between">
@@ -372,6 +372,16 @@ export default function Submissions() {
                     <Button variant="secondary" size="sm" onClick={() => setSelectedSubmissionId(sub.id!)}>
                       <Eye className="h-4 w-4 mr-1.5" /> Details
                     </Button>
+                    {sub.videoUrl && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setPreviewSub(sub); setPreviewOpen(true); }}
+                        className="gap-1.5"
+                      >
+                        <PlayCircle className="h-3.5 w-3.5" /> Preview
+                      </Button>
+                    )}
 
                     {/* Creator: enhance / processing status / preview */}
                     {isCreator && (
