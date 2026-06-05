@@ -1,5 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import {
+  fsSubscribeSubmissions, fsUpdateSubmission, fsCreatePayment,
+  fsSubscribePayments,
+  type FsSubmission, type FsPayment,
+} from "@/lib/firestore";
+import { where } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -305,88 +311,80 @@ function CreatorEarningsPage() {
 
 /* ─────────────────────────── BRAND PAYMENTS ─────────────────────────────── */
 
-interface PgPayment {
-  id: number;
-  submissionId: number;
-  creatorId: number;
-  campaignId: number;
-  amount: number;
-  status: "pending" | "processing" | "paid" | "failed";
-  paidAt: string | null;
-  createdAt: string;
-  creator: { name: string; email: string } | null;
-  campaign: { title: string } | null;
-}
-
 function BrandPaymentsPage() {
   const { toast } = useToast();
 
-  const { data: allPayments = [], isLoading, refetch } = useQuery<PgPayment[]>({
-    queryKey: ["payments"],
-    queryFn: async () => {
-      const res = await fetch(`${BASE}api/payments`);
-      if (!res.ok) throw new Error("Failed to load payments");
-      return res.json();
-    },
-    refetchInterval: 30_000,
-  });
+  // Firestore submissions are the real source of truth.
+  // approved = brand owes creator (pending payout)
+  // paid     = already sent
+  const [submissions, setSubmissions] = useState<FsSubmission[]>([]);
+  const [fsPayments, setFsPayments] = useState<FsPayment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const updatePaymentStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      const res = await fetch(`${BASE}api/payments/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error("Failed to update payment");
-      return res.json();
-    },
-    onSuccess: () => void refetch(),
-  });
+  useEffect(() => {
+    let subDone = false, payDone = false;
+    const check = () => { if (subDone && payDone) setIsLoading(false); };
+
+    const unsubSub = fsSubscribeSubmissions(
+      (data) => {
+        setSubmissions(data);
+        subDone = true;
+        check();
+      },
+      [where("status", "in", ["approved", "paid"])]
+    );
+
+    const unsubPay = fsSubscribePayments((data) => {
+      setFsPayments(data);
+      payDone = true;
+      check();
+    });
+
+    return () => { unsubSub(); unsubPay(); };
+  }, []);
 
   const { data: stripePayouts, isLoading: stripeLoading, error: stripeError } = useStripePayouts();
   const createPayoutIntent = useCreateStripePayoutIntent();
 
   const [payoutDialog, setPayoutDialog] = useState<{
     open: boolean;
-    paymentId?: number;
+    submissionId?: string;
     amount?: number;
     creator?: { name: string; email: string } | null;
-    submissionId?: number;
     result?: { paymentIntentId: string };
   }>({ open: false });
 
-  // Totals come straight from PostgreSQL — the authoritative source
-  const totalPaid = allPayments
-    .filter(p => p.status === "paid")
-    .reduce((s, p) => s + p.amount, 0);
-  const totalProcessing = allPayments
+  // Totals: approved submissions = pending owed; paid submissions = already sent
+  const pendingSubmissions = submissions.filter(s => s.status === "approved");
+  const paidSubmissions    = submissions.filter(s => s.status === "paid");
+
+  const totalPending    = pendingSubmissions.reduce((s, p) => s + (p.payoutAmount ?? 0), 0);
+  const totalPaid       = paidSubmissions.reduce((s, p) => s + (p.payoutAmount ?? 0), 0);
+  // Processing: payments in fsPayments with status processing (Stripe PI created, not settled)
+  const totalProcessing = fsPayments
     .filter(p => p.status === "processing")
     .reduce((s, p) => s + p.amount, 0);
-  const totalPending = allPayments
-    .filter(p => p.status === "pending")
-    .reduce((s, p) => s + p.amount, 0);
 
-  const handleProcessPayment = async (id: number) => {
+  const handleMarkPaid = async (sub: FsSubmission) => {
+    if (!sub.id) return;
     try {
-      await updatePaymentStatus.mutateAsync({ id, status: "processing" });
-      toast({ title: "Payment marked as processing" });
+      await fsUpdateSubmission(sub.id, { status: "paid" });
+      toast({ title: "Marked as paid" });
     } catch {
-      toast({ title: "Failed to update payment", variant: "destructive" });
+      toast({ title: "Failed to update", variant: "destructive" });
     }
   };
 
-  const handleIssuePayout = (payment: PgPayment) => {
-    if (!payment.creator?.email || !payment.creator?.name) {
-      toast({ title: "No creator linked to payment", variant: "destructive" });
+  const handleIssuePayout = (sub: FsSubmission) => {
+    if (!sub.creatorEmail || !sub.creatorName) {
+      toast({ title: "No creator email linked to submission", variant: "destructive" });
       return;
     }
     setPayoutDialog({
       open: true,
-      paymentId: payment.id,
-      amount: payment.amount,
-      creator: { name: payment.creator.name, email: payment.creator.email },
-      submissionId: payment.submissionId,
+      submissionId: sub.id,
+      amount: sub.payoutAmount ?? 0,
+      creator: { name: sub.creatorName, email: sub.creatorEmail },
     });
   };
 
@@ -397,13 +395,28 @@ function BrandPaymentsPage() {
         amount: payoutDialog.amount,
         creatorEmail: payoutDialog.creator.email,
         creatorName: payoutDialog.creator.name,
-        submissionId: String(payoutDialog.submissionId),
+        submissionId: payoutDialog.submissionId,
       },
       {
-        onSuccess: (data) => {
+        onSuccess: async (data) => {
           setPayoutDialog(d => ({ ...d, result: { paymentIntentId: data.paymentIntentId } }));
-          if (payoutDialog.paymentId != null) {
-            updatePaymentStatus.mutate({ id: payoutDialog.paymentId, status: "processing" });
+          // Record in Firestore payments + update submission to processing
+          if (payoutDialog.submissionId) {
+            const sub = submissions.find(s => s.id === payoutDialog.submissionId);
+            if (sub) {
+              await fsCreatePayment({
+                submissionId: payoutDialog.submissionId,
+                creatorId: sub.creatorId,
+                campaignId: sub.campaignId,
+                creatorEmail: sub.creatorEmail,
+                creatorName: sub.creatorName,
+                campaignTitle: sub.campaignTitle,
+                amount: payoutDialog.amount!,
+                status: "processing",
+                stripePaymentIntentId: data.paymentIntentId,
+              });
+              await fsUpdateSubmission(payoutDialog.submissionId, { status: "paid" });
+            }
           }
           toast({ title: "Stripe payout intent created", description: `PI: ${data.paymentIntentId}` });
         },
@@ -413,6 +426,32 @@ function BrandPaymentsPage() {
       }
     );
   };
+
+  // All rows = pending submissions + paid submissions + fsPayments not linked to a submission
+  const allRows: Array<{
+    key: string;
+    date: string;
+    creatorName: string;
+    creatorEmail: string;
+    campaignTitle: string;
+    status: string;
+    amount: number;
+    submission?: FsSubmission;
+  }> = [
+    ...submissions.map(s => ({
+      key: `sub-${s.id}`,
+      date: s.createdAt ? new Date((s.createdAt as unknown as { seconds: number }).seconds * 1000).toISOString() : new Date().toISOString(),
+      creatorName: s.creatorName ?? "Unknown",
+      creatorEmail: s.creatorEmail ?? "",
+      campaignTitle: s.campaignTitle ?? "Unknown",
+      status: s.status === "approved" ? "pending" : s.status,
+      amount: s.payoutAmount ?? 0,
+      submission: s,
+    })),
+  ];
+
+  // Sort newest first
+  allRows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <div className="space-y-6">
@@ -445,7 +484,7 @@ function BrandPaymentsPage() {
         <Card className="bg-card border-card-border">
           <CardContent className="p-6">
             <div className="flex items-center justify-between pb-2">
-              <p className="text-sm font-medium text-muted-foreground">Pending</p>
+              <p className="text-sm font-medium text-muted-foreground">Pending Payout</p>
               <AlertCircle className="h-4 w-4 text-yellow-400" />
             </div>
             <div className="text-2xl font-bold">${totalPending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
@@ -510,7 +549,7 @@ function BrandPaymentsPage() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-          ) : allPayments.length > 0 ? (
+          ) : allRows.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
@@ -523,44 +562,35 @@ function BrandPaymentsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {allPayments.map(payment => (
-                  <TableRow key={payment.id} className="border-border hover:bg-muted/30">
-                    <TableCell className="text-muted-foreground text-sm">{format(new Date(payment.createdAt), "MMM d, yyyy")}</TableCell>
+                {allRows.map(row => (
+                  <TableRow key={row.key} className="border-border hover:bg-muted/30">
+                    <TableCell className="text-muted-foreground text-sm">{format(new Date(row.date), "MMM d, yyyy")}</TableCell>
                     <TableCell>
-                      <div className="font-medium text-foreground text-sm">{payment.creator?.name ?? "Unknown"}</div>
-                      <div className="text-xs text-muted-foreground">{payment.creator?.email}</div>
-                      {!payment.creator?.email && (
+                      <div className="font-medium text-foreground text-sm">{row.creatorName}</div>
+                      <div className="text-xs text-muted-foreground">{row.creatorEmail}</div>
+                      {!row.creatorEmail && (
                         <div className="flex items-center gap-1 text-xs text-yellow-400 mt-0.5">
                           <TriangleAlert className="h-3 w-3" /> No payment info
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">{payment.campaign?.title ?? "Unknown"}</TableCell>
-                    <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                    <TableCell className="text-right font-bold">${payment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-sm">{row.campaignTitle}</TableCell>
+                    <TableCell>{getStatusBadge(row.status as "pending" | "processing" | "paid" | "failed")}</TableCell>
+                    <TableCell className="text-right font-bold">${row.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right space-x-1">
-                      {payment.status === "pending" && (
+                      {row.status === "pending" && row.submission && (
                         <>
-                          <Button size="sm" variant="ghost" onClick={() => handleProcessPayment(payment.id)}>
-                            Mark Processing
+                          <Button size="sm" variant="ghost" onClick={() => handleMarkPaid(row.submission!)}>
+                            Mark Paid
                           </Button>
                           <Button
                             size="sm"
                             className="bg-primary text-primary-foreground hover:bg-primary/90"
-                            onClick={() => handleIssuePayout(payment)}
+                            onClick={() => handleIssuePayout(row.submission!)}
                           >
                             <Send className="h-3 w-3 mr-1" /> Pay via Stripe
                           </Button>
                         </>
-                      )}
-                      {payment.status === "processing" && (
-                        <Button
-                          size="sm"
-                          className="bg-primary text-primary-foreground hover:bg-primary/90"
-                          onClick={() => handleIssuePayout(payment)}
-                        >
-                          <Send className="h-3 w-3 mr-1" /> Pay via Stripe
-                        </Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -570,7 +600,7 @@ function BrandPaymentsPage() {
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <DollarSign className="h-8 w-8 mx-auto mb-3 opacity-20" />
-              <p>No payments recorded yet.</p>
+              <p>No approved submissions yet. Payments appear here after you approve creator content.</p>
             </div>
           )}
         </CardContent>
@@ -596,7 +626,7 @@ function BrandPaymentsPage() {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
-                The payment intent has been created in Stripe. Complete the payout from your Stripe Dashboard to finalize the transfer.
+                Complete the payout from your Stripe Dashboard to finalize the transfer.
               </p>
               <Button className="w-full" onClick={() => setPayoutDialog({ open: false })}>Done</Button>
             </div>
