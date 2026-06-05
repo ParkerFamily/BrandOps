@@ -1,8 +1,7 @@
 import { Router, type IRouter } from "express";
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readFile, writeFile, unlink, mkdir } from "node:fs/promises";
-import { openai } from "@workspace/integrations-openai-ai-server";
 import { writeFirestoreDoc, readFirestoreDoc, uploadToFirebaseStorage } from "../firebaseAdmin";
 import { logger } from "../lib/logger";
 
@@ -28,6 +27,44 @@ function secondsToSrtTime(s: number): string {
 }
 
 interface Segment { start: number; end: number; text: string }
+
+interface WordTimestamp {
+  word: string;
+  start: number;
+  end: number;
+  confidence: number;
+}
+
+interface DeepgramWord {
+  word: string;
+  punctuated_word?: string;
+  start: number;
+  end: number;
+  confidence: number;
+}
+
+interface DeepgramResponse {
+  results: {
+    channels: Array<{
+      alternatives: Array<{
+        transcript: string;
+        words: DeepgramWord[];
+      }>;
+    }>;
+  };
+}
+
+// ASS/FFmpeg subtitle style strings (colors are BGR not RGB)
+const CAPTION_STYLES: Record<string, string> = {
+  bold_white:
+    "Fontsize=22,Bold=1,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,Outline=2,Shadow=1,MarginV=160",
+  neon_lime:
+    "Fontsize=22,Bold=1,PrimaryColour=&H00FFC6,OutlineColour=&H000000,Outline=2,Shadow=1,MarginV=160",
+  minimal:
+    "Fontsize=20,Bold=0,PrimaryColour=&HFFFFFF,OutlineColour=&H000000,Outline=1,Shadow=0,MarginV=160",
+  karaoke:
+    "Fontsize=26,Bold=1,PrimaryColour=&H00FFFF,OutlineColour=&H000000,Outline=3,Shadow=2,MarginV=160",
+};
 
 function buildSrt(segments: Segment[]): string {
   return segments
@@ -75,28 +112,61 @@ async function runFFmpeg(args: string[]): Promise<void> {
   });
 }
 
-async function transcribeAudio(audioPath: string): Promise<{ segments: Segment[]; fullText: string }> {
-  const transcription = await (openai.audio.transcriptions.create as Function)({
-    file: createReadStream(audioPath),
-    model: "gpt-4o-mini-transcribe",
-    response_format: "json",
-  }) as { text: string };
+async function transcribeWithDeepgram(audioPath: string): Promise<{
+  segments: Segment[];
+  fullText: string;
+  wordTimestamps: WordTimestamp[];
+}> {
+  const apiKey = process.env.DEEPGRAM_API_KEY;
+  if (!apiKey) throw new Error("DEEPGRAM_API_KEY not configured");
 
-  const fullText = transcription.text?.trim() ?? "";
+  const audioBuffer = await readFile(audioPath);
 
-  // Build approximate SRT segments from word count (≈2.5 words/sec)
-  const WORDS_PER_SEG = 8;
-  const SECS_PER_WORD = 0.4;
-  const words = fullText.split(/\s+/).filter(Boolean);
-  const segments: Segment[] = [];
-  for (let i = 0; i < words.length; i += WORDS_PER_SEG) {
-    const chunk = words.slice(i, i + WORDS_PER_SEG).join(" ");
-    const start = i * SECS_PER_WORD;
-    const end = Math.min((i + WORDS_PER_SEG) * SECS_PER_WORD, words.length * SECS_PER_WORD + 0.5);
-    segments.push({ start, end, text: chunk });
+  const res = await fetch(
+    "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&words=true&language=en",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": "audio/mp3",
+      },
+      body: audioBuffer,
+    },
+  );
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Deepgram API error ${res.status}: ${body.slice(0, 300)}`);
   }
 
-  return { segments, fullText };
+  const data = (await res.json()) as DeepgramResponse;
+  const alt = data.results?.channels?.[0]?.alternatives?.[0];
+  if (!alt) throw new Error("Deepgram returned no transcript");
+
+  const fullText = alt.transcript?.trim() ?? "";
+  const words = alt.words ?? [];
+
+  // Group words into 6-word caption segments using real timestamps
+  const WORDS_PER_SEG = 6;
+  const segments: Segment[] = [];
+  for (let i = 0; i < words.length; i += WORDS_PER_SEG) {
+    const chunk = words.slice(i, i + WORDS_PER_SEG);
+    const text = chunk.map(w => w.punctuated_word ?? w.word).join(" ");
+    segments.push({
+      start: chunk[0].start,
+      end: chunk[chunk.length - 1].end + 0.1,
+      text,
+    });
+  }
+
+  const wordTimestamps: WordTimestamp[] = words.map(w => ({
+    word: w.punctuated_word ?? w.word,
+    start: w.start,
+    end: w.end,
+    confidence: w.confidence,
+  }));
+
+  return { segments, fullText, wordTimestamps };
 }
 
 interface ProcessParams {
@@ -105,10 +175,11 @@ interface ProcessParams {
   campaignTitle: string;
   brandName: string;
   ctaText: string;
+  captionStyle?: string;
 }
 
 async function processVideo(params: ProcessParams): Promise<void> {
-  const { submissionId, videoUrl, campaignTitle, brandName, ctaText } = params;
+  const { submissionId, videoUrl, campaignTitle, brandName, ctaText, captionStyle = "bold_white" } = params;
   const tmp = `/tmp/bo_${submissionId}`;
 
   try {
@@ -123,7 +194,7 @@ async function processVideo(params: ProcessParams): Promise<void> {
     const inputPath = `${tmp}_input.mp4`;
     await downloadVideo(videoUrl, inputPath);
 
-    // 2. Extract audio for Whisper (16 kHz mono, max 120 s)
+    // 2. Extract audio for Deepgram (16 kHz mono, max 120 s)
     logger.info({ submissionId }, "Extracting audio");
     const audioPath = `${tmp}_audio.mp3`;
     await runFFmpeg([
@@ -133,15 +204,17 @@ async function processVideo(params: ProcessParams): Promise<void> {
       "-y", audioPath,
     ]);
 
-    // 3. Transcribe
+    // 3. Transcribe with Deepgram
     let srtContent = "";
     let fullTranscript = "";
+    let wordTimestamps: WordTimestamp[] = [];
     try {
-      logger.info({ submissionId }, "Transcribing audio");
-      const { segments, fullText } = await transcribeAudio(audioPath);
-      fullTranscript = fullText;
-      srtContent = buildSrt(segments);
-      logger.info({ submissionId, words: fullText.split(/\s+/).length }, "Transcription done");
+      logger.info({ submissionId }, "Transcribing with Deepgram nova-2");
+      const result = await transcribeWithDeepgram(audioPath);
+      fullTranscript = result.fullText;
+      wordTimestamps = result.wordTimestamps;
+      srtContent = buildSrt(result.segments);
+      logger.info({ submissionId, words: wordTimestamps.length }, "Deepgram transcription done");
     } catch (err) {
       logger.warn({ err, submissionId }, "Transcription failed — skipping captions");
     }
@@ -155,18 +228,17 @@ async function processVideo(params: ProcessParams): Promise<void> {
     }
 
     // 5. Build FFmpeg filter chain
+    const styleStr = CAPTION_STYLES[captionStyle] ?? CAPTION_STYLES.bold_white;
+
     const vfParts: string[] = [
-      // Scale to fit 1080×1920, pad remainder with black
       "scale=w=1080:h=1920:force_original_aspect_ratio=decrease",
       "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black",
     ];
 
     if (hasCaptions) {
-      // subtitles filter — libass handles SRT natively
       const safeSrtPath = srtPath.replace(/'/g, "\\'");
       vfParts.push(
-        `subtitles='${safeSrtPath}':force_style='Fontsize=22,Bold=1,` +
-        `PrimaryColour=&HFFFFFF,OutlineColour=&H000000,Outline=2,Shadow=1,MarginV=160'`,
+        `subtitles='${safeSrtPath}':force_style='${styleStr}'`,
       );
     }
 
@@ -187,7 +259,7 @@ async function processVideo(params: ProcessParams): Promise<void> {
     }
 
     const outputPath = `${tmp}_output.mp4`;
-    logger.info({ submissionId }, "Rendering with FFmpeg");
+    logger.info({ submissionId, captionStyle }, "Rendering with FFmpeg");
     await runFFmpeg([
       "-i", inputPath,
       "-vf", vfParts.join(","),
@@ -207,11 +279,13 @@ async function processVideo(params: ProcessParams): Promise<void> {
     const storagePath = `processed-videos/${submissionId}.mp4`;
     const processedVideoUrl = await uploadToFirebaseStorage(videoBuffer, storagePath, "video/mp4");
 
-    // 7. Update Firestore
+    // 7. Update Firestore with transcript, word timestamps, and style used
     await writeFirestoreDoc("submissions", submissionId, {
       processingStatus: "done",
       processedVideoUrl,
-      subtitlesContent: fullTranscript || srtContent || null,
+      subtitlesContent: fullTranscript || null,
+      wordTimestamps: wordTimestamps.length > 0 ? wordTimestamps : null,
+      captionStyle,
     });
     logger.info({ submissionId, processedVideoUrl }, "Video processing complete");
 
@@ -223,7 +297,6 @@ async function processVideo(params: ProcessParams): Promise<void> {
       processingError: msg,
     }).catch(() => {});
   } finally {
-    // Cleanup temp files
     const suffixes = ["_input.mp4", "_audio.mp3", "_subs.srt", "_output.mp4"];
     for (const sfx of suffixes) {
       unlink(`${tmp}${sfx}`).catch(() => {});
@@ -234,12 +307,13 @@ async function processVideo(params: ProcessParams): Promise<void> {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 router.post("/video/process", async (req, res): Promise<void> => {
-  const { submissionId, videoUrl, campaignTitle, brandName, ctaText } = req.body as {
+  const { submissionId, videoUrl, campaignTitle, brandName, ctaText, captionStyle } = req.body as {
     submissionId?: string;
     videoUrl?: string;
     campaignTitle?: string;
     brandName?: string;
     ctaText?: string;
+    captionStyle?: string;
   };
 
   if (!submissionId || !videoUrl) {
@@ -247,13 +321,13 @@ router.post("/video/process", async (req, res): Promise<void> => {
     return;
   }
 
-  // Kick off async — respond immediately
   processVideo({
     submissionId,
     videoUrl,
     campaignTitle: campaignTitle ?? "",
     brandName: brandName ?? "BrandOps",
     ctaText: ctaText ?? "Learn More",
+    captionStyle: captionStyle ?? "bold_white",
   }).catch(err => logger.error({ err, submissionId }, "Unhandled video processing error"));
 
   res.json({ status: "processing", submissionId });
@@ -318,7 +392,7 @@ router.post("/video/approve", async (req, res): Promise<void> => {
       creatorApproval: choice === "processed" ? "approved_processed" : "approved_original",
     });
 
-    logger.info({ submissionId, choice }, "Creator approved video");
+    logger.info({ submissionId, choice }, "Video approved");
     res.json({ success: true, videoUrl: finalVideoUrl });
   } catch (err) {
     logger.error({ err, submissionId }, "Failed to approve video");

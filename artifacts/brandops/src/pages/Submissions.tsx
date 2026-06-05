@@ -18,7 +18,7 @@ import { format } from "date-fns";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
-import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
+import { VideoPreviewDialog, type CaptionStyle } from "@/components/VideoPreviewDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 
 const BASE = import.meta.env.BASE_URL;
@@ -224,7 +224,7 @@ export default function Submissions() {
       .finally(() => setSelectedLoading(false));
   }, [selectedSubmissionId]);
 
-  const handleEnhance = async (sub: FsSubmission) => {
+  const handleEnhance = async (sub: FsSubmission, captionStyle: CaptionStyle = "bold_white") => {
     try {
       const res = await fetch(`${BASE}api/video/process`, {
         method: "POST",
@@ -235,6 +235,7 @@ export default function Submissions() {
           campaignTitle: sub.campaignTitle ?? "",
           brandName: sub.campaignTitle ?? "Brand",
           ctaText: "Learn More",
+          captionStyle,
         }),
       });
       if (!res.ok) throw new Error("Server error");
@@ -530,6 +531,8 @@ export default function Submissions() {
           submission={previewSub}
           onApproved={() => setPreviewSub(null)}
           isBrand={!isCreator}
+          canEnhance={isCreator && (!previewSub.processingStatus || previewSub.processingStatus === "idle" || previewSub.processingStatus === "error")}
+          onEnhance={(style) => handleEnhance(previewSub, style)}
         />
       )}
     </div>

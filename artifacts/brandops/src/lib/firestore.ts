@@ -126,6 +126,8 @@ export interface FsSubmission {
   processingStatus?: "idle" | "processing" | "done" | "error";
   processedVideoUrl?: string;
   subtitlesContent?: string;
+  wordTimestamps?: Array<{ word: string; start: number; end: number; confidence: number }>;
+  captionStyle?: string;
   processingError?: string;
   creatorApproval?: "approved_processed" | "approved_original";
   createdAt?: Timestamp;

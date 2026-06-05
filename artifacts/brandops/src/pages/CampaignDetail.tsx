@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
-import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
+import { VideoPreviewDialog, type CaptionStyle } from "@/components/VideoPreviewDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -258,7 +258,7 @@ export default function CampaignDetail() {
     } catch { toast({ title: "Failed to update submission", variant: "destructive" }); }
   };
 
-  const handleEnhance = async (sub: FsSubmission) => {
+  const handleEnhance = async (sub: FsSubmission, captionStyle: CaptionStyle = "bold_white") => {
     try {
       const res = await fetch(`${BASE}api/video/process`, {
         method: "POST",
@@ -269,6 +269,7 @@ export default function CampaignDetail() {
           campaignTitle: sub.campaignTitle ?? campaign?.title ?? "",
           brandName: campaign?.title ?? "Brand",
           ctaText: "Learn More",
+          captionStyle,
         }),
       });
       if (!res.ok) throw new Error("Server error");
@@ -754,6 +755,8 @@ export default function CampaignDetail() {
           onOpenChange={setPreviewOpen}
           submission={previewSub}
           isBrand={!isCreator}
+          canEnhance={isCreator && (!previewSub.processingStatus || previewSub.processingStatus === "idle" || previewSub.processingStatus === "error")}
+          onEnhance={(style) => handleEnhance(previewSub, style)}
         />
       )}
     </div>
