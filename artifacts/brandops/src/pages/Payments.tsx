@@ -485,7 +485,7 @@ function BrandPaymentsPage() {
         <Card className="bg-card border-card-border">
           <CardContent className="p-6">
             <div className="flex items-center justify-between pb-2">
-              <p className="text-sm font-medium text-muted-foreground">Pending Payout</p>
+              <p className="text-sm font-medium text-muted-foreground">Owed to Creators</p>
               <AlertCircle className="h-4 w-4 text-yellow-400" />
             </div>
             <div className="text-2xl font-bold">${totalPending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
