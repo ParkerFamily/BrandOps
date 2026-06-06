@@ -387,7 +387,7 @@ router.post("/video/approve", async (req, res): Promise<void> => {
         : (submission.videoUrl ?? "");
 
     await writeFirestoreDoc("submissions", submissionId, {
-      status: "pending",
+      status: "paid",
       videoUrl: finalVideoUrl,
       creatorApproval: choice === "processed" ? "approved_processed" : "approved_original",
     });

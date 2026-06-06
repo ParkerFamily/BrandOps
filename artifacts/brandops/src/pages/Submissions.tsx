@@ -227,8 +227,9 @@ export default function Submissions() {
 
   const handleReview = async (id: string, status: "approved" | "rejected" | "revision_requested") => {
     try {
-      await fsUpdateSubmission(id, { status });
-      toast({ title: `Submission ${status.replace("_", " ")}` });
+      const finalStatus = status === "approved" ? "paid" : status;
+      await fsUpdateSubmission(id, { status: finalStatus });
+      toast({ title: status === "approved" ? "Submission approved & marked paid" : `Submission ${status.replace("_", " ")}` });
       if (selectedSubmissionId === id) {
         fsGetSubmission(id).then(s => setSelectedSub(s));
       }
