@@ -104,22 +104,38 @@ function EditableBlock({ value, onChange, rows = 4 }: {
   );
 }
 
+function AutoTextarea({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (ref.current) { ref.current.style.height = "auto"; ref.current.style.height = ref.current.scrollHeight + "px"; }
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={e => { onChange(e.target.value); if (ref.current) { ref.current.style.height = "auto"; ref.current.style.height = ref.current.scrollHeight + "px"; } }}
+      className={cn("resize-none overflow-hidden leading-snug", className)}
+    />
+  );
+}
+
 function EditableList({ items, onChange, accent = "text-[#C6FF00]" }: {
   items: string[]; onChange: (items: string[]) => void; accent?: string;
 }) {
   return (
-    <div className="space-y-1.5 pt-3">
+    <div className="space-y-2 pt-3">
       {items.map((item, i) => (
         <div key={i} className="flex items-start gap-2">
           <span className={cn("shrink-0 text-xs font-bold mt-2.5 w-4", accent)}>•</span>
-          <input
+          <AutoTextarea
             value={item}
-            onChange={e => { const n = [...items]; n[i] = e.target.value; onChange(n); }}
-            className="flex-1 bg-white/4 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white/85 focus:outline-none focus:border-[#C6FF00]/40 transition-colors"
+            onChange={v => { const n = [...items]; n[i] = v; onChange(n); }}
+            className="flex-1 bg-white/4 border border-white/10 rounded-lg px-2.5 py-2 text-sm text-white/85 focus:outline-none focus:border-[#C6FF00]/40 transition-colors w-full"
           />
           <button
             onClick={() => onChange(items.filter((_, idx) => idx !== i))}
-            className="shrink-0 mt-1.5 p-1 text-white/20 hover:text-red-400 transition-colors rounded"
+            className="shrink-0 mt-2 p-1 text-white/20 hover:text-red-400 transition-colors rounded"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
