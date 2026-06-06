@@ -10,10 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload, Wand2 } from "lucide-react";
+import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload, Wand2, DollarSign } from "lucide-react";
 import { format } from "date-fns";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -193,6 +193,8 @@ export default function Submissions() {
   const [isLoading, setIsLoading] = useState(true);
   const [previewSub, setPreviewSub] = useState<FsSubmission | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [approveConfirm, setApproveConfirm] = useState<FsSubmission | null>(null);
+  const [approving, setApproving] = useState(false);
 
   const onboarding = getOnboarding();
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
@@ -371,7 +373,7 @@ export default function Submissions() {
                       <>
                         <Button
                           size="sm"
-                          onClick={() => handleReview(sub.id!, "approved")}
+                          onClick={() => setApproveConfirm(sub)}
                           className="bg-primary text-primary-foreground hover:bg-primary/90"
                           data-testid={`btn-approve-${sub.id}`}
                         >
@@ -471,6 +473,51 @@ export default function Submissions() {
           isBrand={!isCreator}
         />
       )}
+
+      {/* Approve & Pay confirmation dialog */}
+      <Dialog open={!!approveConfirm} onOpenChange={(o) => { if (!o) setApproveConfirm(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary" />
+              Approve & Pay Creator
+            </DialogTitle>
+            <DialogDescription className="pt-2 space-y-3">
+              <span className="block text-sm text-muted-foreground">
+                You're about to approve this submission and mark the creator as paid.
+              </span>
+              {approveConfirm && (
+                <span className="block rounded-lg border border-primary/20 bg-primary/5 p-4 text-center">
+                  <span className="block text-xs text-muted-foreground mb-1">{approveConfirm.creatorName ?? "Creator"}</span>
+                  <span className="block text-3xl font-bold text-primary">
+                    ${(approveConfirm.payoutAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-1">{approveConfirm.campaignTitle}</span>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setApproveConfirm(null)} disabled={approving}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={approving}
+              onClick={async () => {
+                if (!approveConfirm?.id) return;
+                setApproving(true);
+                await handleReview(approveConfirm.id, "approved");
+                setApproving(false);
+                setApproveConfirm(null);
+              }}
+            >
+              {approving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Check className="h-4 w-4 mr-1" />}
+              Confirm & Pay
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
