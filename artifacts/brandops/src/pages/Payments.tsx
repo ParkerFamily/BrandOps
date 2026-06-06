@@ -579,7 +579,7 @@ function BrandPaymentsPage() {
                     <TableCell>{getStatusBadge(row.status as "pending" | "processing" | "paid" | "failed")}</TableCell>
                     <TableCell className="text-right font-bold">${row.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell className="text-right space-x-1">
-                      {row.status === "pending" && row.submission && (
+                      {(row.status === "approved" || row.status === "pending") && row.submission && (
                         <>
                           <Button size="sm" variant="ghost" onClick={() => handleMarkPaid(row.submission!)}>
                             Mark Paid
