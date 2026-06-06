@@ -407,7 +407,7 @@ function BrandPaymentsPage() {
             if (sub) {
               await fsCreatePayment({
                 submissionId: payoutDialog.submissionId,
-                creatorId: sub.creatorId,
+                creatorId: sub.creatorId ?? "",
                 campaignId: sub.campaignId,
                 creatorEmail: sub.creatorEmail,
                 creatorName: sub.creatorName,
