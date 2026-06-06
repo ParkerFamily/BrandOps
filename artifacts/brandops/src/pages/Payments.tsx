@@ -118,6 +118,7 @@ function getStatusBadge(status: string) {
   switch (status) {
     case "paid":       return <Badge className="bg-primary/20 text-primary border-primary/30">Paid</Badge>;
     case "processing": return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Processing</Badge>;
+    case "approved":   return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Approved</Badge>;
     case "pending":    return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Pending</Badge>;
     case "failed":     return <Badge variant="destructive">Failed</Badge>;
     default:           return <Badge variant="outline">{status}</Badge>;
@@ -444,7 +445,7 @@ function BrandPaymentsPage() {
       creatorName: s.creatorName ?? "Unknown",
       creatorEmail: s.creatorEmail ?? "",
       campaignTitle: s.campaignTitle ?? "Unknown",
-      status: s.status === "approved" ? "pending" : s.status,
+      status: s.status,
       amount: s.payoutAmount ?? 0,
       submission: s,
     })),
