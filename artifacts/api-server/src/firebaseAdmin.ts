@@ -150,6 +150,53 @@ export async function readFirestoreDoc<T>(
   return result as T;
 }
 
+// Query a collection for docs where a field equals a value
+export async function queryFirestoreByField<T>(
+  collectionName: string,
+  field: string,
+  value: string,
+): Promise<Array<{ id: string; data: T }>> {
+  const sa = loadServiceAccount();
+  const projectId = sa.project_id;
+  const token = await getAccessToken();
+
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`;
+  const body = {
+    structuredQuery: {
+      from: [{ collectionId: collectionName }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: field },
+          op: "EQUAL",
+          value: toFirestoreValue(value),
+        },
+      },
+    },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Firestore runQuery failed (${res.status}): ${text}`);
+  }
+
+  const rows = (await res.json()) as Array<{ document?: { name: string; fields: Record<string, unknown> } }>;
+  return rows
+    .filter(r => r.document)
+    .map(r => {
+      const id = r.document!.name.split("/").pop()!;
+      const data: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(r.document!.fields)) {
+        data[k] = fromFirestoreValue(v as Record<string, unknown>);
+      }
+      return { id, data: data as T };
+    });
+}
+
 // ── Firebase Storage upload via REST ─────────────────────────────────────────
 
 const STORAGE_BUCKET = "rareswap-ec574.firebasestorage.app";
