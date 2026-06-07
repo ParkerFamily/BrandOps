@@ -39,7 +39,7 @@ const CREATOR_NAV = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/campaigns", label: "Available Campaigns", icon: Megaphone },
   { path: "/submissions", label: "My Submissions", icon: Video },
-  { path: "/payments", label: "My Earnings", icon: DollarSign },
+  { path: "/earnings", label: "Earnings & Payouts", icon: DollarSign },
 ];
 
 const BOTTOM_NAV_ITEMS = [

@@ -12,6 +12,7 @@ import emailRouter from "./email";
 import usersRouter from "./users";
 import authRouter from "./auth";
 import videoRouter from "./video";
+import connectRouter from "./connect";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(openaiRouter);
 router.use(emailRouter);
 router.use(usersRouter);
 router.use(videoRouter);
+router.use(connectRouter);
 
 export default router;

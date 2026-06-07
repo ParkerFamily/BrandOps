@@ -18,6 +18,7 @@ import Creators from "@/pages/Creators";
 import CreatorDetail from "@/pages/CreatorDetail";
 import Submissions from "@/pages/Submissions";
 import Payments from "@/pages/Payments";
+import Earnings from "@/pages/Earnings";
 import Analytics from "@/pages/Analytics";
 import AIAssistant from "@/pages/AIAssistant";
 import Team from "@/pages/Team";
@@ -90,6 +91,7 @@ function AppRoutes() {
               <Route path="/creators/:id" component={CreatorDetail} />
               <Route path="/submissions" component={Submissions} />
               <Route path="/payments" component={Payments} />
+              <Route path="/earnings" component={Earnings} />
               <Route path="/analytics" component={Analytics} />
               <Route path="/ai" component={AIAssistant} />
               <Route path="/team" component={Team} />
