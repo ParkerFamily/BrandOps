@@ -475,18 +475,64 @@ export default function NewCampaign() {
               />
             </div>
 
-            {/* Stats */}
+            {/* Stats — editable, auto-derive third value */}
             <div className="grid grid-cols-3 gap-2">
-              {[
-                { label: "Budget", value: `$${generated.estimatedTotalCost.toLocaleString()}`, accent: true },
-                { label: "Videos", value: String(generated.suggestedVideoCount), accent: false },
-                { label: "Per Video", value: `$${generated.suggestedPayoutPerVideo.toLocaleString()}`, accent: false },
-              ].map(({ label, value, accent }) => (
-                <div key={label} className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-center">
-                  <p className={cn("text-xl font-black tabular-nums", accent ? "text-[#C6FF00]" : "text-white")}>{value}</p>
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">{label}</p>
+              {/* Budget */}
+              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-center group focus-within:border-[#C6FF00]/40 transition-colors">
+                <div className="flex items-center justify-center gap-0.5">
+                  <span className="text-xl font-black text-[#C6FF00]">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={generated.estimatedTotalCost}
+                    onChange={e => {
+                      const budget = Math.max(0, Number(e.target.value) || 0);
+                      const videos = generated.suggestedVideoCount || 1;
+                      patch("estimatedTotalCost", budget);
+                      patch("suggestedPayoutPerVideo", Math.round(budget / videos));
+                    }}
+                    className="w-full bg-transparent text-xl font-black tabular-nums text-[#C6FF00] text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none min-w-0"
+                  />
                 </div>
-              ))}
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">Budget</p>
+              </div>
+
+              {/* Videos */}
+              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-center group focus-within:border-[#C6FF00]/40 transition-colors">
+                <input
+                  type="number"
+                  min={1}
+                  value={generated.suggestedVideoCount}
+                  onChange={e => {
+                    const videos = Math.max(1, Number(e.target.value) || 1);
+                    const budget = generated.estimatedTotalCost || 0;
+                    patch("suggestedVideoCount", videos);
+                    patch("suggestedPayoutPerVideo", Math.round(budget / videos));
+                  }}
+                  className="w-full bg-transparent text-xl font-black tabular-nums text-white text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none min-w-0"
+                />
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">Videos</p>
+              </div>
+
+              {/* Per Video */}
+              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-center group focus-within:border-[#C6FF00]/40 transition-colors">
+                <div className="flex items-center justify-center gap-0.5">
+                  <span className="text-xl font-black text-white">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={generated.suggestedPayoutPerVideo}
+                    onChange={e => {
+                      const perVideo = Math.max(0, Number(e.target.value) || 0);
+                      const videos = generated.suggestedVideoCount || 1;
+                      patch("suggestedPayoutPerVideo", perVideo);
+                      patch("estimatedTotalCost", perVideo * videos);
+                    }}
+                    className="w-full bg-transparent text-xl font-black tabular-nums text-white text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none min-w-0"
+                  />
+                </div>
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">Per Video</p>
+              </div>
             </div>
 
             {/* Editable sections */}
