@@ -249,4 +249,36 @@ router.get("/stripe/connect/payouts", async (req, res): Promise<void> => {
   }
 });
 
+// GET /stripe/connect/dashboard?uid=...
+// Redirect link for mobile "Manage Payouts" button — drops creator straight into Stripe Express
+router.get("/stripe/connect/dashboard", async (req, res): Promise<void> => {
+  const uid = typeof req.query.uid === "string" ? req.query.uid : "";
+  if (!uid) {
+    res.status(400).send("uid is required");
+    return;
+  }
+
+  try {
+    const [profile] = await db
+      .select()
+      .from(userProfilesTable)
+      .where(eq(userProfilesTable.firebaseUid, uid))
+      .limit(1);
+
+    if (!profile?.stripeConnectAccountId) {
+      res.status(404).send("No connected Stripe account for this user");
+      return;
+    }
+
+    const stripe = await getUncachableStripeClient();
+    const loginLink = await stripe.accounts.createLoginLink(profile.stripeConnectAccountId);
+
+    logger.info({ uid, accountId: profile.stripeConnectAccountId }, "Dashboard redirect issued");
+    res.redirect(302, loginLink.url);
+  } catch (err) {
+    logger.error({ err, uid }, "Failed to create dashboard redirect");
+    res.status(500).send("Failed to generate dashboard link");
+  }
+});
+
 export default router;
