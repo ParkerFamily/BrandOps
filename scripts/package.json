@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill-stripe-firestore": "tsx ./src/backfill-stripe-firestore.ts",
+    "backfill-payments-creator-id": "tsx ./src/backfill-payments-creator-id.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
