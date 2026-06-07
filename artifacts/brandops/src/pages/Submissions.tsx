@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  fsSubscribeSubmissions, fsUpdateSubmission, fsGetSubmission,
+  fsSubscribeSubmissions, fsUpdateSubmission, fsGetSubmission, fsCreatePayment,
   type FsSubmission,
 } from "@/lib/firestore";
 import { where } from "firebase/firestore";
@@ -508,6 +508,17 @@ export default function Submissions() {
                 if (!approveConfirm?.id) return;
                 setApproving(true);
                 await handleReview(approveConfirm.id, "approved");
+                // Write payment record with proper creator + campaign IDs
+                await fsCreatePayment({
+                  submissionId: approveConfirm.id,
+                  creatorId: approveConfirm.creatorFirebaseUid ?? approveConfirm.creatorId ?? "",
+                  campaignId: approveConfirm.campaignDocId ?? approveConfirm.campaignId ?? "",
+                  creatorEmail: approveConfirm.creatorEmail ?? "",
+                  creatorName: approveConfirm.creatorName ?? "",
+                  campaignTitle: approveConfirm.campaignTitle ?? "",
+                  amount: approveConfirm.payoutAmount ?? 0,
+                  status: "paid",
+                });
                 setApproving(false);
                 setApproveConfirm(null);
               }}
