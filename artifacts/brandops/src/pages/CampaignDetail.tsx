@@ -377,17 +377,16 @@ export default function CampaignDetail() {
         {/* Left col (2/3) */}
         <div className="md:col-span-2 space-y-5">
 
-          {/* Creator Funnel */}
+          {/* Video Pipeline */}
           <Card className="bg-card border-card-border">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Creator Funnel</CardTitle>
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Video Pipeline</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-1">
-                <FunnelStep label="Invited" value="—" color="text-muted-foreground" />
-                <FunnelStep label="Applied" value={stats.pendingSubmissions + stats.reviewingSubmissions} color="text-blue-400" />
+                <FunnelStep label="Applicants" value={stats.pendingSubmissions + stats.reviewingSubmissions + stats.approvedSubmissions} color="text-blue-400" />
                 <FunnelStep label="Approved" value={stats.approvedSubmissions} color="text-primary" />
-                <FunnelStep label="Submitted" value={stats.totalSubmissions} color="text-yellow-400" />
+                <FunnelStep label="Videos In" value={stats.totalSubmissions} color="text-yellow-400" />
                 <FunnelStep label="Paid" value={stats.paidSubmissions} color="text-green-400" last />
               </div>
             </CardContent>

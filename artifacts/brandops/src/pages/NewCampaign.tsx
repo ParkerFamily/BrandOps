@@ -163,6 +163,7 @@ export default function NewCampaign() {
   const [step, setStep] = useState<Step>("prompt");
   const [prompt, setPrompt] = useState("");
   const [budget, setBudget] = useState("");
+  const [videosNeeded, setVideosNeeded] = useState("");
   const [deadline, setDeadline] = useState("");
   const [genStep, setGenStep] = useState(0);
   const [generated, setGenerated] = useState<Generated | null>(null);
@@ -198,6 +199,7 @@ export default function NewCampaign() {
         body: JSON.stringify({
           prompt: prompt.trim(),
           budget: budget ? Number(budget) : undefined,
+          videosNeeded: videosNeeded ? Number(videosNeeded) : undefined,
           deadline: deadline || undefined,
         }),
       });
@@ -372,9 +374,18 @@ export default function NewCampaign() {
                 </div>
                 <div className="flex items-center gap-1.5 px-4 py-2.5 flex-1">
                   <input
+                    type="number"
+                    value={videosNeeded}
+                    onChange={e => setVideosNeeded(e.target.value)}
+                    placeholder="Videos needed"
+                    className="w-full bg-transparent text-sm text-white placeholder-white/25 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 px-4 py-2.5 flex-1">
+                  <input
                     value={deadline}
                     onChange={e => setDeadline(e.target.value)}
-                    placeholder="Deadline (e.g. 2 weeks)"
+                    placeholder="Deadline (e.g. 14 days)"
                     className="w-full bg-transparent text-sm text-white placeholder-white/25 outline-none"
                   />
                 </div>
@@ -475,8 +486,8 @@ export default function NewCampaign() {
               />
             </div>
 
-            {/* Stats — editable, auto-derive third value */}
-            <div className="grid grid-cols-3 gap-2">
+            {/* Stats — editable */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {/* Budget */}
               <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-center group focus-within:border-[#C6FF00]/40 transition-colors">
                 <div className="flex items-center justify-center gap-0.5">
@@ -532,6 +543,17 @@ export default function NewCampaign() {
                   />
                 </div>
                 <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">Per Video</p>
+              </div>
+
+              {/* Deadline */}
+              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3 text-center group focus-within:border-[#C6FF00]/40 transition-colors">
+                <input
+                  value={generated.suggestedDeadline}
+                  onChange={e => patch("suggestedDeadline", e.target.value)}
+                  className="w-full bg-transparent text-sm font-bold tabular-nums text-white text-center focus:outline-none min-w-0 leading-tight"
+                  placeholder="e.g. 14 days"
+                />
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">Deadline</p>
               </div>
             </div>
 
