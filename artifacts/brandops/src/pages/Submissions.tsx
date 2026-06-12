@@ -204,9 +204,10 @@ export default function Submissions() {
   useEffect(() => {
     if (!user?.uid) return;
     // Creators: filter to their own submissions only.
-    // Brands: fetch all submissions (no where clause) — they need to review
-    // content across all creators, including legacy docs without campaignOwnerUid.
-    const constraints = isCreator ? [where("creatorFirebaseUid", "==", user.uid)] : [];
+    // Brands: filter to their own campaigns' submissions via brandUid.
+    const constraints = isCreator
+      ? [where("creatorFirebaseUid", "==", user.uid)]
+      : [where("brandUid", "==", user.uid)];
     const unsub = fsSubscribeSubmissions((data) => {
       setSubmissions(data);
       setIsLoading(false);

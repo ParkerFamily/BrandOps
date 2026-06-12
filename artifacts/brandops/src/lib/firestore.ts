@@ -114,6 +114,7 @@ export interface FsSubmission {
   creatorId: string;
   creatorFirebaseUid?: string;
   campaignOwnerUid?: string;
+  brandUid?: string;
   creatorName?: string;
   creatorEmail?: string;
   campaignTitle?: string;
@@ -139,6 +140,7 @@ export interface FsPayment {
   submissionId: string;
   creatorId: string;
   campaignId: string;
+  brandUid?: string;
   creatorEmail?: string;
   creatorName?: string;
   campaignTitle?: string;
@@ -210,29 +212,19 @@ export async function fsNormalizeCampaignOwnership(
 }
 
 /**
- * Claim all unowned campaign docs in Firestore for this user.
- * Runs once on Brand Campaigns page mount.
+ * Previously claimed unowned campaign docs — now a no-op.
+ * Kept for call-site compatibility; do not re-enable the claim logic
+ * as it would assign other users' campaigns to the caller.
  */
-export async function fsBootstrapUserCampaigns(uid: string): Promise<void> {
-  const snap = await getDocs(collection(db, "campaigns"));
-  const orphans = snap.docs.filter(d => {
-    const data = d.data();
-    return !data.ownerFirebaseUid || !data.brandUid;
-  });
-  if (orphans.length === 0) return;
-  const batch = writeBatch(db);
-  for (const d of orphans) {
-    batch.update(doc(db, "campaigns", d.id), {
-      ownerFirebaseUid: uid,
-      brandUid: uid,
-      updatedAt: serverTimestamp(),
-    });
-  }
-  await batch.commit();
+export async function fsBootstrapUserCampaigns(_uid: string): Promise<void> {
+  return;
 }
 
-export async function fsGetCampaigns(): Promise<FsCampaign[]> {
-  const snap = await getDocs(query(collection(db, "campaigns"), orderBy("createdAt", "desc")));
+export async function fsGetCampaigns(uid?: string): Promise<FsCampaign[]> {
+  const q = uid
+    ? query(collection(db, "campaigns"), where("brandUid", "==", uid), orderBy("createdAt", "desc"))
+    : query(collection(db, "campaigns"), orderBy("createdAt", "desc"));
+  const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as FsCampaign));
 }
 
@@ -243,10 +235,14 @@ export async function fsGetCampaign(id: string): Promise<FsCampaign | null> {
 }
 
 export function fsSubscribeCampaigns(
-  cb: (campaigns: FsCampaign[]) => void
+  cb: (campaigns: FsCampaign[]) => void,
+  uid?: string
 ): Unsubscribe {
+  const q = uid
+    ? query(collection(db, "campaigns"), where("brandUid", "==", uid), orderBy("createdAt", "desc"))
+    : query(collection(db, "campaigns"), orderBy("createdAt", "desc"));
   return onSnapshot(
-    query(collection(db, "campaigns"), orderBy("createdAt", "desc")),
+    q,
     snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as FsCampaign))),
     (err) => { console.warn("[Firestore] campaigns:", err.code); cb([]); }
   );

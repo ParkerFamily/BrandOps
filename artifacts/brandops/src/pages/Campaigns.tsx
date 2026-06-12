@@ -215,13 +215,8 @@ function BrandCampaignsPage() {
     const unsub = fsSubscribeCampaigns((data) => {
       setCampaigns(data);
       setIsLoading(false);
-    });
+    }, user.uid);
     return unsub;
-  }, [user?.uid]);
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    fsBootstrapUserCampaigns(user.uid).catch(() => {});
   }, [user?.uid]);
 
   const [search, setSearch] = useState("");

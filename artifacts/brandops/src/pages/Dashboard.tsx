@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { where } from "firebase/firestore";
 import {
   fsSubscribeCampaigns, fsSubscribeSubmissions, fsSubscribePayments,
   type FsCampaign, type FsSubmission, type FsPayment,
@@ -407,9 +408,9 @@ function BrandDashboard() {
     if (!user?.uid) return;
     let loaded = 0;
     const checkDone = () => { loaded++; if (loaded >= 3) setDataLoading(false); };
-    const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); });
-    const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); checkDone(); });
-    const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); });
+    const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); }, user.uid);
+    const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); checkDone(); }, [where("brandUid", "==", user.uid)]);
+    const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); }, [where("brandUid", "==", user.uid)]);
     return () => { u1(); u2(); u3(); };
   }, [user?.uid]);
 

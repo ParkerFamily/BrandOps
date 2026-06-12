@@ -12,6 +12,7 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription,
@@ -163,10 +164,13 @@ export default function AIAssistant() {
   const [campaigns, setCampaigns] = useState<FsCampaign[]>([]);
   const [creators, setCreators] = useState<FsCreator[]>([]);
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    fsGetCampaigns().then(setCampaigns).catch(() => {});
+    if (!user?.uid) return;
+    fsGetCampaigns(user.uid).then(setCampaigns).catch(() => {});
     fsGetCreators().then(setCreators).catch(() => {});
-  }, []);
+  }, [user?.uid]);
 
   const stats = {
     pendingSubmissions: 0,

@@ -313,6 +313,7 @@ function CreatorEarningsPage() {
 /* ─────────────────────────── BRAND PAYMENTS ─────────────────────────────── */
 
 function BrandPaymentsPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
 
   // Firestore submissions are the real source of truth.
@@ -326,23 +327,25 @@ function BrandPaymentsPage() {
     let subDone = false, payDone = false;
     const check = () => { if (subDone && payDone) setIsLoading(false); };
 
+    if (!user?.uid) { setIsLoading(false); return; }
+
     const unsubSub = fsSubscribeSubmissions(
       (data) => {
         setSubmissions(data);
         subDone = true;
         check();
       },
-      [where("status", "in", ["approved", "paid"])]
+      [where("brandUid", "==", user.uid), where("status", "in", ["approved", "paid"])]
     );
 
     const unsubPay = fsSubscribePayments((data) => {
       setFsPayments(data);
       payDone = true;
       check();
-    });
+    }, [where("brandUid", "==", user.uid)]);
 
     return () => { unsubSub(); unsubPay(); };
-  }, []);
+  }, [user?.uid]);
 
   const { data: stripePayouts, isLoading: stripeLoading, error: stripeError } = useStripePayouts();
   const createPayoutIntent = useCreateStripePayoutIntent();

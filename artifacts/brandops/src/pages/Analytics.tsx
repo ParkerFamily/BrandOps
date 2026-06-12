@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { where } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   fsSubscribeCampaigns, fsSubscribeSubmissions, fsSubscribePayments, fsSubscribeCreators,
@@ -208,9 +209,9 @@ export default function Analytics() {
     if (!user?.uid) return;
     let loaded = 0;
     const checkDone = () => { loaded++; if (loaded >= 4) setIsLoading(false); };
-    const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); });
-    const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); checkDone(); });
-    const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); });
+    const u1 = fsSubscribeCampaigns(d => { setCampaigns(d); checkDone(); }, user.uid);
+    const u2 = fsSubscribeSubmissions(d => { setSubmissions(d); checkDone(); }, [where("brandUid", "==", user.uid)]);
+    const u3 = fsSubscribePayments(d => { setPayments(d); checkDone(); }, [where("brandUid", "==", user.uid)]);
     const u4 = fsSubscribeCreators(d => { setCreators(d); checkDone(); });
     return () => { u1(); u2(); u3(); u4(); };
   }, [user?.uid]);

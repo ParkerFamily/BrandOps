@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, Send, Loader2, RotateCcw, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fsGetCampaigns, fsGetCreators } from "@/lib/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -36,6 +37,7 @@ function MsgBubble({ msg }: { msg: Msg }) {
 }
 
 export function FloatingAI() {
+  const { user } = useAuth();
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [posReady, setPosReady] = useState(false);
   const [open, setOpen] = useState(false);
@@ -61,9 +63,10 @@ export function FloatingAI() {
   }, []);
 
   useEffect(() => {
-    fsGetCampaigns().then(setCampaigns).catch(() => {});
+    if (!user?.uid) return;
+    fsGetCampaigns(user.uid).then(setCampaigns).catch(() => {});
     fsGetCreators().then(setCreators).catch(() => {});
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (open && msgs.length === 0) {

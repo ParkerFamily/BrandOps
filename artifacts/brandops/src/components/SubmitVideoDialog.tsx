@@ -66,6 +66,7 @@ export function SubmitVideoDialog({ open, onOpenChange, preselectedCampaignId, p
         creatorId: user?.uid ?? "unknown",
         creatorFirebaseUid: user?.uid ?? "unknown",
         campaignOwnerUid: selected?.ownerFirebaseUid ?? selected?.brandUid ?? "",
+        brandUid: selected?.brandUid ?? selected?.ownerFirebaseUid ?? "",
         creatorName: user?.displayName ?? user?.email ?? "Creator",
         creatorEmail: user?.email ?? "",
         campaignTitle: selected?.title ?? preselectedCampaignTitle ?? "",
