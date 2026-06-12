@@ -13,13 +13,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload, Wand2, DollarSign } from "lucide-react";
+import { Check, X, PlayCircle, ExternalLink, Inbox, Eye, Sparkles, Loader2, Upload, Wand2, DollarSign, Download, Crown, Lock } from "lucide-react";
 import { format } from "date-fns";
 import { useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { SubmitVideoDialog } from "@/components/SubmitVideoDialog";
 import { VideoPreviewDialog } from "@/components/VideoPreviewDialog";
 import { getOnboarded as getOnboarding } from "@/lib/onboarding";
+import { useExportGate } from "@/hooks/use-export-gate";
+import { Link } from "wouter";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -200,6 +202,7 @@ export default function Submissions() {
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
 
   const { user } = useAuth();
+  const { tryExport, exportsUsed, exportsRemaining, freeLimit, isSubscribed, showUpgradeModal, setShowUpgradeModal } = useExportGate();
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -265,6 +268,17 @@ export default function Submissions() {
               ? "Track the status of videos you've submitted to brand campaigns."
               : "Review and approve UGC submissions — use AI scoring to decide faster."}
           </p>
+          {!isCreator && !isSubscribed && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs">
+              <Download className="h-3 w-3 text-primary" />
+              <span className="text-primary font-medium">{exportsRemaining} free export{exportsRemaining !== 1 ? "s" : ""} remaining</span>
+              {exportsRemaining === 0 && (
+                <Link href="/subscribe" className="ml-1 text-yellow-400 hover:underline font-semibold flex items-center gap-0.5">
+                  <Crown className="h-3 w-3" /> Upgrade
+                </Link>
+              )}
+            </div>
+          )}
         </div>
         {isCreator && (
           <Button
@@ -367,6 +381,18 @@ export default function Submissions() {
                         <PlayCircle className="h-3.5 w-3.5" /> Preview
                       </Button>
                     )}
+                    {!isCreator && sub.videoUrl && sub.status === "approved" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => tryExport(sub.videoUrl!)}
+                        className={cn("gap-1.5", !isSubscribed && exportsRemaining === 0 ? "border-yellow-500/50 text-yellow-400" : "")}
+                      >
+                        {!isSubscribed && exportsRemaining === 0
+                          ? <><Lock className="h-3.5 w-3.5" /> Export</>
+                          : <><Download className="h-3.5 w-3.5" /> Export</>}
+                      </Button>
+                    )}
 
 
                     {/* Brand: approve / revision / reject */}
@@ -437,10 +463,27 @@ export default function Submissions() {
                     <div>{format(new Date(getTimestamp(selectedSub.createdAt)), "MMM d, yyyy h:mm a")}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-medium text-muted-foreground">Video Link</div>
-                    <a href={selectedSub.videoUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1">
-                      View Video <ExternalLink className="h-3 w-3" />
-                    </a>
+                    <div className="text-sm font-medium text-muted-foreground">Video</div>
+                    {selectedSub.videoUrl ? (
+                      !isCreator && selectedSub.status === "approved" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={cn("gap-1.5 mt-1", !isSubscribed && exportsRemaining === 0 ? "border-yellow-500/50 text-yellow-400" : "text-primary border-primary/40")}
+                          onClick={() => tryExport(selectedSub.videoUrl!)}
+                        >
+                          {!isSubscribed && exportsRemaining === 0
+                            ? <><Lock className="h-3.5 w-3.5" /> Export (limit reached)</>
+                            : <><Download className="h-3.5 w-3.5" /> Export Video</>}
+                        </Button>
+                      ) : (
+                        <a href={selectedSub.videoUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                          View Video <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )
+                    ) : (
+                      <span className="text-muted-foreground text-sm">No video uploaded</span>
+                    )}
                   </div>
                   {selectedSub.payoutAmount && (
                     <div>
@@ -464,6 +507,38 @@ export default function Submissions() {
       </Dialog>
 
       <SubmitVideoDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+
+      {/* Export upgrade gate modal */}
+      <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
+        <DialogContent className="sm:max-w-sm bg-card border-card-border text-card-foreground">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-yellow-400" />
+              Free export limit reached
+            </DialogTitle>
+            <DialogDescription className="pt-2 space-y-3">
+              <span className="block text-sm text-muted-foreground">
+                You've used all {freeLimit} free video exports. Upgrade to a paid plan to export unlimited approved videos without restriction.
+              </span>
+              <span className="block rounded-lg border border-primary/20 bg-primary/5 p-4 text-center">
+                <span className="block text-xs text-muted-foreground mb-1">Free plan</span>
+                <span className="block text-2xl font-bold text-primary">{exportsUsed} / {freeLimit}</span>
+                <span className="block text-xs text-muted-foreground mt-1">exports used</span>
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 flex-col sm:flex-row">
+            <Button variant="outline" onClick={() => setShowUpgradeModal(false)} className="flex-1">
+              Maybe later
+            </Button>
+            <Link href="/subscribe" onClick={() => setShowUpgradeModal(false)} className="flex-1">
+              <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5">
+                <Crown className="h-4 w-4" /> View Plans
+              </Button>
+            </Link>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {previewSub && (
         <VideoPreviewDialog
