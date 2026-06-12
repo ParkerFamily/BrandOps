@@ -74,7 +74,7 @@ router.get('/stripe/products', async (_req, res): Promise<void> => {
 
 // Create a payment intent for a creator payout
 router.post('/stripe/payout-intent', async (req, res): Promise<void> => {
-  const { amount, creatorEmail, creatorName, submissionId } = req.body;
+  const { amount, creatorEmail, creatorName, submissionId, brandUid } = req.body;
 
   if (!amount || !creatorEmail) {
     res.status(400).json({ error: 'amount and creatorEmail are required' });
@@ -104,6 +104,7 @@ router.post('/stripe/payout-intent', async (req, res): Promise<void> => {
       submissionId: String(submissionId),
       creatorEmail,
       type: 'creator_payout',
+      ...(brandUid ? { brandUid: String(brandUid) } : {}),
     },
     description: `BrandOps creator payout for submission #${submissionId}`,
   });
@@ -120,12 +121,17 @@ router.get('/stripe/payout-intent/:id', async (req, res): Promise<void> => {
   res.json({ id: pi.id, status: pi.status, amount: pi.amount / 100, currency: pi.currency });
 });
 
-// List recent payout intents (creator payouts only)
+// List recent payout intents (creator payouts only, scoped to brandUid)
 router.get('/stripe/payouts', async (req, res): Promise<void> => {
+  const uid = typeof req.query.uid === 'string' ? req.query.uid : '';
+  if (!uid) {
+    res.status(400).json({ error: 'uid is required' });
+    return;
+  }
   const stripe = await getUncachableStripeClient();
-  const paymentIntents = await stripe.paymentIntents.list({ limit: 20 });
+  const paymentIntents = await stripe.paymentIntents.list({ limit: 100 });
   const payouts = paymentIntents.data
-    .filter(pi => pi.metadata?.type === 'creator_payout')
+    .filter(pi => pi.metadata?.type === 'creator_payout' && pi.metadata?.brandUid === uid)
     .map(pi => ({
       id: pi.id,
       amount: pi.amount / 100,

@@ -58,14 +58,16 @@ interface StripePayout {
 
 /* ─── shared helpers ─────────────────────────────────────────────────────── */
 
-function useStripePayouts() {
+function useStripePayouts(uid: string | undefined) {
   return useQuery<{ data: StripePayout[] }>({
-    queryKey: ["stripe-payouts"],
+    queryKey: ["stripe-payouts", uid],
     queryFn: async () => {
-      const res = await fetch(`${BASE}api/stripe/payouts`);
+      if (!uid) return { data: [] };
+      const res = await fetch(`${BASE}api/stripe/payouts?uid=${encodeURIComponent(uid)}`);
       if (!res.ok) throw new Error("Failed to fetch Stripe payouts");
       return res.json();
     },
+    enabled: !!uid,
     staleTime: 30_000,
   });
 }
@@ -86,7 +88,7 @@ function useCreatorEarnings(email: string | null | undefined) {
 
 function useCreateStripePayoutIntent() {
   return useMutation({
-    mutationFn: async (body: { amount: number; creatorEmail: string; creatorName: string; submissionId: string }) => {
+    mutationFn: async (body: { amount: number; creatorEmail: string; creatorName: string; submissionId: string; brandUid?: string }) => {
       const res = await fetch(`${BASE}api/stripe/payout-intent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -347,7 +349,7 @@ function BrandPaymentsPage() {
     return () => { unsubSub(); unsubPay(); };
   }, [user?.uid]);
 
-  const { data: stripePayouts, isLoading: stripeLoading, error: stripeError } = useStripePayouts();
+  const { data: stripePayouts, isLoading: stripeLoading, error: stripeError } = useStripePayouts(user?.uid);
   const createPayoutIntent = useCreateStripePayoutIntent();
 
   const [payoutDialog, setPayoutDialog] = useState<{
@@ -400,6 +402,7 @@ function BrandPaymentsPage() {
         creatorEmail: payoutDialog.creator.email,
         creatorName: payoutDialog.creator.name,
         submissionId: payoutDialog.submissionId,
+        brandUid: user?.uid ?? undefined,
       },
       {
         onSuccess: async (data) => {
