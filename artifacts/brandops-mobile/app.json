@@ -1,0 +1,85 @@
+{
+  "expo": {
+    "name": "BrandOps",
+    "slug": "brandops-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/brandops-icon-1024.png",
+    "scheme": "brandopsmobile",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.parkerfamily.brandops-mobile",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "NSPhotoLibraryUsageDescription": "BrandOps needs access to your photo library so you can upload UGC videos for campaigns.",
+        "NSPhotoLibraryAddUsageDescription": "BrandOps can save exported videos to your library when needed.",
+        "NSCameraUsageDescription": "BrandOps needs camera access so you can record UGC videos.",
+        "NSMicrophoneUsageDescription": "BrandOps needs microphone access to record video with audio.",
+        "NSLocationWhenInUseUsageDescription": "BrandOps does not use your location for campaigns or account features. This key is required by an included push notification library."
+      },
+      "entitlements": {
+        "aps-environment": "development",
+        "com.apple.security.application-groups": [
+          "group.com.parkerfamily.brandops-mobile.onesignal"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.parkerfamily.brandopsmobile",
+      "permissions": [
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development",
+          "smallIconAccentColor": "#C6FF00"
+        }
+      ],
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/brandops-splash-wordmark-2048.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0A0A0A"
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BrandOps needs access to your videos so you can submit UGC to campaigns.",
+          "cameraPermission": "BrandOps needs camera access to record UGC videos.",
+          "microphonePermission": "BrandOps needs microphone access when recording video."
+        }
+      ],
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

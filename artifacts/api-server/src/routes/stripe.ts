@@ -4,6 +4,21 @@ import { db, creatorsTable, paymentsTable, campaignsTable, userProfilesTable } f
 import { getUncachableStripeClient, getStripePublishableKey } from '../stripeClient';
 import { logger } from '../lib/logger';
 import { writeFirestoreDoc } from '../firebaseAdmin';
+import {
+  computePlatformPayoutAmounts,
+  creatorAmountFromPaymentIntentMetadata,
+} from '../lib/platformFee';
+import {
+  getBrandDefaultPaymentMethod,
+  resolveBrandStripeCustomer,
+  resolveConnectAccountIdForUid,
+  resolveCreatorConnectAccount,
+} from '../lib/creatorConnect';
+import {
+  createConnectDashboardHandoff,
+  verifyConnectDashboardHandoff,
+} from '../lib/connectDashboardHandoff';
+import { resolveFirebaseUid, type AuthedRequest } from '../lib/firebaseAuth';
 
 // Write Stripe status fields to Firestore users/{uid} so mobile app stays in sync
 async function syncToFirestore(uid: string, fields: Record<string, unknown>): Promise<void> {
@@ -72,45 +87,161 @@ router.get('/stripe/products', async (_req, res): Promise<void> => {
   res.json({ data: Array.from(productsMap.values()) });
 });
 
-// Create a payment intent for a creator payout
+// Create a Connect destination charge — brand pays creator payout + 10% BrandOps fee
 router.post('/stripe/payout-intent', async (req, res): Promise<void> => {
-  const { amount, creatorEmail, creatorName, submissionId, brandUid } = req.body;
+  const { amount, creatorEmail, creatorName, submissionId, brandUid, paymentId } = req.body as {
+    amount?: number;
+    creatorEmail?: string;
+    creatorName?: string;
+    submissionId?: string;
+    brandUid?: string;
+    paymentId?: string;
+  };
 
-  if (!amount || !creatorEmail) {
-    res.status(400).json({ error: 'amount and creatorEmail are required' });
+  if (!amount || !creatorEmail || !brandUid || !submissionId) {
+    res.status(400).json({ error: 'amount, creatorEmail, brandUid, and submissionId are required' });
     return;
   }
 
-  const stripe = await getUncachableStripeClient();
-
-  // Find or create customer for the creator
-  const existing = await stripe.customers.list({ email: creatorEmail, limit: 1 });
-  let customer = existing.data[0];
-
-  if (!customer) {
-    customer = await stripe.customers.create({
-      email: creatorEmail,
-      name: creatorName,
-      metadata: { role: 'creator' },
-    });
+  const creatorAmountInput = Number(amount);
+  if (!Number.isFinite(creatorAmountInput) || creatorAmountInput <= 0) {
+    res.status(400).json({ error: 'amount must be a positive number' });
+    return;
   }
 
-  // Create a payment intent (represents a payout queued to send to creator)
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: Math.round(amount * 100), // cents
-    currency: 'usd',
-    customer: customer.id,
-    metadata: {
-      submissionId: String(submissionId),
-      creatorEmail,
-      type: 'creator_payout',
-      ...(brandUid ? { brandUid: String(brandUid) } : {}),
-    },
-    description: `BrandOps creator payout for submission #${submissionId}`,
-  });
+  const breakdown = computePlatformPayoutAmounts(creatorAmountInput);
+  const stripe = await getUncachableStripeClient();
 
-  req.log.info({ paymentIntentId: paymentIntent.id, amount }, 'Created payout intent');
-  res.status(201).json({ paymentIntentId: paymentIntent.id, clientSecret: paymentIntent.client_secret, customerId: customer.id });
+  const creatorConnect = await resolveCreatorConnectAccount(String(creatorEmail));
+  if (!creatorConnect) {
+    res.status(402).json({
+      error: 'creator_connect_required',
+      message: 'Creator must complete Stripe Connect payout setup before you can pay them.',
+    });
+    return;
+  }
+
+  const creatorAccount = await stripe.accounts.retrieve(creatorConnect.accountId);
+  if (!creatorAccount.payouts_enabled) {
+    res.status(402).json({
+      error: 'creator_payouts_disabled',
+      message: 'Creator Stripe account is not ready to receive payouts yet.',
+    });
+    return;
+  }
+
+  const brandCustomerId = await resolveBrandStripeCustomer(String(brandUid));
+  if (!brandCustomerId) {
+    res.status(402).json({
+      error: 'brand_billing_required',
+      message: 'Add a payment method in Settings before paying creators.',
+    });
+    return;
+  }
+
+  const defaultPaymentMethod = await getBrandDefaultPaymentMethod(brandCustomerId);
+  if (!defaultPaymentMethod) {
+    res.status(402).json({
+      error: 'brand_payment_method_required',
+      message: 'Add a card in Settings before paying creators.',
+    });
+    return;
+  }
+
+  const metadata = {
+    submissionId: String(submissionId),
+    creatorEmail: String(creatorEmail),
+    creatorName: String(creatorName ?? ''),
+    brandUid: String(brandUid),
+    type: 'creator_payout',
+    creatorAmountCents: String(breakdown.creatorAmountCents),
+    platformFeeCents: String(breakdown.platformFeeCents),
+    totalAmountCents: String(breakdown.totalCents),
+    connectedAccountId: creatorConnect.accountId,
+  };
+
+  let paymentIntent;
+  try {
+    paymentIntent = await stripe.paymentIntents.create({
+      amount: breakdown.totalCents,
+      currency: 'usd',
+      customer: brandCustomerId,
+      payment_method: defaultPaymentMethod,
+      confirm: true,
+      off_session: true,
+      application_fee_amount: breakdown.platformFeeCents,
+      transfer_data: {
+        destination: creatorConnect.accountId,
+      },
+      metadata,
+      description: `BrandOps creator payout for submission ${submissionId}`,
+    });
+  } catch (err: unknown) {
+    const stripeErr = err as { code?: string; message?: string };
+    if (stripeErr.code === 'authentication_required') {
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: breakdown.totalCents,
+        currency: 'usd',
+        customer: brandCustomerId,
+        application_fee_amount: breakdown.platformFeeCents,
+        transfer_data: {
+          destination: creatorConnect.accountId,
+        },
+        metadata,
+        description: `BrandOps creator payout for submission ${submissionId}`,
+      });
+    } else {
+      req.log.error({ err, submissionId, creatorEmail }, 'Stripe payout intent failed');
+      res.status(500).json({
+        error: 'stripe_payout_failed',
+        message: stripeErr.message ?? 'Failed to create payout charge',
+      });
+      return;
+    }
+  }
+
+  const workflowStatus = paymentIntent.status === 'succeeded' ? 'paid' : 'processing';
+  const firestorePatch: Record<string, unknown> = {
+    creatorAmount: breakdown.creatorAmount,
+    platformFeeAmount: breakdown.platformFeeAmount,
+    totalAmount: breakdown.totalAmount,
+    amount: breakdown.creatorAmount,
+    stripePaymentIntentId: paymentIntent.id,
+    connectedAccountId: creatorConnect.accountId,
+    paymentStatus: paymentIntent.status,
+    status: workflowStatus,
+  };
+
+  if (paymentId) {
+    try {
+      await writeFirestoreDoc('payments', String(paymentId), firestorePatch);
+    } catch (err) {
+      logger.warn({ err, paymentId }, 'Firestore payment sync failed (non-fatal)');
+    }
+  }
+
+  req.log.info(
+    {
+      paymentIntentId: paymentIntent.id,
+      creatorAmount: breakdown.creatorAmount,
+      platformFeeAmount: breakdown.platformFeeAmount,
+      totalAmount: breakdown.totalAmount,
+      status: paymentIntent.status,
+    },
+    'Created Connect payout charge'
+  );
+
+  res.status(201).json({
+    paymentIntentId: paymentIntent.id,
+    clientSecret: paymentIntent.client_secret,
+    customerId: brandCustomerId,
+    creatorAmount: breakdown.creatorAmount,
+    platformFeeAmount: breakdown.platformFeeAmount,
+    totalAmount: breakdown.totalAmount,
+    connectedAccountId: creatorConnect.accountId,
+    paymentStatus: paymentIntent.status,
+    status: workflowStatus,
+  });
 });
 
 // Get payment intent status
@@ -118,7 +249,16 @@ router.get('/stripe/payout-intent/:id', async (req, res): Promise<void> => {
   const stripe = await getUncachableStripeClient();
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const pi = await stripe.paymentIntents.retrieve(raw);
-  res.json({ id: pi.id, status: pi.status, amount: pi.amount / 100, currency: pi.currency });
+  const creatorAmount = creatorAmountFromPaymentIntentMetadata(pi.metadata as Record<string, string>);
+  res.json({
+    id: pi.id,
+    status: pi.status,
+    amount: creatorAmount ?? pi.amount / 100,
+    totalAmount: pi.amount / 100,
+    platformFeeAmount: pi.metadata?.platformFeeCents ? Number(pi.metadata.platformFeeCents) / 100 : null,
+    currency: pi.currency,
+    connectedAccountId: pi.metadata?.connectedAccountId ?? null,
+  });
 });
 
 // List recent payout intents (creator payouts only, scoped to brandUid)
@@ -132,15 +272,21 @@ router.get('/stripe/payouts', async (req, res): Promise<void> => {
   const paymentIntents = await stripe.paymentIntents.list({ limit: 100 });
   const payouts = paymentIntents.data
     .filter(pi => pi.metadata?.type === 'creator_payout' && pi.metadata?.brandUid === uid)
-    .map(pi => ({
-      id: pi.id,
-      amount: pi.amount / 100,
-      currency: pi.currency,
-      status: pi.status,
-      creatorEmail: pi.metadata?.creatorEmail,
-      submissionId: pi.metadata?.submissionId,
-      createdAt: new Date(pi.created * 1000).toISOString(),
-    }));
+    .map(pi => {
+      const creatorAmount = creatorAmountFromPaymentIntentMetadata(pi.metadata as Record<string, string>);
+      return {
+        id: pi.id,
+        amount: creatorAmount ?? pi.amount / 100,
+        totalAmount: pi.amount / 100,
+        platformFeeAmount: pi.metadata?.platformFeeCents ? Number(pi.metadata.platformFeeCents) / 100 : null,
+        currency: pi.currency,
+        status: pi.status,
+        creatorEmail: pi.metadata?.creatorEmail,
+        submissionId: pi.metadata?.submissionId,
+        connectedAccountId: pi.metadata?.connectedAccountId ?? null,
+        createdAt: new Date(pi.created * 1000).toISOString(),
+      };
+    });
 
   res.json({ data: payouts });
 });
@@ -220,27 +366,33 @@ router.get('/stripe/creator-earnings', async (req, res): Promise<void> => {
       query: `metadata['creatorEmail']:'${email}' AND metadata['type']:'creator_payout'`,
       limit: 100,
     });
-    stripePayouts = searchResult.data.map(pi => ({
-      id: pi.id,
-      amount: pi.amount / 100,
-      currency: pi.currency,
-      status: pi.status,
-      submissionId: pi.metadata?.submissionId,
-      createdAt: new Date(pi.created * 1000).toISOString(),
-    }));
+    stripePayouts = searchResult.data.map(pi => {
+      const creatorAmount = creatorAmountFromPaymentIntentMetadata(pi.metadata as Record<string, string>);
+      return {
+        id: pi.id,
+        amount: creatorAmount ?? pi.amount / 100,
+        currency: pi.currency,
+        status: pi.status,
+        submissionId: pi.metadata?.submissionId,
+        createdAt: new Date(pi.created * 1000).toISOString(),
+      };
+    });
   } catch {
     // Fallback: list and filter if search not available
     const listResult = await stripe.paymentIntents.list({ limit: 100 });
     stripePayouts = listResult.data
       .filter(pi => pi.metadata?.type === 'creator_payout' && pi.metadata?.creatorEmail === email)
-      .map(pi => ({
-        id: pi.id,
-        amount: pi.amount / 100,
-        currency: pi.currency,
-        status: pi.status,
-        submissionId: pi.metadata?.submissionId,
-        createdAt: new Date(pi.created * 1000).toISOString(),
-      }));
+      .map(pi => {
+        const creatorAmount = creatorAmountFromPaymentIntentMetadata(pi.metadata as Record<string, string>);
+        return {
+          id: pi.id,
+          amount: creatorAmount ?? pi.amount / 100,
+          currency: pi.currency,
+          status: pi.status,
+          submissionId: pi.metadata?.submissionId,
+          createdAt: new Date(pi.created * 1000).toISOString(),
+        };
+      });
   }
 
   // Also query local DB for context (campaign title, etc.)
@@ -311,23 +463,138 @@ router.get('/stripe/creator-earnings', async (req, res): Promise<void> => {
 
 // ── CREATOR STRIPE CONNECT ────────────────────────────────────────────────
 
+async function createStripeConnectLoginLink(accountId: string): Promise<string> {
+  const stripe = await getUncachableStripeClient();
+  const loginLink = await stripe.accounts.createLoginLink(accountId);
+  return loginLink.url;
+}
+
+/** Mobile: exchange Firebase auth for a one-time browser URL (Manage payouts). */
+router.post('/stripe/connect/dashboard-handoff', async (req, res): Promise<void> => {
+  const authedUid = await resolveFirebaseUid(req as AuthedRequest);
+  if (!authedUid) {
+    res.status(401).json({ error: 'Sign in required. Send Authorization: Bearer <Firebase ID token>.' });
+    return;
+  }
+
+  const bodyUid = typeof (req.body as { uid?: string })?.uid === 'string' ? (req.body as { uid: string }).uid.trim() : authedUid;
+  if (bodyUid !== authedUid) {
+    res.status(403).json({ error: 'uid does not match signed-in user.' });
+    return;
+  }
+
+  const accountId = await resolveConnectAccountIdForUid(authedUid);
+  if (!accountId) {
+    res.status(402).json({
+      error: 'connect_not_linked',
+      message: 'Complete Stripe Connect payout setup before opening the payout dashboard.',
+    });
+    return;
+  }
+
+  try {
+    const openUrl = await createConnectDashboardHandoff(authedUid);
+    req.log.info({ uid: authedUid, accountId }, 'Connect dashboard handoff created');
+    res.json({ openUrl, accountId });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to create dashboard handoff';
+    req.log.error({ err, uid: authedUid }, 'connect dashboard handoff failed');
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * Opens Stripe Express payout dashboard for a creator.
+ * Mobile: POST /stripe/connect/dashboard-handoff first, then Linking.openURL(openUrl).
+ * Authenticated fetch with Bearer also returns { url } directly.
+ */
+router.get('/stripe/connect/dashboard', async (req, res): Promise<void> => {
+  const uid = typeof req.query.uid === 'string' ? req.query.uid.trim() : '';
+  const handoff = typeof req.query.handoff === 'string' ? req.query.handoff.trim() : '';
+
+  if (!uid) {
+    res.status(400).json({ error: 'uid query parameter is required' });
+    return;
+  }
+
+  let authedUid: string | null = null;
+  if (handoff) {
+    const valid = await verifyConnectDashboardHandoff(handoff, uid);
+    if (valid) authedUid = uid;
+  } else {
+    authedUid = await resolveFirebaseUid(req as AuthedRequest);
+    if (authedUid && authedUid !== uid) {
+      res.status(403).json({ error: 'uid does not match signed-in user.' });
+      return;
+    }
+  }
+
+  if (!authedUid) {
+    res.status(401).json({ error: 'Sign in required or use a valid handoff token.' });
+    return;
+  }
+
+  const accountId = await resolveConnectAccountIdForUid(uid);
+  if (!accountId) {
+    res.status(402).json({
+      error: 'connect_not_linked',
+      message: 'Complete Stripe Connect payout setup first.',
+    });
+    return;
+  }
+
+  try {
+    const url = await createStripeConnectLoginLink(accountId);
+    req.log.info({ uid, accountId }, 'Connect dashboard login link created');
+
+    if (handoff || req.headers.accept?.includes('application/json') || req.headers.authorization) {
+      if (handoff) {
+        res.redirect(url);
+        return;
+      }
+      res.json({ url, accountId });
+      return;
+    }
+
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to open Connect dashboard';
+    req.log.error({ err, uid, accountId }, 'Connect dashboard login link failed');
+    res.status(500).json({ error: message });
+  }
+});
+
 // Start creator Connect Express onboarding — creates account if needed, returns hosted onboarding URL
 router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => {
+  const authedUid = await resolveFirebaseUid(req as AuthedRequest);
+  if (!authedUid) {
+    res.status(401).json({ error: 'Sign in required. Send Authorization: Bearer <Firebase ID token>.' });
+    return;
+  }
+
   const { uid, email, name, returnUrl } = req.body as {
     uid?: string; email?: string; name?: string; returnUrl?: string;
   };
-  if (!uid || !email) {
-    res.status(400).json({ error: 'uid and email are required' });
+
+  const effectiveUid = typeof uid === 'string' && uid.trim() ? uid.trim() : authedUid;
+  if (effectiveUid !== authedUid) {
+    res.status(403).json({ error: 'uid does not match signed-in user.' });
+    return;
+  }
+
+  const effectiveEmail = typeof email === 'string' ? email.trim() : '';
+  if (!effectiveEmail) {
+    res.status(400).json({ error: 'email is required' });
     return;
   }
 
   const stripe = await getUncachableStripeClient();
-  const base = returnUrl ?? 'http://localhost:80';
+  const base = returnUrl ?? 'https://brandopsapp.com/settings/payouts';
 
   const [profile] = await db
     .select()
     .from(userProfilesTable)
-    .where(eq(userProfilesTable.firebaseUid, uid))
+    .where(eq(userProfilesTable.firebaseUid, effectiveUid))
     .limit(1);
 
   let accountId = profile?.stripeConnectAccountId;
@@ -336,32 +603,40 @@ router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => 
     if (!accountId) {
       const account = await stripe.accounts.create({
         type: 'express',
-        email,
+        email: effectiveEmail,
+        ...(typeof name === 'string' && name.trim() ? { business_profile: { name: name.trim() } } : {}),
       });
       accountId = account.id;
 
       await db
         .insert(userProfilesTable)
-        .values({ firebaseUid: uid, stripeConnectAccountId: accountId })
+        .values({ firebaseUid: effectiveUid, stripeConnectAccountId: accountId })
         .onConflictDoUpdate({
           target: userProfilesTable.firebaseUid,
           set: { stripeConnectAccountId: accountId, updatedAt: new Date() },
         });
+
+      await syncToFirestore(effectiveUid, {
+        stripeConnectAccountId: accountId,
+        stripeConnected: false,
+        stripePayoutsEnabled: false,
+        payoutMethodReady: false,
+      });
     }
 
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${base}/settings?stripe_connect=refresh`,
-      return_url: `${base}/settings?stripe_connect=complete`,
+      refresh_url: `${base}?stripe_connect=refresh`,
+      return_url: `${base}?stripe_connect=complete`,
       type: 'account_onboarding',
     });
 
-    req.log.info({ uid, accountId }, 'Creator Connect onboarding link created');
+    req.log.info({ uid: effectiveUid, accountId }, 'Creator Connect onboarding link created');
     res.json({ url: accountLink.url, accountId });
   } catch (err: any) {
     const msg: string = err?.message ?? '';
     if (msg.includes('signed up for Connect')) {
-      req.log.warn({ uid }, 'Stripe Connect not enabled on this account');
+      req.log.warn({ uid: effectiveUid }, 'Stripe Connect not enabled on this account');
       res.status(402).json({
         error: 'connect_not_enabled',
         message: 'Stripe Connect is not enabled on this Stripe account.',
@@ -370,7 +645,7 @@ router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => 
       return;
     }
     if (msg.includes('platform-profile') || msg.includes('managing losses')) {
-      req.log.warn({ uid }, 'Stripe Connect platform profile incomplete');
+      req.log.warn({ uid: effectiveUid }, 'Stripe Connect platform profile incomplete');
       res.status(402).json({
         error: 'platform_profile_incomplete',
         message: 'Your Stripe Connect platform profile is not complete.',
@@ -378,7 +653,7 @@ router.post('/stripe/creator-connect/start', async (req, res): Promise<void> => 
       });
       return;
     }
-    req.log.error({ err, uid }, 'creator-connect/start failed');
+    req.log.error({ err, uid: effectiveUid }, 'creator-connect/start failed');
     res.status(500).json({ error: 'Internal server error', message: msg });
   }
 });
