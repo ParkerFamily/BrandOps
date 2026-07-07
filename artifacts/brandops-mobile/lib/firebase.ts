@@ -1,11 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import {
-  getAuth,
-  initializeAuth,
-  getReactNativePersistence,
-  type Auth,
-} from "firebase/auth";
+import { getAuth, initializeAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 import { env, isFirebaseConfigured } from "@/lib/env";
@@ -20,14 +16,26 @@ type FirebaseBundle = {
 let cached: FirebaseBundle | null = null;
 
 function createAuth(app: FirebaseApp): Auth {
-  // Must initialize with AsyncStorage persistence first — getAuth() alone does not
-  // persist sessions on React Native, so reloads look like a sign-out.
+  if (Platform.OS === "web") {
+    return getAuth(app);
+  }
+
   try {
-    return initializeAuth(app, {
+    const { getReactNativePersistence, initializeAuth: initAuth } = require("firebase/auth") as {
+      getReactNativePersistence: (storage: typeof AsyncStorage) => unknown;
+      initializeAuth: typeof initializeAuth;
+    };
+
+    return initAuth(app, {
+      // @ts-expect-error getReactNativePersistence is provided by Metro's RN firebase/auth bundle.
       persistence: getReactNativePersistence(AsyncStorage),
     });
   } catch {
-    return getAuth(app);
+    try {
+      return getAuth(app);
+    } catch {
+      return initializeAuth(app);
+    }
   }
 }
 

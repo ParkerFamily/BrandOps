@@ -5,39 +5,63 @@ import Toast from "react-native-toast-message";
 import { AccountAuthShell } from "@/components/auth/AccountAuthShell";
 import { AuthModuleErrorBoundary } from "@/components/auth/AuthModuleErrorBoundary";
 import { AuthTextField } from "@/components/auth/AuthTextField";
-import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { SocialAuthButtons, useSocialAuthAvailable } from "@/components/auth/SocialAuthButtons";
 import { BrandOpsButton } from "@/components/ui/BrandOpsButton";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { isGoogleSignInConfigured } from "@/lib/env";
+import type { AppleAuthCredentials } from "@/lib/appleSignIn";
+import { getFirebase } from "@/lib/firebase";
+import { resolvePostAuthRouteForUid } from "@/lib/postAuthRoute";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signInWithApple } = useAuth();
+  const socialAuthAvailable = useSocialAuthAvailable();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const finishAuth = () => {
+  const finishAuth = async () => {
+    const uid = getFirebase()?.auth.currentUser?.uid;
+    if (!uid) return;
+
+    const destination = await resolvePostAuthRouteForUid(uid);
     Toast.show({
       type: "success",
-      text1: "Welcome back",
-      text2: "You're in.",
+      text1: destination === "/(tabs)" ? "Welcome back" : "Almost there",
+      text2: destination === "/(tabs)" ? "You're in." : "Let's finish setting up your workspace.",
     });
-    router.replace("/(tabs)");
+    router.replace(destination);
   };
 
   const handleGoogle = async (idToken: string) => {
     try {
       setLoading(true);
       await signInWithGoogle(idToken);
-      finishAuth();
+      await finishAuth();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Try again.";
       Toast.show({
         type: "error",
         text1: "Google sign-in failed",
+        text2: message.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/g, "").trim(),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApple = async (credentials: AppleAuthCredentials) => {
+    try {
+      setLoading(true);
+      await signInWithApple(credentials);
+      await finishAuth();
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Try again.";
+      Toast.show({
+        type: "error",
+        text1: "Apple sign-in failed",
         text2: message.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/g, "").trim(),
       });
     } finally {
@@ -61,16 +85,24 @@ export default function LoginScreen() {
         </Link>
       }
     >
-      {isGoogleSignInConfigured() ? (
+      {socialAuthAvailable ? (
         <AuthModuleErrorBoundary>
-          <GoogleSignInButton
+          <SocialAuthButtons
             loading={loading}
             disabled={loading}
-            onIdToken={handleGoogle}
-            onError={(message) =>
+            onGoogleIdToken={handleGoogle}
+            onAppleCredentials={handleApple}
+            onGoogleError={(message) =>
               Toast.show({
                 type: "error",
                 text1: "Google sign-in failed",
+                text2: message.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/g, "").trim(),
+              })
+            }
+            onAppleError={(message) =>
+              Toast.show({
+                type: "error",
+                text1: "Apple sign-in failed",
                 text2: message.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/g, "").trim(),
               })
             }
@@ -112,7 +144,7 @@ export default function LoginScreen() {
           try {
             setLoading(true);
             await signInWithEmail(trimmedEmail, password);
-            finishAuth();
+            await finishAuth();
           } catch (e: unknown) {
             const message = e instanceof Error ? e.message : "Try again.";
             Toast.show({
@@ -126,11 +158,6 @@ export default function LoginScreen() {
         }}
       />
 
-      {!isGoogleSignInConfigured() ? (
-        <Text style={{ fontSize: 12, color: BrandOpsTheme.colors.subtle, textAlign: "center" }}>
-          Add Google client IDs in `.env` to enable Google sign-in.
-        </Text>
-      ) : null}
     </AccountAuthShell>
   );
 }

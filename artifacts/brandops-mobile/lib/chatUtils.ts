@@ -22,7 +22,7 @@ function creatorUnreadCount(
   const viewed = viewedSubmissionIds?.has(submission.id) ?? false;
   if (viewed) return 0;
   if (submission.status === "revision_requested") return 1;
-  if (submission.status === "approved" || submission.status === "rejected") return 1;
+  if (submission.status === "approved" || submission.status === "paid" || submission.status === "rejected") return 1;
   return 0;
 }
 
@@ -32,6 +32,9 @@ function creatorStatusBadge(
 ): { label: string; tone: "lime" | "muted" | "warning" | "success" } {
   if (submission.status === "revision_requested") {
     return { label: "Revision needed", tone: "warning" };
+  }
+  if (submission.status === "paid") {
+    return { label: "Paid", tone: "success" };
   }
   if (submission.status === "approved") {
     return { label: "Approved", tone: "success" };
@@ -52,6 +55,8 @@ function statusMessage(status: FirestoreSubmission["status"], notes?: string | n
       return "Submitted — awaiting review.";
     case "approved":
       return "Approved — payout queued.";
+    case "paid":
+      return "Paid — funds sent.";
     case "revision_requested":
       return "Revision requested.";
     case "rejected":

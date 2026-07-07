@@ -4,6 +4,7 @@ import { Link, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BrandOpsScreen } from "@/components/ui/BrandOpsScreen";
+import { BrandOpsCard } from "@/components/ui/BrandOpsCard";
 import { Avatar } from "@/components/ui/Avatar";
 import { PulseChart } from "@/components/ui/PulseChart";
 import { ApiEmpty, ApiError, ApiLoading, ApiNotConfigured } from "@/components/ui/ApiState";
@@ -14,11 +15,15 @@ import { formatRelativeTime, workspaceLabel } from "@/lib/format";
 import { canReviewSubmissions } from "@/lib/roleExperience";
 import { useBrandWorkspaceMetrics } from "@/lib/brandWorkspaceMetrics";
 import { campaignDetailPath, useFirestoreCampaigns } from "@/lib/campaignsFirestore";
+import { CreatorLaunchChecklist } from "@/components/creator/CreatorLaunchChecklist";
+import { CreatorDifferentiatorCard } from "@/components/creator/CreatorDifferentiatorCard";
+import { CreatorEarningsCard } from "@/components/creator/CreatorEarningsCard";
 import { useCreatorPayoutSetup } from "@/lib/creatorPayoutSetup";
 import { CreatorStripeSetupBanner } from "@/components/creator/CreatorStripeSetupBanner";
 import { isFirebaseConfigured } from "@/lib/env";
 import { usePullToRefresh } from "@/lib/usePullToRefresh";
 import { useFirestoreMySubmissions } from "@/lib/useFirestoreOwnerSubmissions";
+import { useFirestoreCreatorPayments } from "@/lib/useFirestoreCreatorPayments";
 
 export default function HomeScreen() {
   const { role } = useAuth();
@@ -28,7 +33,7 @@ export default function HomeScreen() {
 
 function BrandCommandCenter() {
   const router = useRouter();
-  const { user, loading: authLoading, authUid } = useAuth();
+  const { user, loading: authLoading, authUid, authEmail, role } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const { metrics, loading, error, refetch, campaigns, submissions } = useBrandWorkspaceMetrics();
@@ -139,6 +144,9 @@ function BrandCommandCenter() {
     >
       <Text style={{ color: BrandOpsTheme.colors.subtle, fontWeight: "700", fontSize: 14 }}>
         {greeting}, {name}
+      </Text>
+      <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 11, marginTop: 4 }}>
+        Brand workspace · {authEmail ?? authUid ?? "signed in"} · role {role ?? "loading"}
       </Text>
 
       {approvalCount > 0 ? (
@@ -273,13 +281,15 @@ function BrandCommandCenter() {
 
 function CreatorHome() {
   const router = useRouter();
-  const { authUid } = useAuth();
+  const { authUid, user } = useAuth();
   const payoutSetup = useCreatorPayoutSetup(authUid);
   const { campaigns, loading, error, refetch } = useFirestoreCampaigns({ status: "active" });
   const { submissions: mySubmissions } = useFirestoreMySubmissions();
+  const { payments: myPayments } = useFirestoreCreatorPayments();
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
   const next = campaigns[0];
   const latestSubmission = mySubmissions[0];
+  const revisionSubmission = mySubmissions.find((s) => s.status === "revision_requested");
 
   if (!isFirebaseConfigured()) {
     return (
@@ -297,6 +307,32 @@ function CreatorHome() {
     >
       <Text style={{ color: BrandOpsTheme.colors.subtle, fontWeight: "700" }}>Creator</Text>
       <CreatorStripeSetupBanner setup={payoutSetup} />
+
+      <CreatorLaunchChecklist
+        photoUrl={user?.photoURL}
+        payoutSetup={payoutSetup}
+        submissions={mySubmissions}
+      />
+      <CreatorDifferentiatorCard />
+
+      {revisionSubmission ? (
+        <Pressable
+          onPress={() => router.push(`/submission/${revisionSubmission.id}` as never)}
+          style={{ marginBottom: 16 }}
+        >
+          <BrandOpsCard variant="soft" style={{ borderColor: "rgba(255,193,7,0.35)", borderWidth: 1 }}>
+            <Text style={{ color: BrandOpsTheme.colors.warning, fontWeight: "900", fontSize: 13 }}>Revision requested</Text>
+            <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "800", fontSize: 16, marginTop: 6 }}>
+              {revisionSubmission.campaignTitle}
+            </Text>
+            <Text style={{ color: BrandOpsTheme.colors.muted, marginTop: 6, fontSize: 13 }}>
+              {revisionSubmission.notes?.trim() || "Brand asked for changes — tap to re-upload."}
+            </Text>
+          </BrandOpsCard>
+        </Pressable>
+      ) : null}
+
+      <CreatorEarningsCard submissions={mySubmissions} payments={myPayments} payoutSetup={payoutSetup} style={{ marginBottom: 16 }} />
 
       {loading && !next ? <ApiLoading label="Loading campaigns…" /> : null}
 
@@ -318,7 +354,22 @@ function CreatorHome() {
         </Pressable>
       ) : !loading && !error ? (
         <View style={{ marginTop: 16, marginBottom: 24 }}>
-          <ApiEmpty title="No open campaigns" body="Check back soon or browse all campaigns." />
+          <ApiEmpty
+            title="No campaigns available yet"
+            body="Check back soon or enable notifications in Settings so you know when new briefs drop."
+            actionLabel="Browse campaigns"
+            onAction={() => router.push("/(tabs)/campaigns" as never)}
+          />
+        </View>
+      ) : null}
+      {!latestSubmission && !loading && mySubmissions.length === 0 ? (
+        <View style={{ marginBottom: 16 }}>
+          <ApiEmpty
+            title="No submissions yet"
+            body="Pick an open campaign, film your UGC, and submit from the Upload tab."
+            actionLabel="Find a campaign"
+            onAction={() => router.push("/(tabs)/campaigns" as never)}
+          />
         </View>
       ) : null}
       {latestSubmission ? (

@@ -6,6 +6,7 @@ export const CAMPAIGN_OWNER_FIELDS = [
   "owner_firebase_uid",
   "ownerId",
   "workspaceId",
+  "brandUid",
   "ownerEmail",
   "authorEmail",
   "userId",

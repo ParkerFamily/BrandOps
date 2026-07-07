@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Pressable, RefreshControl, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,71 +13,71 @@ import { isFirebaseConfigured } from "@/lib/env";
 import { workspaceLabel } from "@/lib/format";
 import { canReviewSubmissions } from "@/lib/roleExperience";
 import { computeBrandWorkspaceMetrics } from "@/lib/brandWorkspaceMetrics";
+import { computeBrandPaymentTotals, filterPaymentsForBrandOwner } from "@/lib/creatorPaymentsFirestore";
 import { useFirestoreCampaigns } from "@/lib/campaignsFirestore";
 import { useFirestoreMySubmissions, useFirestoreOwnerSubmissions } from "@/lib/useFirestoreOwnerSubmissions";
-import { subscribeUserPaymentProfile } from "@/lib/paymentReadiness";
+import { useFirestoreBrandPayments } from "@/lib/useFirestoreBrandPayments";
+import { useFirestoreCreatorPayments } from "@/lib/useFirestoreCreatorPayments";
 import { useCreatorPayoutSetup } from "@/lib/creatorPayoutSetup";
 import {
   CreatorSetupStatusBadge,
   CreatorStripeSetupBanner,
 } from "@/components/creator/CreatorStripeSetupBanner";
+import { CreatorLaunchChecklist } from "@/components/creator/CreatorLaunchChecklist";
 import { CreatorEarningsCard } from "@/components/creator/CreatorEarningsCard";
 import { usePullToRefresh } from "@/lib/usePullToRefresh";
-import { openAuthenticatedWebSession } from "@/lib/webHandoff";
+import { openCreatorConnectDashboard } from "@/lib/webHandoff";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, role, logout, authUid } = useAuth();
+  const { user, role, logout, authUid, authEmail } = useAuth();
   const creator = !canReviewSubmissions(role);
   const payoutSetup = useCreatorPayoutSetup(creator ? authUid : null);
-  const [stripeConnected, setStripeConnected] = useState(false);
 
   const { campaigns, refetch: refetchCampaigns } = useFirestoreCampaigns(creator ? { status: "active" } : { ownerOnly: true });
-  const { submissions: ownerSubmissions } = useFirestoreOwnerSubmissions();
+  const campaignDocIds = useMemo(() => campaigns.map((c) => c.firestoreDocId), [campaigns]);
+  const { submissions: ownerSubmissions } = useFirestoreOwnerSubmissions(null, campaignDocIds);
+  const { payments: brandPayments } = useFirestoreBrandPayments();
   const { submissions: mySubmissions } = useFirestoreMySubmissions();
+  const { payments: myPayments } = useFirestoreCreatorPayments();
   const submissions = creator ? mySubmissions : ownerSubmissions;
 
   const brandSnapshot = useMemo(() => {
     if (creator) return null;
-    return computeBrandWorkspaceMetrics(campaigns, ownerSubmissions);
-  }, [creator, campaigns, ownerSubmissions]);
-
-  useEffect(() => {
-    if (!authUid || creator) return;
-    return subscribeUserPaymentProfile(authUid, (data) => {
-      const connected = Boolean(
-        data?.stripeCustomerId ||
-          data?.stripeAccountId ||
-          data?.stripeConnectAccountId ||
-          data?.stripeConnected ||
-          data?.stripeOnboardingComplete ||
-          data?.payoutMethodReady
-      );
-      setStripeConnected(connected);
-    });
-  }, [authUid, creator]);
+    return computeBrandWorkspaceMetrics(campaigns, ownerSubmissions, authUid, brandPayments);
+  }, [creator, campaigns, ownerSubmissions, authUid, brandPayments]);
 
   const activeCampaigns = useMemo(
     () => (creator ? campaigns.length : campaigns.filter((c) => c.status === "active").length),
     [campaigns, creator]
   );
 
-  const activeCreators = useMemo(() => {
-    if (!creator) return brandSnapshot?.totalCreators ?? 0;
-    const ids = new Set(submissions.map((s) => s.creatorFirebaseUid).filter(Boolean));
-    return ids.size;
-  }, [submissions, creator, brandSnapshot?.totalCreators]);
-
-  const spendThisMonth = useMemo(() => {
-    if (!creator) return brandSnapshot?.spendThisMonth ?? 0;
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return submissions
-      .filter((s) => s.status === "approved" && s.createdAt >= start)
-      .reduce((sum, s) => sum + (s.payoutAmount ?? 0), 0);
-  }, [submissions, creator, brandSnapshot?.spendThisMonth]);
-
   const { refreshing, onRefresh } = usePullToRefresh(refetchCampaigns);
+
+  const scopedBrandPayments = useMemo(() => {
+    if (creator || !authUid) return [];
+    return filterPaymentsForBrandOwner(
+      brandPayments,
+      authUid,
+      campaignDocIds,
+      ownerSubmissions.map((s) => s.id),
+      campaigns.map((c) => c.title)
+    );
+  }, [creator, authUid, brandPayments, campaignDocIds, ownerSubmissions, campaigns]);
+
+  const brandPaymentSummary = useMemo(
+    () =>
+      creator
+        ? { totalPaid: 0, totalProcessing: 0, totalPending: 0, paidThisMonth: 0 }
+        : computeBrandPaymentTotals(scopedBrandPayments),
+    [creator, scopedBrandPayments]
+  );
+
+  const totalPaid = useMemo(() => {
+    if (!creator) return brandPaymentSummary.totalPaid;
+    return myPayments.filter((p) => p.status === "paid").reduce((sum, p) => sum + p.amount, 0);
+  }, [myPayments, creator, brandPaymentSummary.totalPaid]);
+
   const workspaceName = workspaceLabel(user?.displayName, user?.email);
 
   if (!isFirebaseConfigured()) {
@@ -102,57 +102,64 @@ export default function ProfileScreen() {
             <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "900", fontSize: 20 }}>
               {user?.displayName ?? workspaceName}
             </Text>
-            <Text style={{ color: BrandOpsTheme.colors.muted, marginTop: 4 }}>{user?.email ?? "—"}</Text>
+            <Text style={{ color: BrandOpsTheme.colors.muted, marginTop: 4 }}>{authEmail ?? user?.email ?? "—"}</Text>
             <Text style={{ color: BrandOpsTheme.colors.subtle, marginTop: 6, fontSize: 12 }}>
-              {creator ? "Creator workspace" : "Brand workspace"}
+              {creator ? "Creator workspace" : "Brand workspace"} · role {role ?? "—"}
             </Text>
+            {authUid ? (
+              <Text style={{ color: BrandOpsTheme.colors.subtle, marginTop: 4, fontSize: 10 }} selectable>
+                UID {authUid}
+              </Text>
+            ) : null}
           </View>
         </View>
         {creator ? (
           <View style={{ marginTop: 12 }}>
             <CreatorSetupStatusBadge setup={payoutSetup} />
           </View>
-        ) : (
-          <View
-            style={{
-              marginTop: 12,
-              alignSelf: "flex-start",
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: BrandOpsTheme.colors.limeSoft,
-            }}
-          >
-            <Text style={{ color: BrandOpsTheme.colors.lime, fontWeight: "800", fontSize: 12 }}>
-              Stripe · {stripeConnected ? "Connected" : "Not connected"}
-            </Text>
-          </View>
-        )}
+        ) : null}
       </BrandOpsCard>
 
       {creator ? <CreatorStripeSetupBanner setup={payoutSetup} /> : null}
 
-      {creator ? <CreatorEarningsCard submissions={mySubmissions} /> : null}
+      {creator ? (
+        <CreatorLaunchChecklist
+          photoUrl={user?.photoURL}
+          payoutSetup={payoutSetup}
+          submissions={mySubmissions}
+          compact
+        />
+      ) : null}
+
+      {creator ? <CreatorEarningsCard submissions={mySubmissions} payments={myPayments} payoutSetup={payoutSetup} /> : null}
 
       {!creator ? (
         <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-          <MetricTile label="Spend this month" value={`$${spendThisMonth.toLocaleString()}`} />
-          <MetricTile label="Active creators" value={String(activeCreators)} />
+          <MetricTile label="Total paid" value={`$${totalPaid.toLocaleString()}`} />
+          <MetricTile label="Paid this month" value={`$${brandPaymentSummary.paidThisMonth.toLocaleString()}`} />
         </View>
       ) : null}
 
-      <BrandOpsCard variant="soft" style={{ marginBottom: 14 }}>
-        <ApiEmpty
-          title="Team & billing on web"
-          body="Invite teammates, connect channels, and manage billing from the BrandOps web dashboard."
-        />
-      </BrandOpsCard>
+      {!creator && brandPaymentSummary.totalProcessing > 0 ? (
+        <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 12, marginTop: -8, marginBottom: 16 }}>
+          ${brandPaymentSummary.totalProcessing.toLocaleString()} processing
+        </Text>
+      ) : null}
 
-      <BrandOpsButton
-        label={creator ? "Manage payouts" : "Manage billing"}
-        variant="secondary"
-        onPress={() => void openAuthenticatedWebSession(creator ? "payments" : "billing")}
-      />
+      {creator ? (
+        <BrandOpsButton
+          label="Manage payouts"
+          variant="secondary"
+          onPress={() => void (authUid ? openCreatorConnectDashboard(authUid) : undefined)}
+        />
+      ) : (
+        <BrandOpsCard variant="soft" style={{ marginBottom: 14 }}>
+          <ApiEmpty
+            title="Review on mobile"
+            body="Use this app to review creator submissions. Create and manage campaigns on the BrandOps web dashboard."
+          />
+        </BrandOpsCard>
+      )}
 
       <View style={{ height: 12 }} />
 
@@ -175,7 +182,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "800", fontSize: 16 }}>Settings</Text>
                 <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 12, marginTop: 2 }}>
-                  Privacy Policy, Terms of Service, app info
+                  Account, notifications, payouts, security & more
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={BrandOpsTheme.colors.subtle} />

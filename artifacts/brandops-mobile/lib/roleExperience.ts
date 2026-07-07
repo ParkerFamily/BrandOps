@@ -15,20 +15,19 @@ export function canReviewSubmissions(role: UserRole | null | undefined): boolean
   return isOperatorRole(role);
 }
 
-/** Resolve role after sign-in without clobbering creator accounts with a brand default. */
+/** Resolve role after sign-in — Firestore profile wins over stale device workspace prefs. */
 export function resolveSessionRole(
   firestoreRole: UserRole | null | undefined,
   cachedRole: UserRole | null | undefined,
   setup: WorkspacesSetupState
 ): UserRole | null {
-  // Profile workspace switch / onboarding primary beats stale Firestore `role: brand` tags.
+  if (firestoreRole === "creator") return "creator";
+  if (firestoreRole) return firestoreRole;
+
   if (setup.primary === "creator") return "creator";
   if (setup.primary === "brand") return "brand";
   if (setup.creator && !setup.brand) return "creator";
   if (setup.brand && !setup.creator) return "brand";
-
-  if (firestoreRole === "creator") return "creator";
-  if (firestoreRole) return firestoreRole;
 
   if (cachedRole === "creator") return "creator";
   if (cachedRole) return cachedRole;
@@ -37,7 +36,7 @@ export function resolveSessionRole(
 
 export function homeSubtitle(role: UserRole | null | undefined): string {
   if (isCreatorRole(role)) {
-    return "Find campaigns, submit UGC, and track payouts. Premium, not a feed.";
+    return "Find campaigns, submit UGC, and track payouts.";
   }
   if (role === "agency") {
     return "Multi-brand approvals and campaign pulse. Web remains your HQ.";

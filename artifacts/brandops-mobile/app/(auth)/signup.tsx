@@ -5,14 +5,14 @@ import Toast from "react-native-toast-message";
 import { AccountAuthShell } from "@/components/auth/AccountAuthShell";
 import { AuthModuleErrorBoundary } from "@/components/auth/AuthModuleErrorBoundary";
 import { AuthTextField } from "@/components/auth/AuthTextField";
-import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { SocialAuthButtons, useSocialAuthAvailable } from "@/components/auth/SocialAuthButtons";
 import { WorkspaceProvisioning } from "@/components/auth/WorkspaceProvisioning";
 import { StrategySummary } from "@/components/onboarding/StrategySummary";
 import { BrandOpsButton } from "@/components/ui/BrandOpsButton";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { getFirebase } from "@/lib/firebase";
-import { isGoogleSignInConfigured } from "@/lib/env";
+import type { AppleAuthCredentials } from "@/lib/appleSignIn";
 import { hasCompletedCinematicOnboarding, isOnboardingGateComplete, readOnboardingAnswers } from "@/lib/onboardingStorage";
 import { provisioningSteps } from "@/lib/onboardingStrategy";
 import { provisionWorkspace } from "@/lib/provisionWorkspace";
@@ -20,7 +20,8 @@ import { sendWelcomeEmailFromMobile } from "@/lib/emailApi";
 
 export default function SignupScreen() {
   const router = useRouter();
-  const { role, signUpWithEmail, signUpWithGoogle } = useAuth();
+  const { role, signUpWithEmail, signUpWithGoogle, signUpWithApple, refreshProfile, isAuthenticated } = useAuth();
+  const socialAuthAvailable = useSocialAuthAvailable();
   const provisionedRef = useRef(false);
 
   const [saved, setSaved] = useState<Awaited<ReturnType<typeof readOnboardingAnswers>>>(null);
@@ -69,14 +70,20 @@ export default function SignupScreen() {
           });
         },
       });
+      await refreshProfile();
       router.replace("/(tabs)");
     } catch {
-      Toast.show({ type: "error", text1: "Workspace setup failed", text2: "You're signed in — try refreshing." });
-      router.replace("/(tabs)");
+      provisionedRef.current = false;
+      Toast.show({ type: "error", text1: "Workspace setup failed", text2: "Try again in a moment." });
     } finally {
       setProvisioning(false);
     }
   };
+
+  useEffect(() => {
+    if (!ready || provisioning || provisionedRef.current || !isAuthenticated || !role) return;
+    void finishAndEnterApp();
+  }, [ready, isAuthenticated, role, provisioning]);
 
   const handleGoogle = async (idToken: string) => {
     try {
@@ -87,6 +94,20 @@ export default function SignupScreen() {
       provisionedRef.current = false;
       const message = e instanceof Error ? e.message : "Try again.";
       Toast.show({ type: "error", text1: "Google sign-in failed", text2: message.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/g, "").trim() });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApple = async (credentials: AppleAuthCredentials) => {
+    try {
+      setLoading(true);
+      await signUpWithApple(credentials);
+      await finishAndEnterApp();
+    } catch (e: unknown) {
+      provisionedRef.current = false;
+      const message = e instanceof Error ? e.message : "Try again.";
+      Toast.show({ type: "error", text1: "Apple sign-in failed", text2: message.replace("Firebase: ", "").replace(/\(auth\/.*\)\.?/g, "").trim() });
     } finally {
       setLoading(false);
     }
@@ -113,15 +134,22 @@ export default function SignupScreen() {
         }
       >
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 18, paddingBottom: 8 }}>
-          <StrategySummary strategy={saved.strategy} workspace={saved.profile.workspace} />
+          <StrategySummary
+            strategy={saved.strategy}
+            workspace={saved.profile.workspace === "creator" ? "creator" : "brand"}
+          />
 
           <AuthModuleErrorBoundary>
-            <GoogleSignInButton
-              loading={loading || provisioning}
-              disabled={loading || provisioning}
-              onIdToken={handleGoogle}
-              onError={(message) => Toast.show({ type: "error", text1: "Google sign-in failed", text2: message })}
-            />
+            {socialAuthAvailable ? (
+              <SocialAuthButtons
+                loading={loading || provisioning}
+                disabled={loading || provisioning}
+                onGoogleIdToken={handleGoogle}
+                onAppleCredentials={handleApple}
+                onGoogleError={(message) => Toast.show({ type: "error", text1: "Google sign-in failed", text2: message })}
+                onAppleError={(message) => Toast.show({ type: "error", text1: "Apple sign-in failed", text2: message })}
+              />
+            ) : null}
           </AuthModuleErrorBoundary>
 
           {!showEmail ? (
@@ -156,9 +184,6 @@ export default function SignupScreen() {
             </View>
           )}
 
-          {!isGoogleSignInConfigured() ? (
-            <Text style={{ fontSize: 12, color: BrandOpsTheme.colors.subtle, textAlign: "center" }}>Add Google client IDs in `.env` to enable Google sign-in.</Text>
-          ) : null}
         </ScrollView>
       </AccountAuthShell>
 

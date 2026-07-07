@@ -18,6 +18,7 @@ import { useCreatorActivityState } from "@/lib/creatorActivityStorage";
 import { usePullToRefresh } from "@/lib/usePullToRefresh";
 
 export default function MessagesScreen() {
+  const router = useRouter();
   const { user, role, authUid } = useAuth();
   const { viewedSubmissionIds, markSubmissionViewed } = useCreatorActivityState();
   const [active, setActive] = useState<ChatThread | null>(null);
@@ -84,8 +85,14 @@ export default function MessagesScreen() {
 
       {!loading && threads.length === 0 ? (
         <ApiEmpty
-          title="No threads yet"
-          body="Submission updates with creators will appear here."
+          title={creator ? "No activity yet" : "No threads yet"}
+          body={
+            creator
+              ? "Submit to a campaign to get approval, revision, and payout updates here. Turn on push notifications in Settings."
+              : "Submission updates with creators will appear here."
+          }
+          actionLabel={creator ? "Browse campaigns" : undefined}
+          onAction={creator ? () => router.push("/(tabs)/campaigns" as never) : undefined}
         />
       ) : null}
 

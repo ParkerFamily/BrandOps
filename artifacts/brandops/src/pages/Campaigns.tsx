@@ -340,3 +340,4 @@ export default function Campaigns() {
   const isCreator = onboarding?.accountType === "Creator" || onboarding?.accountType === "Creator Manager";
   return isCreator ? <CreatorCampaignsPage /> : <BrandCampaignsPage />;
 }
+

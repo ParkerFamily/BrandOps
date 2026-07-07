@@ -89,6 +89,7 @@ function toFirestoreValue(val: unknown): unknown {
     return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
   }
   if (typeof val === "string") return { stringValue: val };
+  if (val instanceof Date) return { timestampValue: val.toISOString() };
   if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreValue) } };
   if (typeof val === "object") {
     const fields: Record<string, unknown> = {};

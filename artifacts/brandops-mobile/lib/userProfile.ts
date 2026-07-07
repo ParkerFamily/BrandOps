@@ -26,20 +26,35 @@ type FirestoreUserDoc = {
   role?: UserRole;
   mobileCinematicOnboardingComplete?: boolean;
   onboarding?: OnboardingAnswers | Record<string, unknown> | null;
+  /** Web dashboard stores account type here (`Brand`, `Creator`, etc.). */
+  onboardingData?: Record<string, unknown> | null;
   workspacesSetup?: Partial<WorkspacesSetupState>;
   workspacesOnboarding?: Partial<Record<"brand" | "creator", Record<string, unknown>>>;
 };
 
+function roleFromAccountType(accountType: unknown): UserRole | null {
+  const normalized = String(accountType ?? "").toLowerCase().trim();
+  if (!normalized) return null;
+  if (normalized === "creator") return "creator";
+  if (normalized === "creator manager" || normalized === "creator_manager") return "creator_manager";
+  if (normalized === "agency") return "agency";
+  if (normalized === "brand") return "brand";
+  return "brand";
+}
+
 function inferRoleFromFirestore(data: FirestoreUserDoc): UserRole | null {
   if (data.role) return data.role;
 
+  const webOnboarding = data.onboardingData;
+  if (webOnboarding && typeof webOnboarding === "object" && "accountType" in webOnboarding) {
+    const fromWeb = roleFromAccountType(webOnboarding.accountType);
+    if (fromWeb) return fromWeb;
+  }
+
   const onboarding = data.onboarding;
   if (onboarding && typeof onboarding === "object" && "accountType" in onboarding) {
-    const accountType = String(onboarding.accountType ?? "");
-    if (accountType === "creator") return "creator";
-    if (accountType === "creator_manager") return "creator_manager";
-    if (accountType === "agency") return "agency";
-    if (accountType) return "brand";
+    const fromMobile = roleFromAccountType(onboarding.accountType);
+    if (fromMobile) return fromMobile;
   }
 
   if (onboarding && typeof onboarding === "object" && "inferredRole" in onboarding) {
@@ -50,6 +65,23 @@ function inferRoleFromFirestore(data: FirestoreUserDoc): UserRole | null {
     const workspace = onboarding.workspace;
     if (workspace === "creator") return "creator";
     if (workspace === "brand") return "brand";
+  }
+
+  if (webOnboarding && typeof webOnboarding === "object" && "workspace" in webOnboarding) {
+    const workspace = webOnboarding.workspace;
+    if (workspace === "creator") return "creator";
+    if (workspace === "brand") return "brand";
+  }
+
+  const workspacesSetup = data.workspacesSetup;
+  if (workspacesSetup && typeof workspacesSetup === "object") {
+    const primary = (workspacesSetup as { primary?: string }).primary;
+    if (primary === "creator") return "creator";
+    if (primary === "brand") return "brand";
+    const brand = Boolean((workspacesSetup as { brand?: boolean }).brand);
+    const creator = Boolean((workspacesSetup as { creator?: boolean }).creator);
+    if (brand && !creator) return "brand";
+    if (creator && !brand) return "creator";
   }
 
   return null;
@@ -80,6 +112,22 @@ export async function hydrateSessionFromFirestore(uid: string): Promise<Hydrated
     // Existing account — skip the pre-signup questionnaire on this device.
     const sessionId = (await AsyncStorage.getItem(ONBOARDING_SESSION_KEY)) ?? `restored_${uid}`;
     await markOnboardingGateComplete(sessionId);
+
+    // Web stores account type in onboardingData only — persist role for mobile + rules.
+    if (!data.role) {
+      try {
+        await setDoc(
+          doc(firebase.db, "users", uid),
+          {
+            role,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } catch {
+        // Non-fatal — local session still uses inferred role.
+      }
+    }
   }
 
   return {
@@ -87,6 +135,8 @@ export async function hydrateSessionFromFirestore(uid: string): Promise<Hydrated
     mobileCinematicComplete: Boolean(data.mobileCinematicOnboardingComplete) || Boolean(role),
   };
 }
+
+import { normalizeAccountEmail } from "@/lib/authIdentity";
 
 /** Persist onboarding + account metadata to Firestore `users/{uid}`. */
 export async function syncUserProfileToFirestore(input: SyncUserProfileInput): Promise<void> {
@@ -112,7 +162,8 @@ export async function syncUserProfileToFirestore(input: SyncUserProfileInput): P
   await setDoc(
     doc(firebase.db, "users", input.uid),
     {
-      email: input.email ?? null,
+      email: input.email?.trim() || null,
+      emailLower: normalizeAccountEmail(input.email),
       displayName: input.displayName ?? null,
       role: input.role,
       platform: "mobile",

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, paymentsTable, creatorsTable, campaignsTable, submissionsTable, activityTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { sendPayoutEmail } from "../lib/email";
+import { notifyApiPayoutPaid } from "../lib/notificationTriggers";
 import {
   CreatePaymentBody,
   UpdatePaymentBody,
@@ -130,6 +131,12 @@ router.patch("/payments/:id", async (req, res): Promise<void> => {
         `$${parseFloat(payment.amount).toFixed(2)}`,
         enriched2.campaign?.title ?? "your campaign",
       );
+      void notifyApiPayoutPaid({
+        creatorEmail: enriched2.creator.email,
+        amount: parseFloat(payment.amount),
+        campaignTitle: enriched2.campaign?.title ?? null,
+        paymentId: payment.id,
+      });
     }
   }
 

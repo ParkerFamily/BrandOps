@@ -15,7 +15,10 @@ export type SubmissionReviewAi = {
   source: "ai" | "fallback";
 };
 
-export async function analyzeSubmissionForReview(item: ReviewSubmission): Promise<SubmissionReviewAi> {
+export async function analyzeSubmissionForReview(
+  item: ReviewSubmission,
+  options?: { transcript?: string | null; submissionDocId?: string }
+): Promise<SubmissionReviewAi> {
   const fallback: SubmissionReviewAi = {
     hookStrength: 7,
     brandFit: 7,
@@ -39,12 +42,13 @@ export async function analyzeSubmissionForReview(item: ReviewSubmission): Promis
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({
-        submissionId: item.id,
+        submissionId: options?.submissionDocId ?? item.id,
         videoUrl: item.videoUrl,
         campaignTitle: item.campaign?.title,
         campaignDescription: item.campaign?.description,
         creatorName: item.creator?.name,
         creatorNiche: item.creator?.niche ?? item.campaign?.niche,
+        transcript: options?.transcript?.trim() || undefined,
       }),
     });
 

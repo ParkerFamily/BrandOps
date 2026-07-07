@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -6,6 +6,7 @@ import {
   PanResponder,
   Pressable,
   RefreshControl,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -19,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import { useQueryClient } from "@tanstack/react-query";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
+import { TAB_BAR_BASE_HEIGHT } from "@/constants/layout";
 import { Avatar } from "@/components/ui/Avatar";
 import { ApiLoading } from "@/components/ui/ApiState";
 import { BrandOpsButton } from "@/components/ui/BrandOpsButton";
@@ -27,8 +29,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canReviewSubmissions } from "@/lib/roleExperience";
 import { ReviewVideoPlayer } from "@/components/review/ReviewVideoPlayer";
 import { ReviewAiPanel } from "@/components/review/ReviewAiPanel";
+import { saveSubmissionVideoToDevice } from "@/lib/saveSubmissionVideo";
 import { updateSubmissionStatus } from "@/lib/submissionsApi";
 import type { ReviewSubmission } from "@/lib/submissionUtils";
+import { formatRelativeTime } from "@/lib/format";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const VIDEO_W = Math.min(SCREEN_W - 32, 340);
@@ -43,7 +48,20 @@ export type ReviewFeedSubmission = ReviewSubmission & {
   submissionType?: "upload" | "link";
   creatorFirebaseUid?: string;
   campaignOwnerUid?: string;
+  subtitlesContent?: string | null;
+  processedVideoUrl?: string | null;
 };
+
+function reviewStatusLabel(status: ReviewSubmission["status"]): { label: string; tone: "warning" | "lime" | "muted" } {
+  if (status === "revision_requested") return { label: "Revision needed", tone: "warning" };
+  if (status === "reviewing") return { label: "In review", tone: "lime" };
+  return { label: "Pending review", tone: "warning" };
+}
+
+function submissionRef(item: ReviewFeedSubmission): string {
+  if (item.firestoreDocId) return item.firestoreDocId.slice(-8).toUpperCase();
+  return `#${item.id}`;
+}
 
 type Props = {
   submissions: ReviewFeedSubmission[];
@@ -65,9 +83,10 @@ export function ReviewFeed({ submissions, onReviewed, refreshing, onRefresh, loa
   const swipeX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<FlatList<ReviewFeedSubmission>>(null);
 
-  const footerH = 118 + insets.bottom;
+  const footerH = 88 + insets.bottom;
   const headerH = 52 + insets.top;
-  const pageH = SCREEN_H - headerH - footerH;
+  const tabBarH = TAB_BAR_BASE_HEIGHT + Math.max(insets.bottom, 10);
+  const pageH = SCREEN_H - headerH - footerH - tabBarH;
 
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.y / pageH);
@@ -172,8 +191,8 @@ export function ReviewFeed({ submissions, onReviewed, refreshing, onRefresh, loa
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: BrandOpsTheme.colors.bg }}>
         <Ionicons name="checkmark-done-circle" size={48} color={BrandOpsTheme.colors.lime} />
         <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "900", fontSize: 20, marginTop: 16 }}>All caught up</Text>
-        <Text style={{ color: BrandOpsTheme.colors.muted, marginTop: 8, textAlign: "center" }}>
-          No UGC waiting for approval.
+        <Text style={{ color: BrandOpsTheme.colors.muted, marginTop: 8, textAlign: "center", lineHeight: 22 }}>
+          No creator videos are waiting for approval on your campaigns. New submissions appear here in real time.
         </Text>
       </View>
     );
@@ -187,6 +206,8 @@ export function ReviewFeed({ submissions, onReviewed, refreshing, onRefresh, loa
       swipeX={swipeX}
       scrub={scrub}
       onScrub={setScrub}
+      notes={notes}
+      onNotesChange={setNotes}
       onSwipeEnd={(dir) => {
         if (dir === "right") void act("approve");
         if (dir === "left") void act("reject");
@@ -199,20 +220,27 @@ export function ReviewFeed({ submissions, onReviewed, refreshing, onRefresh, loa
       <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, paddingBottom: 8 }}>
         <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "900", fontSize: 20 }}>Review</Text>
         <Text style={{ color: BrandOpsTheme.colors.subtle, marginTop: 2, fontSize: 13 }}>
-          {index + 1} of {submissions.length} · swipe ↑↓ between creators
+          {submissions.length > 1
+            ? `${index + 1} of ${submissions.length} · swipe ↑↓ between creators`
+            : `${index + 1} of ${submissions.length} · scroll for AI details`}
         </Text>
       </View>
 
       <FlatList
         ref={listRef}
+        style={{ flex: 1 }}
         data={submissions}
-        keyExtractor={(s) => String(s.id)}
+        keyExtractor={(s) => s.firestoreDocId ?? String(s.id)}
         renderItem={renderItem}
-        pagingEnabled
+        pagingEnabled={submissions.length > 1}
+        scrollEnabled={submissions.length > 1}
         showsVerticalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
-        snapToInterval={pageH}
+        onScrollEndDrag={onScrollEnd}
+        snapToInterval={submissions.length > 1 ? pageH : undefined}
+        snapToAlignment="start"
         decelerationRate="fast"
+        disableIntervalMomentum={submissions.length > 1}
         getItemLayout={(_, i) => ({ length: pageH, offset: pageH * i, index: i })}
         refreshControl={
           onRefresh ? (
@@ -230,21 +258,6 @@ export function ReviewFeed({ submissions, onReviewed, refreshing, onRefresh, loa
           borderTopColor: "rgba(255,255,255,0.05)",
         }}
       >
-        <TextInput
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Revision notes…"
-          placeholderTextColor={BrandOpsTheme.colors.subtle}
-          style={{
-            height: 40,
-            borderRadius: 12,
-            paddingHorizontal: 14,
-            backgroundColor: BrandOpsTheme.colors.surface,
-            color: BrandOpsTheme.colors.text,
-            fontSize: 14,
-            marginBottom: 10,
-          }}
-        />
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <IconAction icon="close" label="Reject" onPress={() => void act("reject")} />
           <IconAction icon="refresh" label="Revise" onPress={() => void act("revision")} />
@@ -263,6 +276,8 @@ function ReviewPage({
   pageH,
   videoH,
   swipeX,
+  notes,
+  onNotesChange,
   onSwipeEnd,
 }: {
   item: ReviewFeedSubmission;
@@ -271,17 +286,30 @@ function ReviewPage({
   swipeX: Animated.Value;
   scrub: number;
   onScrub: (n: number) => void;
+  notes: string;
+  onNotesChange: (value: string) => void;
   onSwipeEnd: (dir: "left" | "right" | null) => void;
 }) {
+  const router = useRouter();
+  const [showNotes, setShowNotes] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setShowNotes(false);
+  }, [item.firestoreDocId, item.id]);
+
   const { review } = item;
   const creator = item.creator;
+  const statusMeta = reviewStatusLabel(item.status);
+  const submittedAgo = formatRelativeTime(item.createdAt);
+  const refLabel = submissionRef(item);
   const fmtFollowers =
     creator && creator.followerCount >= 1000 ? `${(creator.followerCount / 1000).toFixed(0)}K` : String(creator?.followerCount ?? 0);
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 16 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
       onPanResponderMove: (_, g) => swipeX.setValue(g.dx),
       onPanResponderRelease: (_, g) => {
         if (g.dx > 80) {
@@ -301,8 +329,49 @@ function ReviewPage({
   const rejectOpacity = swipeX.interpolate({ inputRange: [-80, 0], outputRange: [1, 0], extrapolate: "clamp" });
 
   return (
-    <View style={{ height: pageH, alignItems: "center", justifyContent: "flex-start", paddingTop: 4 }}>
-      <View style={{ width: VIDEO_W }}>
+    <View style={{ height: pageH, paddingTop: 4 }}>
+      <View style={{ width: VIDEO_W, alignSelf: "center", gap: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <View style={{ flex: 1, gap: 6 }}>
+            <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "900", fontSize: 16 }} numberOfLines={1}>
+              {item.campaign?.title ?? "Campaign submission"}
+            </Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <StatusBadge label={statusMeta.label} tone={statusMeta.tone} />
+              <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 11, fontWeight: "700" }}>
+                Submission {refLabel}
+              </Text>
+              {submittedAgo ? (
+                <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 11 }}>· {submittedAgo}</Text>
+              ) : null}
+            </View>
+          </View>
+          {item.firestoreDocId ? (
+            <Pressable
+              onPress={() => router.push(`/submission/${item.firestoreDocId}` as never)}
+              hitSlop={8}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderRadius: 10,
+                backgroundColor: BrandOpsTheme.colors.surface,
+                borderWidth: 1,
+                borderColor: BrandOpsTheme.colors.border,
+              }}
+            >
+              <Text style={{ color: BrandOpsTheme.colors.lime, fontWeight: "800", fontSize: 11 }}>Details</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <Text style={{ color: BrandOpsTheme.colors.muted, fontSize: 12 }}>
+          {creator?.name ?? "Creator"}
+          {creator?.handle ? ` · ${creator.handle}` : ""}
+          {item.submissionType === "link" ? " · external link" : " · uploaded video"}
+        </Text>
+      </View>
+
+      <View style={{ width: VIDEO_W, alignSelf: "center", marginTop: 4 }}>
         <Animated.View
           {...pan.panHandlers}
           style={{
@@ -314,7 +383,7 @@ function ReviewPage({
         >
           <View style={{ position: "relative" }}>
             <ReviewVideoPlayer
-              videoUrl={item.videoUrl}
+              videoUrl={item.processedVideoUrl ?? item.videoUrl}
               storagePath={item.storagePath}
               submissionType={item.submissionType}
               height={videoH}
@@ -401,13 +470,21 @@ function ReviewPage({
             </Text>
           </Animated.View>
         </Animated.View>
+      </View>
 
-        <View style={{ marginTop: 12, gap: 10 }}>
+      <ScrollView
+        style={{ flex: 1, marginTop: 12 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={{ width: VIDEO_W, alignSelf: "center", gap: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
               <Ionicons name="videocam" size={14} color={BrandOpsTheme.colors.lime} />
               <Text style={{ color: BrandOpsTheme.colors.muted, fontSize: 12, fontWeight: "700" }} numberOfLines={1}>
-                {item.campaign?.title}
+                Tap video to play · swipe ← reject · approve →
               </Text>
             </View>
             <Text style={{ color: BrandOpsTheme.colors.lime, fontWeight: "900", fontSize: 16 }}>
@@ -420,14 +497,101 @@ function ReviewPage({
           </Text>
 
           {item.videoUrl ? null : (
-            <Text style={{ color: BrandOpsTheme.colors.warning, fontSize: 12, marginTop: 8 }}>
+            <Text style={{ color: BrandOpsTheme.colors.warning, fontSize: 12 }}>
               Waiting for video upload — creator may have submitted a link only.
             </Text>
           )}
 
-          <ReviewAiPanel item={item} />
+          <View style={{ gap: 8 }}>
+            <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 11, fontWeight: "800", letterSpacing: 0.6 }}>
+              EXPORT
+            </Text>
+            <Pressable
+              disabled={saving || !item.videoUrl}
+              onPress={() => {
+                void (async () => {
+                  try {
+                    setSaving(true);
+                    await saveSubmissionVideoToDevice({
+                      videoUrl: item.videoUrl,
+                      storagePath: item.storagePath,
+                      submissionType: item.submissionType,
+                      fileName: item.campaign?.title ?? item.creator?.name ?? "submission",
+                    });
+                    Toast.show({
+                      type: "success",
+                      text1: "Saved to device",
+                      text2: "Video is in your Photos library.",
+                    });
+                  } catch (err) {
+                    const message = err instanceof Error ? err.message : "Try again.";
+                    Toast.show({ type: "error", text1: "Could not save", text2: message });
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
+              }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                paddingVertical: 12,
+                borderRadius: 12,
+                backgroundColor: BrandOpsTheme.colors.surface,
+                borderWidth: 1,
+                borderColor: BrandOpsTheme.colors.border,
+                opacity: saving || !item.videoUrl ? 0.55 : 1,
+              }}
+            >
+              {saving ? (
+                <Text style={{ color: BrandOpsTheme.colors.muted, fontWeight: "800", fontSize: 13 }}>Saving…</Text>
+              ) : (
+                <>
+                  <Ionicons name="download-outline" size={18} color={BrandOpsTheme.colors.lime} />
+                  <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "800", fontSize: 13 }}>Save to device</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+
+          {showNotes ? (
+            <TextInput
+              value={notes}
+              onChangeText={onNotesChange}
+              placeholder="Revision notes (optional)…"
+              placeholderTextColor={BrandOpsTheme.colors.subtle}
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="none"
+              returnKeyType="done"
+              blurOnSubmit
+              style={{
+                height: 40,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                backgroundColor: BrandOpsTheme.colors.surface,
+                color: BrandOpsTheme.colors.text,
+                fontSize: 14,
+                borderWidth: 1,
+                borderColor: BrandOpsTheme.colors.border,
+              }}
+            />
+          ) : (
+            <Pressable onPress={() => setShowNotes(true)} hitSlop={8}>
+              <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 13, fontWeight: "700" }}>
+                + Add revision notes
+              </Text>
+            </Pressable>
+          )}
+
+          <ReviewAiPanel
+            item={item}
+            transcript={item.subtitlesContent}
+            submissionDocId={item.firestoreDocId}
+          />
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }

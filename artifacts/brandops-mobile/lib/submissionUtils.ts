@@ -25,6 +25,16 @@ function derivePostedLabel(status: Submission["status"], platform?: string | nul
   return "Awaiting review";
 }
 
+/** First spoken line from Whisper transcript — matches web hook overlay context. */
+export function deriveHookOverlay(transcript: string | null | undefined, fallback: string): string {
+  const text = transcript?.trim();
+  if (!text) return fallback;
+  const firstSentence = text.match(/^[^.!?\n]+[.!?]?/)?.[0]?.trim();
+  if (firstSentence && firstSentence.length >= 12) return firstSentence;
+  if (text.length <= 140) return text;
+  return `${text.slice(0, 137).trim()}…`;
+}
+
 function submissionHook(submission: Submission): string {
   const notes = submission.notes?.trim();
   if (notes) return notes;

@@ -1,3 +1,4 @@
+import type { FirestorePayment } from "@/lib/creatorPaymentsFirestore";
 import type { FirestoreSubmission } from "@/lib/submissionsFirestore";
 
 export type CreatorEarningsSnapshot = {
@@ -7,6 +8,7 @@ export type CreatorEarningsSnapshot = {
   approvedCount: number;
   pendingCount: number;
   revisionCount: number;
+  paidCount: number;
 };
 
 function payoutForSubmission(submission: FirestoreSubmission): number {
@@ -14,10 +16,23 @@ function payoutForSubmission(submission: FirestoreSubmission): number {
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
 }
 
-export function computeCreatorEarnings(submissions: FirestoreSubmission[] | undefined): CreatorEarningsSnapshot {
+function paymentAmount(payment: FirestorePayment): number {
+  const amount = payment.creatorAmount ?? payment.amount ?? 0;
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+export function computeCreatorEarnings(
+  submissions: FirestoreSubmission[] | undefined,
+  payments?: FirestorePayment[]
+): CreatorEarningsSnapshot {
   const rows = submissions ?? [];
+  const paymentRows = payments ?? [];
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const paidSubmissionIds = new Set(
+    paymentRows.filter((p) => p.status === "paid" && p.submissionId).map((p) => p.submissionId)
+  );
 
   let totalEarned = 0;
   let earnedThisMonth = 0;
@@ -25,19 +40,32 @@ export function computeCreatorEarnings(submissions: FirestoreSubmission[] | unde
   let approvedCount = 0;
   let pendingCount = 0;
   let revisionCount = 0;
+  let paidCount = 0;
+
+  for (const payment of paymentRows) {
+    if (payment.status !== "paid") continue;
+    const amount = paymentAmount(payment);
+    totalEarned += amount;
+    paidCount += 1;
+    const paidAt = payment.paidAt ?? payment.createdAt;
+    if (paidAt >= monthStart) earnedThisMonth += amount;
+  }
 
   for (const submission of rows) {
     const payout = payoutForSubmission(submission);
 
-    if (submission.status === "approved") {
-      approvedCount += 1;
+    if (submission.status === "paid" && !paidSubmissionIds.has(submission.id)) {
       totalEarned += payout;
-      if (submission.createdAt >= monthStart) {
-        earnedThisMonth += payout;
-      }
-    } else if (submission.status === "pending") {
-      pendingCount += 1;
+      paidCount += 1;
+      if (submission.createdAt >= monthStart) earnedThisMonth += payout;
+      continue;
+    }
+
+    if (submission.status === "approved" && !paidSubmissionIds.has(submission.id)) {
+      approvedCount += 1;
       pendingPayout += payout;
+    } else if (submission.status === "pending" || submission.status === "reviewing") {
+      pendingCount += 1;
     } else if (submission.status === "revision_requested") {
       revisionCount += 1;
     }
@@ -50,6 +78,7 @@ export function computeCreatorEarnings(submissions: FirestoreSubmission[] | unde
     approvedCount,
     pendingCount,
     revisionCount,
+    paidCount,
   };
 }
 

@@ -25,6 +25,7 @@ import { useFirestoreMySubmissions } from "@/lib/useFirestoreOwnerSubmissions";
 import { CreatorSubmissionSection } from "@/components/campaigns/CreatorSubmissionSection";
 import { CreatorBriefDocument } from "@/components/campaigns/CreatorBriefDocument";
 import { CreatorFullBriefSheet } from "@/components/campaigns/CreatorFullBriefSheet";
+import { CreatorCampaignSpecsCard } from "@/components/campaigns/CreatorCampaignSpecsCard";
 import { CreatorStripeSetupBanner } from "@/components/creator/CreatorStripeSetupBanner";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -149,6 +150,13 @@ export function CreatorCampaignView({ campaign, brief, deadline }: Props) {
           <StatChip icon="videocam-outline" label={meta.videosNeeded} />
         </View>
       </BrandOpsCard>
+
+      <CreatorCampaignSpecsCard
+        campaign={campaign}
+        brief={brief}
+        deadline={deadline}
+        brandName={campaign.ownerEmail?.split("@")[0] ?? null}
+      />
 
       <BrandOpsCard
         variant="elevated"

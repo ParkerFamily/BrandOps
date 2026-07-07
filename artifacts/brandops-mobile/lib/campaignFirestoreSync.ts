@@ -47,12 +47,13 @@ export function ownedCampaignsQuery(db: Firestore, uid: string) {
       where("ownerFirebaseUid", "==", uid),
       where("owner_firebase_uid", "==", uid),
       where("ownerId", "==", uid),
-      where("workspaceId", "==", uid)
+      where("workspaceId", "==", uid),
+      where("brandUid", "==", uid)
     )
   );
 }
 
-const OWNER_UID_FIELDS = ["ownerFirebaseUid", "owner_firebase_uid", "ownerId", "workspaceId"] as const;
+const OWNER_UID_FIELDS = ["ownerFirebaseUid", "owner_firebase_uid", "ownerId", "workspaceId", "brandUid"] as const;
 
 export type CampaignSyncDiagnostics = {
   indexedIds: number;
@@ -147,6 +148,7 @@ export async function normalizeFirestoreCampaignDoc(
       owner_firebase_uid: uid,
       ownerId: uid,
       workspaceId: uid,
+      brandUid: uid,
       ownerEmail: tokenEmail,
       authorEmail: tokenEmail,
       createdBy: uid,
@@ -525,33 +527,13 @@ export async function repairOwnedCampaignsFromFirestore(
   };
 }
 
-/** Fast read — owner query + indexed doc IDs only (no full-collection scan). */
+/** Fast read — multi-field owner queries + indexed doc IDs (matches web-readable owned campaigns). */
 export async function loadOwnedCampaignDocsFast(
   db: Firestore,
   ctx: { uid: string; email: string | null; workspaceId: string }
 ): Promise<{ id: string; data: DocumentData }[]> {
   const merged = new Map<string, DocumentData>();
-
-  try {
-    const snap = await getDocs(query(collection(db, "campaigns"), where("ownerFirebaseUid", "==", ctx.uid)));
-    for (const d of snap.docs) merged.set(d.id, d.data());
-  } catch (err) {
-    if (__DEV__) console.warn("[BrandOps campaigns] fast owner query failed:", err);
-  }
-
-  const indexedIds = await readUserCampaignDocIds(ctx.uid);
-  await Promise.all(
-    indexedIds.map(async (docId) => {
-      if (merged.has(docId)) return;
-      try {
-        const snap = await getDoc(doc(db, "campaigns", docId));
-        if (snap.exists()) merged.set(snap.id, snap.data());
-      } catch (err) {
-        if (__DEV__) console.warn("[BrandOps campaigns] indexed doc read failed:", docId, err);
-      }
-    })
-  );
-
+  await mergeOwnedCampaignDocs(db, ctx, merged);
   return [...merged.entries()].map(([id, data]) => ({ id, data }));
 }
 

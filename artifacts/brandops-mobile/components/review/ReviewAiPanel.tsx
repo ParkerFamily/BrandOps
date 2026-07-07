@@ -7,6 +7,8 @@ import type { ReviewSubmission } from "@/lib/submissionUtils";
 
 type Props = {
   item: ReviewSubmission;
+  transcript?: string | null;
+  submissionDocId?: string;
   onSuggestNotes?: (notes: string) => void;
 };
 
@@ -22,14 +24,14 @@ function recommendationColor(rec: SubmissionReviewAi["recommendation"]): string 
   return BrandOpsTheme.colors.warning;
 }
 
-export function ReviewAiPanel({ item, onSuggestNotes }: Props) {
+export function ReviewAiPanel({ item, transcript, submissionDocId, onSuggestNotes }: Props) {
   const [ai, setAi] = useState<SubmissionReviewAi | null>(null);
   const [loading, setLoading] = useState(false);
 
   const runAnalysis = async () => {
     setLoading(true);
     try {
-      const result = await analyzeSubmissionForReview(item);
+      const result = await analyzeSubmissionForReview(item, { transcript, submissionDocId });
       setAi(result);
       if (result.improvements[0]) {
         onSuggestNotes?.(result.improvements.join(" · "));
@@ -42,7 +44,7 @@ export function ReviewAiPanel({ item, onSuggestNotes }: Props) {
   useEffect(() => {
     setAi(null);
     void runAnalysis();
-  }, [item.id, item.videoUrl]);
+  }, [item.id, item.videoUrl, transcript, submissionDocId]);
 
   return (
     <BrandOpsCardShell>
@@ -85,6 +87,17 @@ export function ReviewAiPanel({ item, onSuggestNotes }: Props) {
               • {s}
             </Text>
           ))}
+          {transcript?.trim() ? (
+            <View style={{ gap: 6, marginTop: 4 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="document-text-outline" size={14} color={BrandOpsTheme.colors.lime} />
+                <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 11, fontWeight: "800" }}>
+                  TRANSCRIPT
+                </Text>
+              </View>
+              <Text style={{ color: BrandOpsTheme.colors.muted, fontSize: 12, lineHeight: 18 }}>{transcript.trim()}</Text>
+            </View>
+          ) : null}
           {ai.source === "fallback" ? (
             <Text style={{ color: BrandOpsTheme.colors.subtle, fontSize: 11 }}>
               Offline summary — connect API for full AI scoring.

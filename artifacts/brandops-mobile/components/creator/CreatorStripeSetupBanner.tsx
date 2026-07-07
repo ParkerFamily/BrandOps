@@ -5,8 +5,9 @@ import { BrandOpsCard } from "@/components/ui/BrandOpsCard";
 import { BrandOpsButton } from "@/components/ui/BrandOpsButton";
 import { P } from "@/components/ui/BrandOpsText";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
+import { useAuth } from "@/contexts/AuthContext";
 import type { CreatorPayoutSetup } from "@/lib/creatorPayoutSetup";
-import { openAuthenticatedWebSession } from "@/lib/webHandoff";
+import { openCreatorConnectDashboard } from "@/lib/webHandoff";
 
 type Props = {
   setup: CreatorPayoutSetup | null;
@@ -14,14 +15,15 @@ type Props = {
 };
 
 export function CreatorStripeSetupBanner({ setup, compact }: Props) {
+  const { authUid } = useAuth();
   const [opening, setOpening] = useState(false);
 
   if (!setup || setup.isFullySetUp) return null;
 
-  const title = setup.stripeConnected ? "Finish Stripe payout setup" : "Connect Stripe to get paid";
+  const title = setup.stripeConnected ? "Finish payout setup" : "Set up payouts (optional)";
   const body = setup.stripeConnected
-    ? "Your creator account isn't fully set up until Stripe payouts are enabled. Finish setup before submitting videos."
-    : "Your creator account isn't fully set up yet. Connect Stripe so you can submit UGC and receive payouts after approval.";
+    ? "Add bank details so you can receive compensation after brands approve your videos."
+    : "Uploading is free. Connect a payout account when you are ready to receive pay for approved work.";
 
   return (
     <BrandOpsCard
@@ -40,15 +42,17 @@ export function CreatorStripeSetupBanner({ setup, compact }: Props) {
           <P style={{ fontSize: 13, lineHeight: 20 }}>{body}</P>
         </View>
       </View>
-      <BrandOpsButton
-        label={opening ? "Opening…" : "Set up Stripe payouts"}
-        variant="secondary"
-        loading={opening}
-        onPress={() => {
-          setOpening(true);
-          void openAuthenticatedWebSession("payments").finally(() => setOpening(false));
-        }}
-      />
+      {authUid ? (
+        <BrandOpsButton
+          label={opening ? "Opening…" : "Set up payouts"}
+          variant="secondary"
+          loading={opening}
+          onPress={() => {
+            setOpening(true);
+            void openCreatorConnectDashboard(authUid).finally(() => setOpening(false));
+          }}
+        />
+      ) : null}
     </BrandOpsCard>
   );
 }
@@ -74,7 +78,7 @@ export function CreatorSetupStatusBadge({ setup }: { setup: CreatorPayoutSetup |
           fontSize: 12,
         }}
       >
-        {ready ? "BrandOps · Ready to earn" : "Setup required · Connect Stripe"}
+        {ready ? "Payouts ready" : "Payout setup optional"}
       </Text>
     </View>
   );

@@ -41,7 +41,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
   {
     title: "Data retention",
     paragraphs: [
-      "We retain account and submission data while your account is active and as needed to provide the service, resolve disputes, and meet legal requirements. You may request deletion of your account by contacting us.",
+      "You may delete your account at any time from Settings → Security → Delete account in the mobile app.",
     ],
   },
   {

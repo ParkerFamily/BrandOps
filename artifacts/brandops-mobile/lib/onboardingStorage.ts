@@ -114,6 +114,8 @@ export async function resetOnboardingSession(): Promise<void> {
   ]);
 }
 
+export type { OnboardingProfile } from "@/lib/onboardingStrategy";
+
 export const defaultOnboardingProfile: OnboardingProfile = {
   workspace: null,
   brandName: "",

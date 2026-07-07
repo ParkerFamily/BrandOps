@@ -15,6 +15,9 @@ const pkg = require(path.join(appRoot, "package.json"));
 const packages = [
   ...Object.keys(pkg.dependencies || {}),
   ...Object.keys(pkg.devDependencies || {}),
+  // Transitive Metro deps (not in package.json) that native/Metro resolve locally.
+  "metro-runtime",
+  "@expo/metro-runtime",
 ];
 
 if (!fs.existsSync(workspaceNodeModules)) {

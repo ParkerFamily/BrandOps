@@ -1,11 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { getListCampaignsQueryKey } from "@workspace/api-client-react";
 import type { Campaign } from "@workspace/api-client-react";
-import { pruneStaleFirestoreCampaigns } from "@/lib/campaignFirestoreSync";
-import { bootstrapUserFirestoreCampaigns } from "@/lib/campaignFirestoreSync";
+import {
+  bootstrapUserFirestoreCampaigns,
+  pruneStaleFirestoreCampaigns,
+  repairOwnedCampaignsFromFirestore,
+} from "@/lib/campaignFirestoreSync";
 import { getFirebase } from "@/lib/firebase";
 import { isLegacyUnscopedWorkspace, type CampaignRow } from "@/lib/workspaceFilter";
-import { syncStripeProfileFromApi } from "@/lib/stripeProfileSync";
 
 /** React Query key prefixes for all workspace-scoped API data. */
 export const WORKSPACE_QUERY_PREFIXES = [
@@ -29,6 +31,7 @@ export async function refreshWorkspace(queryClient: QueryClient, authUid: string
 
   const email = getFirebase()?.auth.currentUser?.email ?? null;
   await bootstrapUserFirestoreCampaigns(authUid, email);
+  await repairOwnedCampaignsFromFirestore(authUid, email, authUid).catch(() => {});
 
   await invalidateWorkspaceQueries(queryClient);
   await queryClient.refetchQueries({ queryKey: getListCampaignsQueryKey() });
@@ -37,6 +40,4 @@ export async function refreshWorkspace(queryClient: QueryClient, authUid: string
   if (!isLegacyUnscopedWorkspace(campaigns as CampaignRow[] | undefined)) {
     await pruneStaleFirestoreCampaigns(authUid, campaigns ?? []);
   }
-
-  await syncStripeProfileFromApi();
 }

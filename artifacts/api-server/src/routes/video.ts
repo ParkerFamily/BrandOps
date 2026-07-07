@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { readFile, writeFile, unlink, mkdir } from "node:fs/promises";
 import { writeFirestoreDoc, readFirestoreDoc, uploadToFirebaseStorage } from "../firebaseAdmin";
 import { logger } from "../lib/logger";
@@ -420,11 +421,16 @@ async function runWatermarkJob(jobId: string, job: WmJob, videoUrl: string): Pro
     logger.info({ jobId, submissionId: job.submissionId }, "Watermark job: downloading video");
     await downloadVideo(videoUrl, job.inputPath!);
 
-    const logoFile = "/home/runner/workspace/artifacts/brandops/public/logo.png";
-    const logoExists = existsSync(logoFile);
-    logger.info({ jobId, logoExists }, "Watermark job: rendering with FFmpeg");
+    const logoCandidates = [
+      process.env.WATERMARK_LOGO_PATH,
+      "/home/runner/workspace/artifacts/brandops/public/logo.png",
+      resolve(process.cwd(), "../brandops/public/logo.png"),
+      resolve(process.cwd(), "artifacts/brandops/public/logo.png"),
+    ].filter((p): p is string => Boolean(p));
+    const logoFile = logoCandidates.find((p) => existsSync(p));
+    logger.info({ jobId, logoExists: Boolean(logoFile) }, "Watermark job: rendering with FFmpeg");
 
-    if (logoExists) {
+    if (logoFile) {
       const filterComplex =
         "[1:v]scale=iw*0.35:-1," +
         "colorkey=0x000000:similarity=0.25:blend=0.1," +

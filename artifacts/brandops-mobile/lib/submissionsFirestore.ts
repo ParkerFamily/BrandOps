@@ -14,7 +14,15 @@ import {
 } from "firebase/firestore";
 import { getFirebase } from "@/lib/firebase";
 
-export type FirestoreSubmissionStatus = "pending" | "approved" | "rejected" | "revision_requested";
+export type FirestoreSubmissionStatus =
+  | "pending"
+  | "reviewing"
+  | "approved"
+  | "rejected"
+  | "revision_requested"
+  | "paid";
+
+export type VideoProcessingStatus = "idle" | "processing" | "done" | "error";
 
 export type FirestoreSubmission = {
   id: string;
@@ -31,6 +39,11 @@ export type FirestoreSubmission = {
   payoutAmount: number | null;
   notes: string | null;
   createdAt: Date;
+  processingStatus?: VideoProcessingStatus | null;
+  processedVideoUrl?: string | null;
+  processingError?: string | null;
+  subtitlesContent?: string | null;
+  creatorApproval?: string | null;
 };
 
 function toDate(value: unknown): Date {
@@ -41,22 +54,44 @@ function toDate(value: unknown): Date {
   return new Date();
 }
 
+function normalizeSubmissionStatus(value: unknown): FirestoreSubmissionStatus {
+  const raw = String(value ?? "pending").toLowerCase();
+  if (raw === "reviewing") return "reviewing";
+  if (raw === "paid") return "paid";
+  if (raw === "approved") return "approved";
+  if (raw === "rejected") return "rejected";
+  if (raw === "revision_requested" || raw === "revision") return "revision_requested";
+  return "pending";
+}
+
 function mapSubmission(id: string, data: DocumentData): FirestoreSubmission {
   return {
     id,
-    campaignDocId: String(data.campaignDocId ?? ""),
+    campaignDocId: String(data.campaignDocId ?? data.campaignId ?? ""),
     campaignTitle: String(data.campaignTitle ?? "Campaign"),
-    campaignOwnerUid: String(data.campaignOwnerUid ?? data.ownerFirebaseUid ?? ""),
-    creatorFirebaseUid: String(data.creatorFirebaseUid ?? ""),
+    campaignOwnerUid: String(
+      data.campaignOwnerUid ??
+        data.campaign_owner_uid ??
+        data.brandUid ??
+        data.ownerFirebaseUid ??
+        data.owner_firebase_uid ??
+        ""
+    ),
+    creatorFirebaseUid: String(data.creatorFirebaseUid ?? data.creatorId ?? ""),
     creatorEmail: (data.creatorEmail as string | null | undefined) ?? null,
     creatorName: (data.creatorName as string | null | undefined) ?? null,
     videoUrl: String(data.videoUrl ?? ""),
     storagePath: (data.storagePath as string | null | undefined) ?? null,
     submissionType: data.submissionType === "link" ? "link" : "upload",
-    status: (data.status as FirestoreSubmissionStatus) ?? "pending",
+    status: normalizeSubmissionStatus(data.status),
     payoutAmount: data.payoutAmount != null ? Number(data.payoutAmount) : null,
     notes: (data.notes as string | null | undefined) ?? null,
     createdAt: toDate(data.createdAt),
+    processingStatus: (data.processingStatus as VideoProcessingStatus | null | undefined) ?? null,
+    processedVideoUrl: (data.processedVideoUrl as string | null | undefined) ?? null,
+    processingError: (data.processingError as string | null | undefined) ?? null,
+    subtitlesContent: (data.subtitlesContent as string | null | undefined) ?? null,
+    creatorApproval: (data.creatorApproval as string | null | undefined) ?? null,
   };
 }
 
@@ -136,10 +171,21 @@ export async function listSubmissionsForCampaign(campaignDocId: string): Promise
   return snap.docs.map((d) => mapSubmission(d.id, d.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
+function mergeSubmissionBuckets(buckets: Map<string, FirestoreSubmission>[]): FirestoreSubmission[] {
+  const merged = new Map<string, FirestoreSubmission>();
+  for (const bucket of buckets) {
+    for (const [id, row] of bucket) merged.set(id, row);
+  }
+  return [...merged.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/** Brand workspace — merges owner + per-campaign listeners (web uses campaignId and campaignDocId). */
 export function subscribeOwnerSubmissions(
   ownerUid: string,
   campaignDocId: string | undefined,
-  onData: (rows: FirestoreSubmission[]) => void
+  onData: (rows: FirestoreSubmission[]) => void,
+  _ownerEmail?: string | null,
+  campaignDocIds: string[] = []
 ): Unsubscribe {
   const firebase = getFirebase();
   if (!firebase) {
@@ -147,28 +193,77 @@ export function subscribeOwnerSubmissions(
     return () => {};
   }
 
-  const q = campaignDocId
-    ? query(
-        collection(firebase.db, "submissions"),
-        where("campaignOwnerUid", "==", ownerUid),
-        where("campaignDocId", "==", campaignDocId)
-      )
-    : query(collection(firebase.db, "submissions"), where("campaignOwnerUid", "==", ownerUid));
+  void _ownerEmail;
 
-  return onSnapshot(
-    q,
-    (snap) => {
-      onData(
-        snap.docs
-          .map((d) => mapSubmission(d.id, d.data()))
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      );
-    },
-    (err) => {
-      if (__DEV__) console.warn("[BrandOps submissions] listener:", err.message);
-      onData([]);
-    }
+  const scopedCampaignIds = [
+    ...new Set(
+      [campaignDocId, ...campaignDocIds].filter((id): id is string => Boolean(id?.trim()))
+    ),
+  ].slice(0, 24);
+
+  const buckets = new Map<string, Map<string, FirestoreSubmission>>();
+  const emit = () => {
+    onData(mergeSubmissionBuckets([...buckets.values()]));
+  };
+
+  const attach = (key: string, q: ReturnType<typeof query>) =>
+    onSnapshot(
+      q,
+      (snap) => {
+        const bucket = new Map<string, FirestoreSubmission>();
+        for (const docSnap of snap.docs) {
+          bucket.set(docSnap.id, mapSubmission(docSnap.id, docSnap.data()));
+        }
+        buckets.set(key, bucket);
+        emit();
+      },
+      (err) => {
+        if (__DEV__) console.warn("[BrandOps submissions]", key, err.message);
+        buckets.set(key, new Map());
+        emit();
+      }
+    );
+
+  const unsubs: Unsubscribe[] = [];
+  unsubs.push(
+    attach(
+      `owner:${ownerUid}`,
+      query(collection(firebase.db, "submissions"), where("campaignOwnerUid", "==", ownerUid))
+    )
   );
+
+  for (const docId of scopedCampaignIds) {
+    unsubs.push(
+      attach(
+        `campaignDocId:${docId}`,
+        query(collection(firebase.db, "submissions"), where("campaignDocId", "==", docId))
+      )
+    );
+    unsubs.push(
+      attach(
+        `campaignId:${docId}`,
+        query(collection(firebase.db, "submissions"), where("campaignId", "==", docId))
+      )
+    );
+  }
+
+  return () => {
+    for (const unsub of unsubs) unsub();
+  };
+}
+
+/** Submissions that belong to this brand's campaigns (client-side scope for metrics + review). */
+export function filterSubmissionsForBrandOwner(
+  submissions: FirestoreSubmission[],
+  ownerUid: string,
+  campaignDocIds: Iterable<string>
+): FirestoreSubmission[] {
+  const ownedIds = new Set(campaignDocIds);
+  return submissions.filter((s) => {
+    if (s.campaignOwnerUid === ownerUid) return true;
+    if (ownedIds.has(s.campaignDocId)) return true;
+    return false;
+  });
 }
 
 export async function getFirestoreSubmission(submissionDocId: string): Promise<FirestoreSubmission | null> {
@@ -256,7 +351,7 @@ export function computeCampaignSubmissionStats(
   let revision = 0;
 
   for (const s of submissions) {
-    if (s.status === "pending") pending += 1;
+    if (s.status === "pending" || s.status === "reviewing") pending += 1;
     else if (s.status === "approved") approved += 1;
     else if (s.status === "rejected") rejected += 1;
     else if (s.status === "revision_requested") revision += 1;
@@ -281,7 +376,7 @@ export function countReviewableSubmissions(
   if (!reviewerUid) return 0;
   return submissions.filter(
     (s) =>
-      (s.status === "pending" || s.status === "revision_requested") &&
+      (s.status === "pending" || s.status === "reviewing" || s.status === "revision_requested") &&
       s.creatorFirebaseUid !== reviewerUid
   ).length;
 }
@@ -293,7 +388,7 @@ export function firstReviewableSubmission(
   if (!reviewerUid) return undefined;
   return submissions.find(
     (s) =>
-      (s.status === "pending" || s.status === "revision_requested") &&
+      (s.status === "pending" || s.status === "reviewing" || s.status === "revision_requested") &&
       s.creatorFirebaseUid !== reviewerUid
   );
 }

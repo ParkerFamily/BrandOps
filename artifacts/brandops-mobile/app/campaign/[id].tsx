@@ -15,7 +15,6 @@ import { shouldShowCreatorCampaignView } from "@/lib/campaignDetailView";
 import { markCreatorCampaignViewed } from "@/lib/creatorActivityStorage";
 import { useFirestoreOwnerSubmissions } from "@/lib/useFirestoreOwnerSubmissions";
 import { computeCampaignSubmissionStats } from "@/lib/submissionsFirestore";
-import { derivePaymentReadiness, subscribeUserPaymentProfile, type PaymentReadiness } from "@/lib/paymentReadiness";
 
 function useCampaignBrief(docId: string, campaign: FirestoreCampaign | null) {
   const [brief, setBrief] = useState<CampaignBrief | null>(null);
@@ -51,24 +50,6 @@ function useCampaignBrief(docId: string, campaign: FirestoreCampaign | null) {
   return brief;
 }
 
-function usePaymentReadiness(campaign: FirestoreCampaign | null) {
-  const { authUid } = useAuth();
-  const [readiness, setReadiness] = useState<PaymentReadiness | null>(null);
-
-  useEffect(() => {
-    if (!campaign || !authUid) {
-      setReadiness(null);
-      return;
-    }
-
-    return subscribeUserPaymentProfile(authUid, (userData) => {
-      setReadiness(derivePaymentReadiness(campaign, userData));
-    });
-  }, [authUid, campaign]);
-
-  return readiness;
-}
-
 export default function CampaignDetailScreen() {
   const { id, view } = useLocalSearchParams<{ id: string; view?: string }>();
   const { role, authUid, authEmail } = useAuth();
@@ -77,7 +58,6 @@ export default function CampaignDetailScreen() {
   const { campaign, loading, error } = useFirestoreCampaign(docId);
   const brief = useCampaignBrief(docId, campaign);
   const { submissions } = useFirestoreOwnerSubmissions(docId);
-  const paymentReadiness = usePaymentReadiness(campaign);
 
   useEffect(() => {
     if (!docId || !campaign) return;
@@ -144,7 +124,6 @@ export default function CampaignDetailScreen() {
             brief={resolvedBrief}
             stats={resolvedStats}
             submissions={submissions}
-            paymentReadiness={paymentReadiness}
             deadline={deadlineDate}
           />
         )}

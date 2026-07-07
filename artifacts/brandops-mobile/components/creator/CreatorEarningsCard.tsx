@@ -2,15 +2,20 @@ import { Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
 import { computeCreatorEarnings, formatUsd } from "@/lib/creatorEarningsMetrics";
+import type { FirestorePayment } from "@/lib/creatorPaymentsFirestore";
 import type { FirestoreSubmission } from "@/lib/submissionsFirestore";
+import type { CreatorPayoutSetup } from "@/lib/creatorPayoutSetup";
+import { CreatorPayoutPipeline } from "@/components/creator/CreatorPayoutPipeline";
 
 type Props = {
   submissions: FirestoreSubmission[] | undefined;
+  payments?: FirestorePayment[];
+  payoutSetup?: CreatorPayoutSetup | null;
   style?: { marginBottom?: number; marginTop?: number };
 };
 
-export function CreatorEarningsCard({ submissions, style }: Props) {
-  const earnings = computeCreatorEarnings(submissions);
+export function CreatorEarningsCard({ submissions, payments, payoutSetup, style }: Props) {
+  const earnings = computeCreatorEarnings(submissions, payments);
 
   return (
     <View style={{ marginTop: style?.marginTop ?? 0, marginBottom: style?.marginBottom ?? 16 }}>
@@ -25,14 +30,19 @@ export function CreatorEarningsCard({ submissions, style }: Props) {
           {formatUsd(earnings.totalEarned)}
         </Text>
         <Text style={{ color: BrandOpsTheme.colors.muted, marginTop: 8, fontSize: 14 }}>
-          {formatUsd(earnings.earnedThisMonth)} this month · {earnings.approvedCount} approved
+          {formatUsd(earnings.earnedThisMonth)} this month
+          {earnings.paidCount > 0
+            ? ` · ${earnings.paidCount} paid`
+            : earnings.approvedCount > 0
+              ? ` · ${earnings.approvedCount} approved`
+              : ""}
         </Text>
-        {earnings.pendingCount > 0 ? (
-          <Text style={{ color: BrandOpsTheme.colors.text, marginTop: 10, fontSize: 13, fontWeight: "700" }}>
-            {formatUsd(earnings.pendingPayout)} pending review ({earnings.pendingCount} submission
-            {earnings.pendingCount === 1 ? "" : "s"})
+        {earnings.revisionCount > 0 ? (
+          <Text style={{ color: BrandOpsTheme.colors.warning, marginTop: 10, fontSize: 13, fontWeight: "700" }}>
+            {earnings.revisionCount} revision{earnings.revisionCount === 1 ? "" : "s"} needed — check Activity
           </Text>
         ) : null}
+        <CreatorPayoutPipeline submissions={submissions} payments={payments} payoutSetup={payoutSetup ?? null} />
       </LinearGradient>
     </View>
   );

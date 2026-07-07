@@ -17,7 +17,13 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
+const workspacePackages = {
+  "@workspace/notifications": path.resolve(workspaceRoot, "lib/notifications"),
+  "@workspace/api-client-react": path.resolve(workspaceRoot, "lib/api-client-react"),
+};
+
 function resolvePackageDir(name) {
+  if (workspacePackages[name]) return workspacePackages[name];
   for (const base of [projectRoot, workspaceRoot]) {
     try {
       return path.dirname(require.resolve(`${name}/package.json`, { paths: [base] }));
@@ -36,6 +42,13 @@ const hoistedDeps = [
 
 config.resolver.extraNodeModules = Object.fromEntries(
   hoistedDeps.map((name) => [name, resolvePackageDir(name)]),
+);
+
+// Metro's default emptyModulePath resolves into `.pnpm/.../node_modules/...`, which
+// Metro's crawler excludes (nested node_modules). Use the hoisted symlink instead.
+config.resolver.emptyModulePath = path.resolve(
+  workspaceRoot,
+  "node_modules/metro-runtime/src/modules/empty-module.js",
 );
 
 module.exports = config;

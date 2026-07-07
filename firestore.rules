@@ -21,6 +21,7 @@ service cloud.firestore {
         resource.data.owner_firebase_uid == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
         resource.data.workspaceId == request.auth.uid ||
+        resource.data.brandUid == request.auth.uid ||
         resource.data.ownerEmail == request.auth.token.email ||
         resource.data.authorEmail == request.auth.token.email ||
         resource.data.userId == request.auth.uid ||
@@ -39,6 +40,7 @@ service cloud.firestore {
         resource.data.owner_firebase_uid == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
         resource.data.workspaceId == request.auth.uid ||
+        resource.data.brandUid == request.auth.uid ||
         resource.data.ownerEmail == request.auth.token.email ||
         resource.data.authorEmail == request.auth.token.email ||
         resource.data.userId == request.auth.uid ||
@@ -60,6 +62,7 @@ service cloud.firestore {
         resource.data.owner_firebase_uid == request.auth.uid ||
         resource.data.ownerId == request.auth.uid ||
         resource.data.workspaceId == request.auth.uid ||
+        resource.data.brandUid == request.auth.uid ||
         resource.data.ownerEmail == request.auth.token.email
       );
     }

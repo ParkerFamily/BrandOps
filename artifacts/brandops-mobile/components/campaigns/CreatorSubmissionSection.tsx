@@ -8,7 +8,7 @@ import { P, Label } from "@/components/ui/BrandOpsText";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCreatorPayoutSetup } from "@/lib/creatorPayoutSetup";
-import { openAuthenticatedWebSession } from "@/lib/webHandoff";
+import { openCreatorConnectDashboard } from "@/lib/webHandoff";
 import { createFirestoreSubmission, readCampaignOwnerUid, type FirestoreSubmission } from "@/lib/submissionsFirestore";
 import {
   pickVideoFromLibrary,
@@ -20,6 +20,7 @@ import { uploadSubmissionVideo } from "@/lib/videoUpload";
 import { useFirestoreMySubmissions } from "@/lib/useFirestoreOwnerSubmissions";
 import { formatShortTime } from "@/lib/format";
 import { SubmissionVideoPreview } from "@/components/campaigns/SubmissionVideoPreview";
+import { submissionEnhancementHint } from "@/components/campaigns/SubmissionVideoEnhancement";
 
 type Props = {
   campaignDocId: string;
@@ -31,9 +32,10 @@ type Props = {
 };
 
 function statusLabel(status: FirestoreSubmission["status"]): string {
-  if (status === "pending") return "Pending review";
+  if (status === "pending" || status === "reviewing") return "Pending review";
   if (status === "approved") return "Approved";
-  if (status === "revision_requested") return "Revision needed";
+  if (status === "paid") return "Paid";
+  if (status === "revision_requested") return "Revision requested";
   if (status === "rejected") return "Rejected";
   return status;
 }
@@ -167,54 +169,22 @@ export function CreatorSubmissionSection({
 
   const payoutReady = payoutSetup?.isFullySetUp ?? false;
 
-  if (!payoutReady) {
-    return (
-      <>
-        <BrandOpsCard variant="soft" style={{ marginBottom: 12, gap: 10 }}>
-          <P style={{ fontWeight: "800" }}>Submissions locked until Stripe is set up</P>
-          <P style={{ color: BrandOpsTheme.colors.muted, fontSize: 13, lineHeight: 20 }}>
-            Connect Stripe payouts so brands can pay you after approval. Your account stays in setup mode until that is
-            complete.
-          </P>
-          <BrandOpsButton
-            label="Set up Stripe payouts"
-            variant="secondary"
-            onPress={() => void openAuthenticatedWebSession("payments")}
-          />
-        </BrandOpsCard>
-        {myCampaignSubmissions.length > 0 ? (
-          <BrandOpsCard variant="soft" style={{ marginBottom: 12 }}>
-            <Label style={{ color: BrandOpsTheme.colors.lime }}>Your submissions</Label>
-            <View style={{ marginTop: 10, gap: 10 }}>
-              {myCampaignSubmissions.map((s) => (
-                <Pressable
-                  key={s.id}
-                  onPress={() => router.push(`/submission/${s.id}` as never)}
-                  style={{
-                    paddingVertical: 8,
-                    borderBottomWidth: 1,
-                    borderBottomColor: "rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <P style={{ fontWeight: "800" }}>{statusLabel(s.status)}</P>
-                  <P style={{ color: BrandOpsTheme.colors.muted, fontSize: 13, marginTop: 2 }}>
-                    {formatShortTime(s.createdAt.toISOString())}
-                    {s.submissionType === "upload" ? " · Video upload" : " · Link"}
-                  </P>
-                  <Text style={{ color: BrandOpsTheme.colors.lime, fontWeight: "800", fontSize: 12, marginTop: 6 }}>
-                    View submission →
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </BrandOpsCard>
-        ) : null}
-      </>
-    );
-  }
-
   return (
     <>
+      {!payoutReady ? (
+        <BrandOpsCard variant="soft" style={{ marginBottom: 12, gap: 8 }}>
+          <P style={{ fontWeight: "800" }}>Payout setup recommended</P>
+          <P style={{ color: BrandOpsTheme.colors.muted, fontSize: 13, lineHeight: 20 }}>
+            You can submit videos anytime. Connect payout details so brands can pay you after approval.
+          </P>
+          <BrandOpsButton
+            label="Set up payouts"
+            variant="secondary"
+            onPress={() => void (authUid ? openCreatorConnectDashboard(authUid) : undefined)}
+          />
+        </BrandOpsCard>
+      ) : null}
+
       <BrandOpsCard variant="elevated" style={{ marginBottom: 12, gap: 10 }}>
         {picked ? (
           <SubmissionVideoPreview video={picked} />
@@ -274,7 +244,9 @@ export function CreatorSubmissionSection({
         <BrandOpsCard variant="soft" style={{ marginBottom: 12 }}>
           <Label style={{ color: BrandOpsTheme.colors.lime }}>Your submissions</Label>
           <View style={{ marginTop: 10, gap: 10 }}>
-            {myCampaignSubmissions.map((s) => (
+            {myCampaignSubmissions.map((s) => {
+              const enhanceHint = submissionEnhancementHint(s);
+              return (
               <Pressable
                 key={s.id}
                 onPress={() => router.push(`/submission/${s.id}` as never)}
@@ -288,12 +260,14 @@ export function CreatorSubmissionSection({
                 <P style={{ color: BrandOpsTheme.colors.muted, fontSize: 13, marginTop: 2 }}>
                   {formatShortTime(s.createdAt.toISOString())}
                   {s.submissionType === "upload" ? " · Video upload" : " · Link"}
+                  {enhanceHint ? ` · ${enhanceHint}` : ""}
                 </P>
                 <Text style={{ color: BrandOpsTheme.colors.lime, fontWeight: "800", fontSize: 12, marginTop: 6 }}>
                   View submission →
                 </Text>
               </Pressable>
-            ))}
+            );
+            })}
           </View>
         </BrandOpsCard>
       ) : null}

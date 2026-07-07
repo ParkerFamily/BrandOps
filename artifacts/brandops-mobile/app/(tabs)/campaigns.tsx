@@ -22,6 +22,8 @@ import {
   useCreatorActivityState,
 } from "@/lib/creatorActivityStorage";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { CampaignFilterBar } from "@/components/campaigns/CampaignFilterBar";
+import { filterCreatorCampaigns, type CampaignFilterState, DEFAULT_CAMPAIGN_FILTERS } from "@/lib/campaignFilters";
 import { usePullToRefresh } from "@/lib/usePullToRefresh";
 
 export default function CampaignsScreen() {
@@ -131,21 +133,13 @@ function CreatorBrowse() {
   const payoutSetup = useCreatorPayoutSetup(authUid);
   const { submissions: mySubmissions } = useFirestoreMySubmissions();
   const { viewedCampaignIds, markCampaignViewed } = useCreatorActivityState();
-  const [query, setQuery] = useState("");
-  const [platform, setPlatform] = useState<"all" | "tiktok" | "instagram" | "youtube">("all");
+  const [filters, setFilters] = useState<CampaignFilterState>(DEFAULT_CAMPAIGN_FILTERS);
   const { campaigns, loading, error, refetch, syncDiagnostics } = useFirestoreCampaigns({ status: "active" });
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   const submissionByCampaign = useMemo(() => latestSubmissionByCampaign(mySubmissions), [mySubmissions]);
 
-  const filtered = useMemo(() => {
-    return campaigns
-      .filter((c) => (platform === "all" ? true : c.platform === platform))
-      .filter((c) => {
-        const q = query.trim().toLowerCase();
-        return !q || `${c.title} ${c.description}`.toLowerCase().includes(q);
-      });
-  }, [campaigns, platform, query]);
+  const filtered = useMemo(() => filterCreatorCampaigns(campaigns, filters), [campaigns, filters]);
 
   if (!isFirebaseConfigured()) {
     return (
@@ -168,25 +162,40 @@ function CreatorBrowse() {
       <CreatorStripeSetupBanner setup={payoutSetup} compact />
 
       <TextInput
-        value={query}
-        onChangeText={setQuery}
+        value={filters.query}
+        onChangeText={(query) => setFilters((prev) => ({ ...prev, query }))}
         placeholder="Search niche, payout…"
         placeholderTextColor={BrandOpsTheme.colors.subtle}
         style={inputStyle}
       />
 
+      <CampaignFilterBar
+        platform={filters.platform}
+        type={filters.type}
+        niche={filters.niche}
+        minPayout={filters.minPayout}
+        remoteOnly={filters.remoteOnly}
+        onPlatformChange={(platform) => setFilters((prev) => ({ ...prev, platform }))}
+        onTypeChange={(type) => setFilters((prev) => ({ ...prev, type }))}
+        onNicheChange={(niche) => setFilters((prev) => ({ ...prev, niche }))}
+        onMinPayoutChange={(minPayout) => setFilters((prev) => ({ ...prev, minPayout }))}
+        onRemoteOnlyChange={(remoteOnly) => setFilters((prev) => ({ ...prev, remoteOnly }))}
+      />
+
       {loading && campaigns.length === 0 ? <ApiLoading label="Loading campaigns…" /> : null}
       {error ? <ApiError message={error} /> : null}
 
-      {!loading && !error && filtered.length === 0 ? (
+      {!loading && !error && campaigns.length === 0 ? (
+        <ApiEmpty
+          title="No campaigns available yet"
+          body="New brand briefs show up here when they go live. Enable notifications in Settings so you never miss one."
+        />
+      ) : null}
+
+      {!loading && !error && campaigns.length > 0 && filtered.length === 0 ? (
         <ApiEmpty
           title="No campaigns match"
-          body={[
-            "Creator mode shows published (active) campaigns from all brands. Switch to Brand in Profile if you’re looking for your own campaigns.",
-            syncDiagnostics?.tokenEmail ? `Signed in as ${syncDiagnostics.tokenEmail}.` : null,
-          ]
-            .filter(Boolean)
-            .join("\n\n")}
+          body="Try clearing filters or search for a different niche or payout."
         />
       ) : null}
 

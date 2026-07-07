@@ -14,8 +14,9 @@ import type { Campaign } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getFirebase } from "@/lib/firebase";
 import { isFirebaseConfigured } from "@/lib/env";
-import { logCampaignOwnershipDebug } from "@/lib/campaignOwnership";
+import { logCampaignOwnershipDebug, resolveWorkspaceId } from "@/lib/campaignOwnership";
 import {
+  bootstrapUserFirestoreCampaigns,
   loadOwnedCampaignDocsFast,
   repairOwnedCampaignsFromFirestore,
   type CampaignSyncDiagnostics,
@@ -129,7 +130,8 @@ export function mapCampaignDoc(docId: string, data: DocumentData): FirestoreCamp
     approvedCount: pickNumber(data, 0, "approvedCount"),
     pendingCount: pickNumber(data, 0, "pendingCount"),
     totalSpent: pickNumber(data, 0, "totalSpent"),
-    ownerFirebaseUid: pickString(data, "ownerFirebaseUid", "owner_firebase_uid", "ownerId") || null,
+    ownerFirebaseUid:
+      pickString(data, "ownerFirebaseUid", "owner_firebase_uid", "ownerId", "brandUid", "workspaceId") || null,
     ownerEmail: pickString(data, "ownerEmail", "authorEmail") || null,
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
@@ -148,8 +150,17 @@ type LoadContext = {
 
 async function buildLoadContext(uid: string, authEmail: string | null | undefined): Promise<LoadContext> {
   const email = authEmail?.trim() || null;
-  // Auth email + uid is enough for queries; skip extra user-doc round trip on hot path.
-  return { uid, email, workspaceId: uid };
+  const firebase = getFirebase();
+  let workspaceId = uid;
+  if (firebase) {
+    try {
+      const userSnap = await getDoc(doc(firebase.db, "users", uid));
+      workspaceId = resolveWorkspaceId(uid, userSnap.exists() ? userSnap.data() : null);
+    } catch {
+      workspaceId = uid;
+    }
+  }
+  return { uid, email, workspaceId };
 }
 
 function snapshotToCampaignMap(snap: { docs: { id: string; data: () => DocumentData }[] }): Map<string, DocumentData> {
@@ -278,15 +289,29 @@ export function useFirestoreCampaigns(options: UseFirestoreCampaignsOptions = {}
       }
 
       let cancelled = false;
-      let unsubOwner = () => {};
+      let unsubCampaigns = () => {};
       let unsubIndex = () => {};
       let ownerMap = new Map<string, DocumentData>();
       let indexedExtras: { id: string; data: DocumentData }[] = [];
+      let loadCtx: LoadContext | null = null;
 
       const applyCampaigns = () => {
         if (cancelled) return;
         setCampaigns(mergeCampaignMaps(ownerMap, indexedExtras));
         setReady(true);
+      };
+
+      const applyReadableCampaigns = (snap: { docs: { id: string; data: () => DocumentData }[] }) => {
+        if (!loadCtx) return;
+        // Match web brand dashboard: show every campaign Firestore rules allow (no extra owner filter).
+        ownerMap = snapshotToCampaignMap(snap);
+        logCampaignOwnershipDebug(
+          "readable campaigns",
+          loadCtx.uid,
+          loadCtx.workspaceId,
+          [...ownerMap.entries()].map(([id, data]) => ({ id, data }))
+        );
+        applyCampaigns();
       };
 
       const refreshIndexedExtras = async (ids: string[]) => {
@@ -310,7 +335,7 @@ export function useFirestoreCampaigns(options: UseFirestoreCampaignsOptions = {}
               const snap = await getDoc(doc(firebase.db, "campaigns", docId));
               if (snap.exists()) fetched.push({ id: snap.id, data: snap.data() });
             } catch {
-              // ignore — owner listener is primary
+              // ignore — readable listener is primary
             }
           })
         );
@@ -324,13 +349,14 @@ export function useFirestoreCampaigns(options: UseFirestoreCampaignsOptions = {}
         setError(null);
         const ctx = await buildLoadContext(authUid, authEmail);
         ctxRef.current = ctx;
+        loadCtx = ctx;
 
-        unsubOwner = onSnapshot(
-          query(collection(firebase.db, "campaigns"), where("ownerFirebaseUid", "==", authUid)),
+        void bootstrapUserFirestoreCampaigns(ctx.uid, ctx.email).catch(() => {});
+
+        unsubCampaigns = onSnapshot(
+          collection(firebase.db, "campaigns"),
           (snap) => {
-            ownerMap = snapshotToCampaignMap(snap);
-            logCampaignOwnershipDebug("listener campaigns", authUid, ctx.workspaceId, [...ownerMap.entries()].map(([id, data]) => ({ id, data })));
-            applyCampaigns();
+            applyReadableCampaigns(snap);
 
             if (!repairedUids.has(authUid) && ownerMap.size === 0) {
               repairedUids.add(authUid);
@@ -355,7 +381,7 @@ export function useFirestoreCampaigns(options: UseFirestoreCampaignsOptions = {}
 
       return () => {
         cancelled = true;
-        unsubOwner();
+        unsubCampaigns();
         unsubIndex();
       };
     }

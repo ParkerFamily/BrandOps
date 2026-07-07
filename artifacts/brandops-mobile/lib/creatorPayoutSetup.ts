@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { DocumentData } from "firebase/firestore";
-import { subscribeUserPaymentProfile } from "@/lib/paymentReadiness";
+import { subscribeCreatorPayoutProfile } from "@/lib/creatorPayoutProfile";
 
 export type CreatorPayoutSetup = {
   stripeConnected: boolean;
@@ -29,7 +29,7 @@ function pickString(data: DocumentData | undefined, ...keys: string[]): string |
   return null;
 }
 
-/** Creators need Stripe Connect + payouts enabled before the account is fully ready. */
+/** Creator Stripe Connect payout readiness — not a subscription or in-app purchase gate. */
 export function deriveCreatorPayoutSetup(userData: DocumentData | undefined): CreatorPayoutSetup {
   const connectAccountId = pickString(userData, "stripeConnectAccountId", "stripeAccountId");
   const stripeConnected =
@@ -55,7 +55,7 @@ export function useCreatorPayoutSetup(uid: string | null | undefined): CreatorPa
       setSetup(null);
       return;
     }
-    return subscribeUserPaymentProfile(uid, (data) => {
+    return subscribeCreatorPayoutProfile(uid, (data) => {
       setSetup(deriveCreatorPayoutSetup(data));
     });
   }, [uid]);

@@ -16,8 +16,6 @@ import {
 } from "@/lib/submissionsFirestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { canReviewSubmissions } from "@/lib/roleExperience";
-import { isPaymentSetupComplete, type PaymentReadiness } from "@/lib/paymentReadiness";
-import { openAuthenticatedWebSession } from "@/lib/webHandoff";
 import { CampaignAiBriefCard } from "@/components/campaigns/CampaignAiBriefCard";
 import { CreatorFullBriefSheet } from "@/components/campaigns/CreatorFullBriefSheet";
 import { loadBrandCampaignAi, loadCreatorCampaignAi, type BrandCampaignAi } from "@/lib/creatorBriefAi";
@@ -28,7 +26,6 @@ type Props = {
   brief: CampaignBrief;
   stats: CampaignSubmissionStats;
   submissions: FirestoreSubmission[];
-  paymentReadiness: PaymentReadiness | null;
   deadline: Date | null;
 };
 
@@ -86,47 +83,11 @@ function DashMetric({
   );
 }
 
-function PaymentAlert({
-  readiness,
-  onOpenBilling,
-}: {
-  readiness: PaymentReadiness;
-  onOpenBilling: () => void;
-}) {
-  if (isPaymentSetupComplete(readiness)) return null;
-
-  const needsStripe = !readiness.stripeConnected || !readiness.payoutMethodReady;
-
-  return (
-    <BrandOpsCard variant="soft" style={{ marginBottom: 14, gap: 10, borderColor: "rgba(255,201,77,0.35)", borderWidth: 1 }}>
-      <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
-        <Ionicons name="alert-circle-outline" size={22} color={BrandOpsTheme.colors.warning} />
-        <View style={{ flex: 1, gap: 6 }}>
-          <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "800", fontSize: 15 }}>
-            {needsStripe ? "Connect billing to pay creators" : "Fund this campaign"}
-          </Text>
-          <P style={{ fontSize: 13 }}>
-            {needsStripe
-              ? "Stripe setup lives in Settings → Billing — not on every campaign page."
-              : "Add budget on web before creators can get paid."}
-          </P>
-        </View>
-      </View>
-      <BrandOpsButton
-        label={needsStripe ? "Open billing in Settings" : "Manage campaign on web"}
-        variant="secondary"
-        onPress={onOpenBilling}
-      />
-    </BrandOpsCard>
-  );
-}
-
 export function BrandCampaignDashboard({
   campaign,
   brief,
   stats,
   submissions,
-  paymentReadiness,
   deadline,
 }: Props) {
   const router = useRouter();
@@ -215,13 +176,6 @@ export function BrandCampaignDashboard({
         <StatusBadge status={campaign.status} />
       </View>
 
-      {paymentReadiness ? (
-        <PaymentAlert
-          readiness={paymentReadiness}
-          onOpenBilling={() => void openAuthenticatedWebSession("billing")}
-        />
-      ) : null}
-
       <CampaignAiBriefCard
         summary={aiBrief?.summary ?? "Loading campaign brief…"}
         bullets={aiBrief?.highlights ?? []}
@@ -268,19 +222,15 @@ export function BrandCampaignDashboard({
         ) : null}
         <BrandOpsButton label="Open messages" variant="secondary" onPress={() => router.push("/(tabs)/messages" as never)} />
         <BrandOpsButton
-          label="View creators"
+          label="View creators on web"
           variant="secondary"
-          onPress={() =>
-            void openAuthenticatedWebSession("dashboard", {
-              redirectTo: `/campaigns/${campaign.firestoreDocId}`,
-            })
-          }
+          onPress={() => router.push("/(tabs)/upload" as never)}
         />
         <BrandOpsButton label="Preview creator brief" variant="ghost" onPress={() => setBriefOpen(true)} />
       </BrandOpsCard>
 
       <P style={{ color: BrandOpsTheme.colors.subtle, fontSize: 12, textAlign: "center", marginBottom: 8 }}>
-        Full campaign editing and billing → brandopsapp.com
+        Full campaign editing → brandopsapp.com
       </P>
 
       <CreatorFullBriefSheet

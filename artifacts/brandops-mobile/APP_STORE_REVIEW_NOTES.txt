@@ -1,0 +1,64 @@
+BrandOps — App Store Review Notes (paste into App Review Information)
+
+Submission ID: 471903db-b8c1-4c78-9d55-812c352bde0d
+Version: 1.0.0 (Build 28+)
+Bundle ID: com.parkerfamily.brandops-mobile
+
+Thank you for reviewing BrandOps. This build fixes the payout-setup error reported on build 27 (iPad) and clarifies our business model under Guideline 3.1.1.
+
+────────────────────────────────────────
+1. BUG FIX — SET UP PAYOUTS (Guideline 2.1a)
+────────────────────────────────────────
+
+Issue on build 27: Tapping "Set up payouts" showed "Could not open payouts" for new creator accounts.
+
+Fix: New creators without a payout account now open Stripe Connect onboarding directly in the in-app browser. The app no longer falls back to the BrandOps web dashboard settings page (which could be mistaken for subscription access).
+
+How to test payout setup (creator account):
+1. Sign in (Sign in with Apple, Google, or email).
+2. Profile tab → tap "Set up payouts" OR Settings → Payout account & history → "Set up payout account".
+3. A secure Stripe-hosted onboarding form opens in the in-app browser.
+4. Uploading campaigns remains free; payout setup is optional and only for receiving compensation after approved work.
+
+────────────────────────────────────────
+2. ACCOUNT DELETION (Guideline 5.1.1v)
+────────────────────────────────────────
+
+Profile → Settings (gear) → Security → Password & account deletion → Delete my account → confirm.
+
+Deletion permanently removes the Firebase Authentication account and Firestore user profile. A screen recording of this flow is attached.
+
+────────────────────────────────────────
+3. IN-APP PURCHASES / SUBSCRIPTIONS (Guideline 3.1.1)
+────────────────────────────────────────
+
+BrandOps is a UGC marketplace. The iOS app is FREE and does NOT sell digital content, subscriptions, premium features, or in-app purchases.
+
+CREATORS:
+- Join campaigns, upload video submissions, and use all app features at no cost.
+- Optional payout account setup is marketplace compensation infrastructure (receive pay for approved work). It is NOT purchasing digital goods, app unlocks, or subscription plans.
+- The iOS app does not read, restore, or gate features behind externally purchased subscription plans.
+
+BRANDS:
+- The iOS app is limited to reviewing creator submissions for existing campaigns.
+- Campaign creation, team management, and any business subscription/billing exist ONLY on our separate web dashboard (brandopsapp.com) in Safari — not inside the iOS app.
+- The iOS app does not display subscription plans, upgrade prompts, billing screens, or "restore purchases" flows.
+
+There are no IAP products in this app because nothing is sold in the iOS app.
+
+────────────────────────────────────────
+4. SIGN IN
+────────────────────────────────────────
+
+Email/password, Sign in with Google, and Sign in with Apple (iPhone and iPad).
+
+────────────────────────────────────────
+5. SUGGESTED REVIEW PATHS
+────────────────────────────────────────
+
+Creator payout setup: Profile → Set up payouts → Stripe onboarding opens in browser
+Account deletion: Profile → Settings → Security → Delete my account
+Creator workflow: Campaigns → open campaign → submit or view status
+Brand workflow: Campaigns / Review → open submission → approve or reject
+
+Support: support@brandopsapp.com

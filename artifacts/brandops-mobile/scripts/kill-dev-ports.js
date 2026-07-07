@@ -5,9 +5,10 @@
  */
 const { execSync } = require("child_process");
 
+// Default: only BrandOps Metro (8081). EnterLinkd uses 8082 — do not kill it here.
 const ports = (
   process.env.BRANDOPS_KILL_PORTS ||
-  "8080,8081,8082,19000,19001,19002"
+  "8081"
 ).split(",").map((p) => p.trim()).filter(Boolean);
 
 function killPort(port) {

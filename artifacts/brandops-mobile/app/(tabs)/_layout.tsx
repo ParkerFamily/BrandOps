@@ -1,20 +1,52 @@
+import { View, ActivityIndicator, Text } from "react-native";
 import { WorkspaceRefreshOnFocus } from "@/components/sync/WorkspaceRefreshOnFocus";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/Colors";
 import { TAB_BAR_BASE_HEIGHT } from "@/constants/layout";
+import { BrandOpsTheme } from "@/constants/brandopsTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { canReviewSubmissions } from "@/lib/roleExperience";
 
+function TabBootScreen({ message }: { message: string }) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: BrandOpsTheme.colors.bg,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 14,
+        padding: 24,
+      }}
+    >
+      <ActivityIndicator color={BrandOpsTheme.colors.lime} size="large" />
+      <Text style={{ color: BrandOpsTheme.colors.muted, fontWeight: "700", textAlign: "center" }}>{message}</Text>
+    </View>
+  );
+}
+
 export default function TabLayout() {
   const colorScheme = "dark";
-  const { user, role, loading } = useAuth();
+  const { role, loading, isAuthenticated, profileComplete } = useAuth();
   const creator = !canReviewSubmissions(role);
   const insets = useSafeAreaInsets();
   const tabBarBottomPadding = Math.max(insets.bottom, 10);
 
-  if (loading || !role) return null;
+  if (loading) {
+    return <TabBootScreen message="Loading your workspace…" />;
+  }
+
+  if (isAuthenticated && !profileComplete) {
+    return <TabBootScreen message="Finishing your workspace setup…" />;
+  }
+
+  if (isAuthenticated && !role) {
+    return (
+      <TabBootScreen message="Could not load your account type. Sign out and try again, or finish setup on brandopsapp.com." />
+    );
+  }
 
   return (
     <>

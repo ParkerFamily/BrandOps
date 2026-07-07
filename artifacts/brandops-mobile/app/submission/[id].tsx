@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useGetSubmission } from "@workspace/api-client-react";
@@ -20,6 +20,7 @@ import {
   type FirestoreSubmission,
 } from "@/lib/submissionsFirestore";
 import { markCreatorSubmissionViewed } from "@/lib/creatorActivityStorage";
+import { SubmissionVideoEnhancement } from "@/components/campaigns/SubmissionVideoEnhancement";
 
 export default function SubmissionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -167,6 +168,8 @@ function FirestoreSubmissionDetail({ submissionDocId }: { submissionDocId: strin
     );
   }
 
+  const creatorView = authUid === submission.creatorFirebaseUid;
+
   return (
     <SubmissionDetailLayout
       statusLabel={mapFirestoreStatus(submission.status)}
@@ -180,6 +183,7 @@ function FirestoreSubmissionDetail({ submissionDocId }: { submissionDocId: strin
       storagePath={submission.storagePath}
       submissionType={submission.submissionType}
       revisionCta={submission.status === "revision_requested"}
+      enhancementSlot={creatorView ? <SubmissionVideoEnhancement submission={submission} /> : null}
     />
   );
 }
@@ -196,6 +200,7 @@ function SubmissionDetailLayout(props: {
   storagePath?: string | null;
   submissionType?: "upload" | "link";
   revisionCta?: boolean;
+  enhancementSlot?: ReactNode;
 }) {
   const router = useRouter();
   const { role } = useAuth();
@@ -214,6 +219,8 @@ function SubmissionDetailLayout(props: {
           <BrandOpsButton label="Go to Upload" onPress={() => router.push("/(tabs)/upload")} />
         </BrandOpsCard>
       ) : null}
+
+      {props.enhancementSlot}
 
       <BrandOpsCard variant="elevated" style={{ marginBottom: 12, overflow: "hidden", paddingHorizontal: 0, paddingTop: BrandOpsTheme.spacing.md }}>
         <View style={{ paddingHorizontal: BrandOpsTheme.spacing.md }}>
@@ -296,10 +303,14 @@ function mapFirestoreStatus(s: FirestoreSubmission["status"]) {
   switch (s) {
     case "pending":
       return "Pending Review";
+    case "reviewing":
+      return "In Review";
     case "revision_requested":
       return "Revision Requested";
     case "approved":
       return "Approved";
+    case "paid":
+      return "Paid";
     case "rejected":
       return "Rejected";
     default:

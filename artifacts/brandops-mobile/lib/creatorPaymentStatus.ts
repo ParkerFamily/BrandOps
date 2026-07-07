@@ -9,10 +9,14 @@ export type CreatorPaymentStatus = {
 
 function statusLabels(status: FirestoreSubmission["status"]): { approval: string; payment: string } {
   switch (status) {
+    case "reviewing":
+      return { approval: "In review", payment: "Not yet" };
     case "pending":
       return { approval: "Pending review", payment: "Not yet" };
     case "approved":
       return { approval: "Approved", payment: "Queued" };
+    case "paid":
+      return { approval: "Approved", payment: "Paid" };
     case "revision_requested":
       return { approval: "Revision needed", payment: "On hold" };
     case "rejected":

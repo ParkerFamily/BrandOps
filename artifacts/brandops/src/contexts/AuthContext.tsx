@@ -10,6 +10,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
+import { assertEmailAvailableForPasswordSignUp, mapAuthIdentityError } from "@/lib/authIdentity";
 import { setOnboarded, getOnboarded, clearOnboarded, type OnboardingData } from "@/lib/onboarding";
 import { fsGetUserProfile, fsSetUserProfile } from "@/lib/firestore";
 
@@ -120,10 +121,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const signInWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      throw mapAuthIdentityError(err);
+    }
   };
 
   const signUpWithEmail = async (email: string, password: string, displayName: string) => {
+    await assertEmailAvailableForPasswordSignUp(auth, email);
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName });
     setUser({ ...cred.user, displayName });

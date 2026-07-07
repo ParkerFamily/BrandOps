@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useRootNavigationState, useRouter, useSegments } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasCompletedCinematicOnboarding, isOnboardingGateComplete } from "@/lib/onboardingStorage";
+import { resolvePostAuthRoute } from "@/lib/postAuthRoute";
 import { readPendingWorkspaceSwitch } from "@/lib/workspaceSetup";
 
 /**
  * Route rules:
- * - Signed in → app (never redo the questionnaire)
- * - Not signed in → onboarding / signup / login allowed; default entry is onboarding (Get started)
+ * - Signed in + Firestore profile → app
+ * - Signed in + no profile → onboarding, then signup/provisioning
+ * - Not signed in → onboarding / signup / login allowed; default entry is onboarding
  */
 export function AuthRouteGuard({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, loading: authLoading, role } = useAuth();
+  const { isAuthenticated, loading: authLoading, profileComplete, role } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
@@ -20,17 +22,15 @@ export function AuthRouteGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void hasCompletedCinematicOnboarding().then(setCinematicDone);
-  }, [isAuthenticated, role, user?.uid]);
+  }, [isAuthenticated, profileComplete, role]);
 
   useEffect(() => {
     void readPendingWorkspaceSwitch().then(setPendingWorkspaceSwitchState);
-  }, [isAuthenticated, role, user?.uid, segments.join("/")]);
+  }, [isAuthenticated, profileComplete, role, segments.join("/")]);
 
   const navReady = Boolean(rootNavigationState?.key);
   const onboardingComplete = isOnboardingGateComplete(cinematicDone, role);
-  // Wait for Firebase auth hydration before routing — don't treat a cached role as signed-in.
-  // Signed-in users enter the app immediately — onboarding flag loads in background.
-  const bootstrapping = authLoading && !isAuthenticated;
+  const bootstrapping = authLoading;
 
   const inAuth = segments[0] === "(auth)";
   const onOnboarding = inAuth && segments[1] === "onboarding";
@@ -41,16 +41,24 @@ export function AuthRouteGuard({ children }: { children: React.ReactNode }) {
     if (!navReady || bootstrapping) return;
 
     let target: string | null = null;
+    const switchingWorkspace = Boolean(pendingWorkspaceSwitch) && onOnboarding;
 
     if (isAuthenticated) {
-      const switchingWorkspace = Boolean(pendingWorkspaceSwitch) && onOnboarding;
-      if ((inAuth || segments.length === 0) && !switchingWorkspace) {
+      if (switchingWorkspace) {
+        lastRedirect.current = null;
+        return;
+      }
+
+      if (!profileComplete) {
+        target = resolvePostAuthRoute({ profileComplete, onboardingComplete });
+        if (target === "/(auth)/onboarding" && onOnboarding) target = null;
+        if (target === "/(auth)/signup" && onSignup) target = null;
+      } else if (inAuth || segments.join("/") === "") {
         target = "/(tabs)";
       }
     } else if (onboardingComplete && !onSignup && !onLogin && !onOnboarding) {
       target = "/(auth)/signup";
     } else if (!onboardingComplete && !onOnboarding && !onLogin) {
-      // Allow login without bouncing back to setup.
       target = "/(auth)/onboarding";
     }
 
@@ -67,14 +75,15 @@ export function AuthRouteGuard({ children }: { children: React.ReactNode }) {
     bootstrapping,
     inAuth,
     isAuthenticated,
-    segments,
-    navReady,
+    onboardingComplete,
     onLogin,
     onOnboarding,
-    onboardingComplete,
     onSignup,
     pendingWorkspaceSwitch,
+    profileComplete,
+    role,
     router,
+    segments.join("/"),
   ]);
 
   if (!navReady) return null;

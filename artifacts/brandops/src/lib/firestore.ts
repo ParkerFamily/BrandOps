@@ -144,10 +144,16 @@ export interface FsPayment {
   creatorEmail?: string;
   creatorName?: string;
   campaignTitle?: string;
+  /** Creator payout amount (unchanged by platform fee). */
   amount: number;
+  creatorAmount?: number;
+  platformFeeAmount?: number;
+  totalAmount?: number;
   currency?: string;
   status: "pending" | "processing" | "paid" | "failed";
   stripePaymentIntentId?: string;
+  connectedAccountId?: string;
+  paymentStatus?: string;
   stripeTransferId?: string;
   paidAt?: Timestamp | null;
   createdAt?: Timestamp;

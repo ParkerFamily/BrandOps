@@ -1,9 +1,11 @@
 import type { FirestoreCampaign } from "@/lib/campaignsFirestore";
 import type { FirestoreSubmission } from "@/lib/submissionsFirestore";
 import type { ReviewSubmission } from "@/lib/submissionUtils";
-import { toReviewSubmission } from "@/lib/submissionUtils";
+import { deriveHookOverlay, toReviewSubmission } from "@/lib/submissionUtils";
+import type { VideoProcessingStatus } from "@/lib/submissionsFirestore";
 
 function creatorDisplayName(submission: FirestoreSubmission): string {
+  if (submission.creatorName?.trim()) return submission.creatorName.trim();
   if (submission.creatorEmail) {
     const local = submission.creatorEmail.split("@")[0];
     if (local) return local.replace(/[._]/g, " ");
@@ -17,6 +19,9 @@ export type FirestoreReviewSubmission = ReviewSubmission & {
   submissionType: "upload" | "link";
   creatorFirebaseUid: string;
   campaignOwnerUid: string;
+  processedVideoUrl?: string | null;
+  subtitlesContent?: string | null;
+  processingStatus?: VideoProcessingStatus | null;
 };
 
 export function firestoreSubmissionToReview(
@@ -99,13 +104,19 @@ export function firestoreSubmissionToReview(
     updatedAt: submission.createdAt.toISOString(),
   });
 
+  const hook = deriveHookOverlay(submission.subtitlesContent, synthetic.review.hook);
+
   return {
     ...synthetic,
+    review: { ...synthetic.review, hook },
     firestoreDocId: submission.id,
     storagePath: submission.storagePath,
     submissionType: submission.submissionType,
     creatorFirebaseUid: submission.creatorFirebaseUid,
     campaignOwnerUid: submission.campaignOwnerUid,
+    processedVideoUrl: submission.processedVideoUrl,
+    subtitlesContent: submission.subtitlesContent,
+    processingStatus: submission.processingStatus,
   };
 }
 
@@ -117,11 +128,36 @@ function hashSubmissionId(value: string): number {
   return Math.abs(hash) || 1;
 }
 
+export function isBrandReviewableStatus(status: FirestoreSubmission["status"]): boolean {
+  return status === "pending" || status === "reviewing" || status === "revision_requested";
+}
+
 export function getPendingFirestoreReviews(
   submissions: FirestoreSubmission[],
   campaignsByDocId: Map<string, FirestoreCampaign>
 ): FirestoreReviewSubmission[] {
   return submissions
-    .filter((s) => s.status === "pending" || s.status === "revision_requested")
-    .map((s) => firestoreSubmissionToReview(s, campaignsByDocId.get(s.campaignDocId) ?? null));
+    .filter((s) => isBrandReviewableStatus(s.status))
+    .map((s) => firestoreSubmissionToReview(s, campaignsByDocId.get(s.campaignDocId) ?? null))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/** Review queue scoped to a brand's campaigns — excludes the reviewer's own UGC. */
+export function getBrandReviewQueue(
+  submissions: FirestoreSubmission[],
+  campaignsByDocId: Map<string, FirestoreCampaign>,
+  reviewerUid: string
+): FirestoreReviewSubmission[] {
+  const ownedIds = new Set(campaignsByDocId.keys());
+
+  return submissions
+    .filter((s) => {
+      if (!isBrandReviewableStatus(s.status)) return false;
+      if (s.creatorFirebaseUid === reviewerUid) return false;
+      if (ownedIds.has(s.campaignDocId)) return true;
+      if (s.campaignOwnerUid === reviewerUid) return true;
+      return false;
+    })
+    .map((s) => firestoreSubmissionToReview(s, campaignsByDocId.get(s.campaignDocId) ?? null))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }

@@ -82,6 +82,20 @@ if (iosUrlScheme) {
   plugins.push("@react-native-google-signin/google-signin");
 }
 
+plugins.push("expo-apple-authentication");
+plugins.push([
+  "expo-build-properties",
+  {
+    ios: {
+      useFrameworks: "static",
+      extraPods: [
+        { name: "GoogleUtilities", modular_headers: true },
+        { name: "RecaptchaInterop", modular_headers: true },
+      ],
+    },
+  },
+]);
+
 const googleServicesPath = path.join(__dirname, "google-services.json");
 const android = { ...appJson.expo.android };
 if (fs.existsSync(googleServicesPath)) {
@@ -104,9 +118,11 @@ module.exports = {
     },
     ios: {
       ...ios,
+      usesAppleSignIn: true,
       entitlements: {
         ...ios.entitlements,
         "aps-environment": isProductionBuild ? "production" : "development",
+        "com.apple.developer.applesignin": ["Default"],
       },
     },
     android,

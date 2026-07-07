@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { RefreshControl, View } from "react-native";
-import Toast from "react-native-toast-message";
+import { useRouter } from "expo-router";
 import { BrandOpsScreen } from "@/components/ui/BrandOpsScreen";
 import { BrandOpsCard } from "@/components/ui/BrandOpsCard";
 import { BrandOpsButton } from "@/components/ui/BrandOpsButton";
 import { H1, H2, P, Label } from "@/components/ui/BrandOpsText";
-import { ApiLoading } from "@/components/ui/ApiState";
+import { ApiEmpty, ApiLoading } from "@/components/ui/ApiState";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
 import { ReviewFeed } from "@/components/review/ReviewFeed";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,9 +22,10 @@ import {
 } from "@/lib/pickSubmissionVideo";
 import { uploadSubmissionVideo } from "@/lib/videoUpload";
 import { useFirestoreOwnerSubmissions } from "@/lib/useFirestoreOwnerSubmissions";
-import { getPendingFirestoreReviews } from "@/lib/firestoreReviewAdapter";
+import { getBrandReviewQueue } from "@/lib/firestoreReviewAdapter";
 import { isFirebaseConfigured } from "@/lib/env";
 import { usePullToRefresh } from "@/lib/usePullToRefresh";
+import Toast from "react-native-toast-message";
 
 export default function UploadScreen() {
   const { role } = useAuth();
@@ -35,12 +36,9 @@ export default function UploadScreen() {
 function BrandReviewFlow() {
   const { authUid, role } = useAuth();
   const { campaigns, refetch: refetchCampaigns } = useFirestoreCampaigns({ ownerOnly: true });
-  const { submissions, loading } = useFirestoreOwnerSubmissions();
+  const campaignDocIds = useMemo(() => campaigns.map((c) => c.firestoreDocId), [campaigns]);
+  const { submissions, loading } = useFirestoreOwnerSubmissions(null, campaignDocIds);
   const { refreshing, onRefresh } = usePullToRefresh(refetchCampaigns);
-
-  if (!canReviewSubmissions(role) || !authUid) {
-    return <CreatorUploadFlow />;
-  }
 
   const campaignsByDocId = useMemo(
     () => new Map(campaigns.map((c) => [c.firestoreDocId, c])),
@@ -48,14 +46,15 @@ function BrandReviewFlow() {
   );
 
   const pending = useMemo(
-    () =>
-      getPendingFirestoreReviews(submissions, campaignsByDocId).filter(
-        (s) => s.campaignOwnerUid === authUid && s.creatorFirebaseUid !== authUid
-      ),
+    () => (authUid ? getBrandReviewQueue(submissions, campaignsByDocId, authUid) : []),
     [submissions, campaignsByDocId, authUid]
   );
 
-  if (!isFirebaseConfigured() || !authUid) {
+  if (!canReviewSubmissions(role) || !authUid) {
+    return <CreatorUploadFlow />;
+  }
+
+  if (!isFirebaseConfigured()) {
     return (
       <BrandOpsScreen scroll>
         <P>Sign in with Firebase to review submissions.</P>
@@ -74,9 +73,9 @@ function BrandReviewFlow() {
 }
 
 function CreatorUploadFlow() {
+  const router = useRouter();
   const { authUid, authEmail, user } = useAuth();
   const payoutSetup = useCreatorPayoutSetup(authUid);
-  const payoutReady = payoutSetup?.isFullySetUp ?? false;
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [picked, setPicked] = useState<PickedVideo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -113,20 +112,16 @@ function CreatorUploadFlow() {
 
       {campaignsLoading && campaigns.length === 0 ? <ApiLoading label="Loading campaigns…" /> : null}
 
-      {!payoutReady ? (
-        <BrandOpsCard variant="soft" style={{ marginBottom: 12 }}>
-          <P style={{ fontWeight: "800" }}>Uploads locked until Stripe is set up</P>
-          <P style={{ marginTop: 8, color: BrandOpsTheme.colors.muted, fontSize: 13, lineHeight: 20 }}>
-            Finish Stripe payout setup on the web before submitting videos from this tab.
-          </P>
-        </BrandOpsCard>
-      ) : (
-        <>
       <BrandOpsCard variant="soft" style={{ marginBottom: 12 }}>
         <Label style={{ color: BrandOpsTheme.colors.lime }}>Campaign</Label>
         <View style={{ gap: 8, marginTop: 10 }}>
           {campaigns.length === 0 ? (
-            <P>No active campaigns available.</P>
+            <ApiEmpty
+              title="No active campaigns"
+              body="When brands publish new briefs they'll show up here. Check Home or enable notifications."
+              actionLabel="Browse campaigns"
+              onAction={() => router.push("/(tabs)/campaigns" as never)}
+            />
           ) : (
             campaigns.map((c) => (
               <BrandOpsButton
@@ -193,8 +188,6 @@ function CreatorUploadFlow() {
           }
         }}
       />
-        </>
-      )}
     </BrandOpsScreen>
   );
 }

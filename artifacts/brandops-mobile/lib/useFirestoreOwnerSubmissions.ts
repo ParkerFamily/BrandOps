@@ -8,11 +8,15 @@ import {
   type FirestoreSubmission,
 } from "@/lib/submissionsFirestore";
 
-export function useFirestoreOwnerSubmissions(campaignDocId?: string | null) {
-  const { authUid, isAuthenticated } = useAuth();
+export function useFirestoreOwnerSubmissions(
+  campaignDocId?: string | null,
+  campaignDocIds?: string[] | null
+) {
+  const { authUid, authEmail, isAuthenticated } = useAuth();
   const [submissions, setSubmissions] = useState<FirestoreSubmission[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const ownedCampaignKey = (campaignDocIds ?? []).join("|");
 
   useEffect(() => {
     if (!isFirebaseConfigured() || !isAuthenticated || !authUid) {
@@ -25,16 +29,22 @@ export function useFirestoreOwnerSubmissions(campaignDocId?: string | null) {
     setReady(false);
     setError(null);
 
-    const unsub = subscribeOwnerSubmissions(authUid, campaignDocId ?? undefined, (rows) => {
-      setSubmissions(rows);
-      setReady(true);
-      if (__DEV__) {
-        console.log("[BrandOps submissions]", rows.length, campaignDocId ?? "all");
-      }
-    });
+    const unsub = subscribeOwnerSubmissions(
+      authUid,
+      campaignDocId ?? undefined,
+      (rows) => {
+        setSubmissions(rows);
+        setReady(true);
+        if (__DEV__) {
+          console.log("[BrandOps submissions]", rows.length, campaignDocId ?? (ownedCampaignKey || "brand"));
+        }
+      },
+      authEmail,
+      campaignDocIds ?? []
+    );
 
     return () => unsub();
-  }, [authUid, isAuthenticated, campaignDocId]);
+  }, [authUid, authEmail, isAuthenticated, campaignDocId, ownedCampaignKey]);
 
   return {
     submissions,
