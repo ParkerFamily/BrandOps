@@ -1,0 +1,44 @@
+========================================
+YOUR SHA-1 FINGERPRINT
+========================================
+
+SHA-1 (App Signing Certificate):
+F4:BC:AC:FF:89:15:C7:57:8F:C2:78:23:EB:F6:42:D4:D2:21:21:7C
+
+========================================
+WHERE TO ADD IT
+========================================
+
+Direct Link:
+https://console.firebase.google.com/project/rareswap-ec574/settings/general/android:com.parkerfamily.brandopsmobile
+
+Steps:
+1. Open the link above
+2. Scroll to "SHA certificate fingerprints"
+3. Click "Add fingerprint"
+4. Paste the SHA-1 above
+5. Click "Save"
+
+========================================
+AFTER ADDING
+========================================
+
+1. Wait 5-10 minutes for propagation
+2. Uninstall old app from device:
+   Settings → Apps → BrandOps → Uninstall
+
+3. Reinstall the app
+
+4. Try Google Sign-In again
+
+========================================
+VERIFICATION
+========================================
+
+Firebase Console:
+https://console.firebase.google.com/project/rareswap-ec574/settings/general
+
+Package Name: com.parkerfamily.brandopsmobile
+Firebase Project: rareswap-ec574
+
+========================================
