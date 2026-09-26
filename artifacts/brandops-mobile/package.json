@@ -58,6 +58,7 @@
     "ios:clean": "bash ./scripts/rebuild-ios-clean.sh",
     "ios:open": "node ./scripts/open-ios-dev.js",
     "web": "expo start --web --port 8081",
+    "check:google-signin": "node ./scripts/check-google-signin-config.js",
     "eas:env:push": "eas env:push --environment production --path .env",
     "eas:update": "eas update --channel production --environment production --message",
     "eas-build-pre-install": "node ./scripts/check-eas-env.js"

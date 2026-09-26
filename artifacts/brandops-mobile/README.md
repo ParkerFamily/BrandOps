@@ -4,6 +4,26 @@ Mobile is the **fast creator workflow + quick approvals companion**. The web app
 
 > **Important:** Run commands from **`artifacts/brandops-mobile`** (this folder). Do **not** use the nested `brandops/` subfolder — that is an accidental Expo template (different app id `com.parkerfamily.brandops`) and will crash with missing native modules / no API wiring.
 
+## Troubleshooting Google Sign-In (Android)
+
+If you're getting a **"Google sign-in failed DEVELOPER_ERROR"** on real Android devices (but not the emulator), you need to add your SHA-1 certificate fingerprint to Firebase.
+
+**Quick diagnosis:**
+
+```bash
+cd artifacts/brandops-mobile
+pnpm check:google-signin
+```
+
+**Detailed fix guide:** See [`GOOGLE_SIGNIN_ANDROID_FIX.md`](./GOOGLE_SIGNIN_ANDROID_FIX.md)
+
+**TL;DR:**
+1. Get your SHA-1 fingerprint: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep SHA1`
+2. Add it to [Firebase Console](https://console.firebase.google.com/project/rareswap-ec574/settings/general) → Android app → SHA certificate fingerprints
+3. Download `google-services.json` and place it in this directory
+4. Rebuild: `npx expo prebuild --clean && npx expo run:android`
+5. Wait 5-10 minutes for changes to propagate
+
 ## Push notifications (OneSignal)
 
 1. Create a OneSignal app and configure iOS (APNs) + Android (FCM) for bundle `com.parkerfamily.brandops-mobile`.
