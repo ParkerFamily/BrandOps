@@ -1,0 +1,71 @@
+{
+  "project_info": {
+    "project_number": "1041255855912",
+    "firebase_url": "https://rareswap-ec574-default-rtdb.firebaseio.com",
+    "project_id": "rareswap-ec574",
+    "storage_bucket": "rareswap-ec574.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041255855912:android:2467fe274e1cc678c0021d",
+        "android_client_info": {
+          "package_name": "com.parkerfamily.brandopsmobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1041255855912-l2el5t95iirntkq87na1oclipmua974p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.parkerfamily.brandopsmobile",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "1041255855912-lkbi53nut0kop49n795h2kc1nhmjhido.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.parkerfamily.brandopsmobile",
+            "certificate_hash": "6e2fb94459a143e10f75ccbbf63974122c9730e0"
+          }
+        },
+        {
+          "client_id": "1041255855912-t8qolgbk6ofdugat05u1qihm2idnb2hg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.parkerfamily.brandopsmobile",
+            "certificate_hash": "e15f013b4e1c55b8bb714043b3ac96f961461818"
+          }
+        },
+        {
+          "client_id": "1041255855912-5ttvd5natbopeb8l6gjbjltdk88boq9n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKptUdVeucJZyWTNChL6cd9Kn0VwE4fRs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1041255855912-5ttvd5natbopeb8l6gjbjltdk88boq9n.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1041255855912-217e2nng1u98jghmeqfrst7n5hbruavf.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.parkerfamily.brandops-mobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

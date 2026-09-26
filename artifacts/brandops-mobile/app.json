@@ -38,7 +38,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.parkerfamily.brandopsmobile",
+      "package": "com.brandops.app",
       "permissions": [
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_EXTERNAL_STORAGE",
