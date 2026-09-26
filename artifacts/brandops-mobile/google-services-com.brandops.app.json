@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "1041255855912",
+    "firebase_url": "https://rareswap-ec574-default-rtdb.firebaseio.com",
+    "project_id": "rareswap-ec574",
+    "storage_bucket": "rareswap-ec574.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041255855912:android:79b9e934f8966602c0021d",
+        "android_client_info": {
+          "package_name": "com.brandops.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1041255855912-lev78vvspua31ss3o39qkmon3g25svvp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.brandops.app",
+            "certificate_hash": "f4bcacff8915c7578fc27823ebf642d4d221217c"
+          }
+        },
+        {
+          "client_id": "1041255855912-5ttvd5natbopeb8l6gjbjltdk88boq9n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKptUdVeucJZyWTNChL6cd9Kn0VwE4fRs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1041255855912-5ttvd5natbopeb8l6gjbjltdk88boq9n.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1041255855912-217e2nng1u98jghmeqfrst7n5hbruavf.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.parkerfamily.brandops-mobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
