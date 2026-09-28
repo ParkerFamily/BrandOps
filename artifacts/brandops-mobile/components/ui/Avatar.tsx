@@ -1,8 +1,23 @@
-import { Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
 
-export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+export function Avatar({ name, photoUrl, size = 40 }: { name: string; photoUrl?: string | null; size?: number }) {
   const initial = (name.trim()[0] ?? "?").toUpperCase();
+  
+  if (photoUrl) {
+    return (
+      <Image
+        source={{ uri: photoUrl }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: BrandOpsTheme.colors.limeSoft,
+        }}
+      />
+    );
+  }
+  
   return (
     <View
       style={{

@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { BrandOpsScreen } from "@/components/ui/BrandOpsScreen";
 import { BrandOpsButton } from "@/components/ui/BrandOpsButton";
+import { BrandOpsCard } from "@/components/ui/BrandOpsCard";
 import { SettingsDivider, SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { CreatorSetupStatusBadge } from "@/components/creator/CreatorStripeSetupBanner";
@@ -10,6 +13,7 @@ import { useFirestoreCreatorPayments } from "@/lib/useFirestoreCreatorPayments";
 import { computeCreatorEarnings, formatUsd } from "@/lib/creatorEarningsMetrics";
 import { useFirestoreMySubmissions } from "@/lib/useFirestoreOwnerSubmissions";
 import { openCreatorConnectDashboard } from "@/lib/webHandoff";
+import { isApiConfigured } from "@/lib/apiClient";
 import { BrandOpsTheme } from "@/constants/brandopsTheme";
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -27,13 +31,21 @@ export default function PayoutSettingsScreen() {
   const { submissions } = useFirestoreMySubmissions();
   const { payments } = useFirestoreCreatorPayments();
   const earnings = computeCreatorEarnings(submissions, payments);
+  const [opening, setOpening] = useState(false);
 
   const paidTotal = payments.filter((p) => p.status === "paid").reduce((s, p) => s + (p.creatorAmount ?? p.amount), 0);
   const pendingTotal = earnings.pendingPayout;
 
-  const openPayoutDashboard = () => {
+  const apiConfigured = isApiConfigured();
+
+  const openPayoutDashboard = async () => {
     if (!authUid) return;
-    void openCreatorConnectDashboard(authUid);
+    setOpening(true);
+    try {
+      await openCreatorConnectDashboard(authUid);
+    } finally {
+      setOpening(false);
+    }
   };
 
   return (
@@ -53,9 +65,35 @@ export default function PayoutSettingsScreen() {
         <Metric label="Pending" value={formatUsd(pendingTotal)} />
       </View>
 
+      {!apiConfigured ? (
+        <BrandOpsCard
+          variant="soft"
+          style={{
+            marginBottom: 18,
+            gap: 10,
+            borderColor: "rgba(255,107,107,0.35)",
+            borderWidth: 1,
+          }}
+        >
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+            <Ionicons name="warning-outline" size={22} color={BrandOpsTheme.colors.danger} />
+            <View style={{ flex: 1, gap: 6 }}>
+              <Text style={{ color: BrandOpsTheme.colors.text, fontWeight: "800", fontSize: 15 }}>
+                API not configured
+              </Text>
+              <Text style={{ color: BrandOpsTheme.colors.muted, fontSize: 13, lineHeight: 20 }}>
+                Set EXPO_PUBLIC_API_BASE_URL in your .env file to enable payout account setup and management.
+              </Text>
+            </View>
+          </View>
+        </BrandOpsCard>
+      ) : null}
+
       <BrandOpsButton
-        label={payoutSetup?.isFullySetUp ? "Open payout dashboard" : "Set up payout account"}
+        label={opening ? "Opening…" : payoutSetup?.isFullySetUp ? "Open payout dashboard" : "Set up payout account"}
         onPress={openPayoutDashboard}
+        loading={opening}
+        disabled={!apiConfigured}
         style={{ marginBottom: 18 }}
       />
 
